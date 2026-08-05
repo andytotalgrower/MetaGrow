@@ -1,0 +1,147 @@
+/* ============================================================
+   mantine-components.css
+   Structural overrides that CSS variables alone can't express.
+   Load with BOTH Mantine Light and Mantine Dark themes,
+   AFTER mantine-palette.css and the mode file.
+
+   Selectors verified against DevExpress Blazor v26.1.3 rendered
+   markup (Editable Grid / Basic Form pages) on 2026-07-28.
+   Rules marked [unverified] target components not present in the
+   test app yet — confirm in devtools when first used.
+   ============================================================ */
+
+/* ---------- Typography ---------- */
+body {
+  font-family: var(--mantine-font-family);
+  font-size: var(--mantine-font-size-sm);   /* Mantine components default to 14px */
+  line-height: var(--mantine-line-height);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--mantine-font-family);
+  font-weight: 700;                          /* Mantine heading weight */
+}
+
+/* ---------- Buttons (verified: .dxbl-btn) ---------- */
+/* Mantine: radius sm (4px), font-weight 600, no text-transform. */
+.dxbl-btn {
+  border-radius: var(--mantine-radius-sm);
+  font-weight: 600;
+}
+
+/* Standalone buttons get Mantine md height (36px); excludes
+   icon-only chrome buttons and buttons embedded in editors. */
+.dxbl-btn.dxbl-btn-standalone:not(.dxbl-btn-icon-only) {
+  min-height: var(--mantine-control-height);
+  padding-left: 1.125rem;
+  padding-right: 1.125rem;
+}
+
+/* Mantine disables buttons to gray, not tinted primary */
+.dxbl-btn:disabled,
+.dxbl-btn[aria-disabled="true"] {
+  background-color: var(--dxds-color-surface-neutral-default-disabled);
+  border-color: transparent;
+  color: var(--dxds-color-content-neutral-default-disabled);
+}
+
+/* ---------- Text editors / inputs (verified: .dxbl-text-edit) ----------
+   ALL DevExpress editors (TextBox, ComboBox, DateEdit, SpinEdit…)
+   render a .dxbl-text-edit wrapper, so one selector covers them. */
+.dxbl-text-edit {
+  border-radius: var(--mantine-radius-sm);
+  min-height: var(--mantine-control-height);  /* Mantine md = 36px (Fluent renders 34px) */
+}
+
+/* Mantine focus: border swaps to primary, no glow */
+.dxbl-text-edit:focus-within {
+  border-color: var(--dxds-color-border-focus-default);
+  box-shadow: none;
+}
+
+/* Mantine focus ring for non-input interactive elements */
+.dxbl-btn:focus-visible {
+  outline: 2px solid var(--dxds-color-border-focus-default);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* ---------- Grid (verified: .dxbl-grid) ----------
+   The grid draws all its lines from --dxbl-grid-border-color
+   (internal var that defaults to the semantic neutral border =
+   gray.4). Mantine tables use the lighter gray.3, supplied by
+   --mantine-table-border from the light/dark semantic files. */
+.dxbl-grid {
+  border-radius: var(--mantine-radius-md);
+  --dxbl-grid-border-color: var(--mantine-table-border, #dee2e6);
+}
+
+/* Header: 600-weight text (bg is already transparent in Fluent) */
+.dxbl-grid .dxbl-grid-header-content {
+  font-weight: 600;
+}
+
+/* ---------- Dropdowns, menus, popups ----------
+   Verified against 26.1.3: editor dropdowns render as
+   <dxbl-dropdown-dialog class="dxbl-dropdown-dialog dxbl-edit-dropdown">
+   inside a .dxbl-popup-portal at document root. DevExpress styles them
+   through --dxbl-(edit-)dropdown-* vars (core.min.css), so we set the
+   vars rather than fight rule specificity. Shadows already flow from
+   the --dxds-box-shadow-* mapping in mantine-palette.css. */
+.dxbl-dropdown,
+.dxbl-itemlist-dropdown {
+  --dxbl-dropdown-border-radius: var(--mantine-radius-md);
+  --dxbl-dropdown-border-width: 1px;
+  --dxbl-dropdown-border-color: var(--dxds-color-border-neutral-default-rest);
+  --dxbl-dropdown-box-shadow: var(--mantine-shadow-md);
+}
+
+/* DevExpress re-defines the edit-dropdown vars ON the dialog element
+   (.dxbl-edit-dropdown in core.min.css), which shadows values inherited
+   from the portal — so we must match the element with higher specificity. */
+.dxbl-edit-dropdown.dxbl-edit-dropdown {
+  --dxbl-edit-dropdown-border-radius: var(--mantine-radius-md);
+  --dxbl-edit-dropdown-border-width: 1px;
+  --dxbl-edit-dropdown-border-color: var(--dxds-color-border-neutral-default-rest);
+}
+
+.dxbl-menu-dropdown {
+  border-radius: var(--mantine-radius-md);
+  box-shadow: var(--mantine-shadow-md);
+  border: 1px solid var(--dxds-color-border-neutral-default-rest);
+}
+
+.dxbl-popup {
+  border-radius: var(--mantine-radius-md);
+  box-shadow: var(--mantine-shadow-xl);
+}
+
+.dxbl-popup .dxbl-popup-header {
+  font-weight: 600;
+  font-size: var(--mantine-font-size-md);
+}
+
+/* ---------- Tabs [unverified] ---------- */
+/* Mantine default variant: transparent list, 2px primary underline. */
+.dxbl-tabs .dxbl-tab {
+  border-radius: 0;
+  background: transparent;
+  font-weight: 500;
+}
+
+.dxbl-tabs .dxbl-tab.dxbl-active {
+  border-bottom: 2px solid var(--dxds-color-surface-primary-default-rest);
+  color: var(--dxds-color-content-neutral-default-rest);
+}
+
+/* ---------- Scrollbars (optional, Mantine-like minimal) ---------- */
+.dxbl-grid ::-webkit-scrollbar,
+.dxbl-listbox ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.dxbl-grid ::-webkit-scrollbar-thumb,
+.dxbl-listbox ::-webkit-scrollbar-thumb {
+  background: var(--dxds-color-border-neutral-default-rest);
+  border-radius: 5px;
+}

@@ -1,0 +1,41 @@
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+<div>
+    <DxMenu Orientation="Orientation.Vertical" CssClass="menu">
+        <Items>
+            <DxMenuItem NavigateUrl="/" Text="Home" CssClass="@MenuItemCssClass("/")" IconCssClass="icon icon-home" />
+            <DxMenuItem NavigateUrl="/surveys/multicrop" Text="Multi-crop surveys" CssClass="@MenuItemCssClass("/surveys/multicrop")" IconCssClass="icon icon-chart" />
+            <DxMenuItem NavigateUrl="/surveys/banana" Text="Banana surveys" CssClass="@MenuItemCssClass("/surveys/banana")" IconCssClass="icon icon-basic-form" />
+            <DxMenuItem NavigateUrl="/surveys/samples" Text="Sample surveys" CssClass="@MenuItemCssClass("/surveys/samples")" IconCssClass="icon icon-demos" />
+            <DxMenuItem NavigateUrl="/farms" Text="Farm setup" CssClass="@MenuItemCssClass("/farms")" IconCssClass="icon icon-editable-grid" />
+        </Items>
+    </DxMenu>
+    <hr class="menu-separator" />
+    <DxMenu Orientation="Orientation.Vertical" CssClass="menu">
+        <Items>
+            <DxMenuItem NavigateUrl="/admin" Text="Administration" CssClass="@MenuItemCssClass("/admin")" IconCssClass="icon icon-settings" />
+        </Items>
+    </DxMenu>
+</div>
+
+@code {
+    private string? currentLocalPath;
+
+    protected override void OnInitialized()
+    {
+        currentLocalPath = new Uri(NavigationManager.Uri).LocalPath;
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentLocalPath = new Uri(e.Location).LocalPath;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string? MenuItemCssClass(string itemPath) =>
+        string.Equals(currentLocalPath, itemPath, StringComparison.OrdinalIgnoreCase) ? "menu-item-active" : null;
+
+    public void Dispose() => NavigationManager.LocationChanged -= OnLocationChanged;
+}

@@ -1,0 +1,29 @@
+@page "/"
+@using MetaGrow.Web.Components.Pages.Index
+
+<PageTitle>MetaGrow</PageTitle>
+
+<div class="home-page">
+    <div class="mg-hero">
+        <span class="mg-eyebrow">Metagen operations</span>
+        <h1>MetaGrow</h1>
+        <p>Survey reporting and farm information for Metagen and Total Grower Services staff.</p>
+        <hr class="mg-keyline" />
+    </div>
+
+    <section aria-labelledby="work-areas-heading">
+        <h2 id="work-areas-heading">Work areas</h2>
+        <p class="section-intro">Choose an area to open its dashboard and dedicated search.</p>
+        <div class="tiles">
+            <IndexTile NavigateUrl="/surveys/multicrop" Title="Multi-crop surveys" Description="Find surveys and open online or printable reports." IconCssClass="icon-chart" />
+            <IndexTile NavigateUrl="/surveys/banana" Title="Banana surveys" Description="Open the dedicated banana survey dashboard." IconCssClass="icon-basic-form" />
+            <IndexTile NavigateUrl="/surveys/samples" Title="Sample surveys" Description="Find sample surveys and open their reports." IconCssClass="icon-demos" />
+            <IndexTile NavigateUrl="/farms" Title="Farm setup" Description="Maintain properties, growers and blocks." IconCssClass="icon-editable-grid" />
+            <IndexTile NavigateUrl="/admin" Title="Administration" Description="Manage users, roles, MFA and application access." IconCssClass="icon-settings" />
+        </div>
+    </section>
+
+    <div class="release-note">
+        <strong>Initial shell:</strong> navigation and module boundaries only. Authentication and Multi-crop functionality come next.
+    </div>
+</div>

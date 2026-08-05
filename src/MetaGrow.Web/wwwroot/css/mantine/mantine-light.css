@@ -1,0 +1,129 @@
+/* ============================================================
+   mantine-light.css
+   Mantine LIGHT color scheme → DevExpress semantic CSS variables.
+   Load ONLY with the "Mantine Light" registered theme (Mode=Light).
+
+   Variable names verified against DevExpress Design System docs
+   ("Semantic CSS Variables", Dec 2025). Values = Mantine defaults:
+   text #000, dimmed gray.6, borders gray.4 (inputs) / gray.3 (tables),
+   filled primary = blue.6, hover +1 shade, light variant = blue.0.
+   ============================================================ */
+
+:root {
+  /* ----- Surfaces: neutral ----- */
+  --dxds-color-surface-neutral-default-rest: #ffffff;
+  --dxds-color-surface-neutral-default-hovered: #f8f9fa;          /* gray.0 */
+  --dxds-color-surface-neutral-default-active: #e9ecef;           /* gray.2 */
+  --dxds-color-surface-neutral-default-selected: #f1f3f5;         /* gray.1 */
+  --dxds-color-surface-neutral-default-selected-hovered: #e9ecef;
+  --dxds-color-surface-neutral-default-disabled: #f1f3f5;
+  --dxds-color-surface-neutral-subdued-rest: #f8f9fa;
+  --dxds-color-surface-neutral-subdued-hovered: #f1f3f5;
+  --dxds-color-surface-neutral-subdued-active: #dee2e6;
+  --dxds-color-surface-neutral-subdued-disabled: #f8f9fa;
+  --dxds-color-surface-neutral-deep-rest: #f1f3f5;
+  --dxds-color-surface-neutral-deep-hovered: #e9ecef;
+  --dxds-color-surface-neutral-deep-active: #dee2e6;
+  --dxds-color-surface-neutral-deep-disabled: #f8f9fa;
+
+  /* ----- Surfaces: primary (filled buttons etc.) ----- */
+  --dxds-color-surface-primary-default-rest: #228be6;             /* blue.6 */
+  --dxds-color-surface-primary-default-hovered: #1c7ed6;          /* blue.7 */
+  --dxds-color-surface-primary-default-active: #1971c2;           /* blue.8 */
+  --dxds-color-surface-primary-default-selected: #1c7ed6;
+  --dxds-color-surface-primary-default-disabled: #a5d8ff;         /* blue.2 (Mantine disables to gray — see components.css) */
+  --dxds-color-surface-primary-subdued-rest: #a5d8ff;
+  --dxds-color-surface-primary-subdued-hovered: #74c0fc;
+  --dxds-color-surface-primary-subdued-active: #4dabf7;
+  --dxds-color-surface-primary-subdued-selected: #74c0fc;
+  /* "light" variant / selection tints */
+  --dxds-color-surface-primary-deep-rest: #e7f5ff;                /* blue.0 */
+  --dxds-color-surface-primary-deep-hovered: #d0ebff;             /* blue.1 */
+  --dxds-color-surface-primary-deep-active: #a5d8ff;
+  --dxds-color-surface-primary-deep-selected: #d0ebff;
+  --dxds-color-surface-primary-compound-rest: #228be6;
+  --dxds-color-surface-primary-compound-hovered: #1c7ed6;
+  --dxds-color-surface-primary-compound-active: #1971c2;
+
+  /* ----- Surfaces: feedback ----- */
+  --dxds-color-surface-danger-default-rest: #fa5252;              /* red.6 */
+  --dxds-color-surface-danger-default-hovered: #f03e3e;
+  --dxds-color-surface-danger-default-active: #e03131;
+  --dxds-color-surface-danger-deep-rest: #fff5f5;                 /* red.0 */
+  --dxds-color-surface-danger-deep-hovered: #ffe3e3;
+  --dxds-color-surface-success-default-rest: #40c057;             /* green.6 */
+  --dxds-color-surface-success-default-hovered: #37b24d;
+  --dxds-color-surface-success-default-active: #2f9e44;
+  --dxds-color-surface-success-deep-rest: #ebfbee;                /* green.0 */
+  --dxds-color-surface-warning-default-rest: #fab005;             /* yellow.6 */
+  --dxds-color-surface-warning-default-hovered: #f59f00;
+  --dxds-color-surface-warning-default-active: #f08c00;
+  --dxds-color-surface-warning-deep-rest: #fff9db;                /* yellow.0 */
+  --dxds-color-surface-info-default-rest: #4c6ef5;                /* indigo.6 */
+  --dxds-color-surface-info-default-hovered: #4263eb;
+  --dxds-color-surface-info-default-active: #3b5bdb;
+  --dxds-color-surface-info-deep-rest: #edf2ff;                   /* indigo.0 */
+
+  /* ----- Backdrop (Modal/Drawer overlay) ----- */
+  --dxds-color-surface-backdrop-default-rest: rgba(0, 0, 0, 0.6); /* Mantine Overlay default */
+
+  /* ----- Content (text/icons) ----- */
+  --dxds-color-content-neutral-default-rest: #000000;             /* Mantine text (black) */
+  --dxds-color-content-neutral-default-hovered: #000000;
+  --dxds-color-content-neutral-default-active: #000000;
+  --dxds-color-content-neutral-default-selected: #000000;
+  --dxds-color-content-neutral-default-disabled: #adb5bd;         /* gray.5 */
+  --dxds-color-content-neutral-subdued-rest: #495057;             /* gray.7 */
+  --dxds-color-content-neutral-subdued-disabled: #ced4da;
+  --dxds-color-content-neutral-deep-rest: #868e96;                /* gray.6 = dimmed */
+  --dxds-color-content-neutral-deep-disabled: #ced4da;
+
+  --dxds-color-content-primary-default-rest: #228be6;
+  --dxds-color-content-primary-default-hovered: #1c7ed6;
+  --dxds-color-content-primary-default-active: #1971c2;
+  --dxds-color-content-primary-compound-rest: #228be6;
+  --dxds-color-content-primary-compound-hovered: #1c7ed6;
+  --dxds-color-content-primary-compound-active: #1971c2;
+
+  --dxds-color-content-danger-default-rest: #fa5252;              /* Mantine error = red.6 */
+  --dxds-color-content-danger-default-hovered: #f03e3e;
+  --dxds-color-content-danger-default-active: #e03131;
+  --dxds-color-content-success-default-rest: #40c057;
+  --dxds-color-content-success-default-hovered: #37b24d;
+  --dxds-color-content-warning-default-rest: #f08c00;             /* yellow.8 for contrast on white */
+  --dxds-color-content-info-default-rest: #4c6ef5;
+
+  /* ----- Borders ----- */
+  --dxds-color-border-neutral-default-rest: #ced4da;              /* gray.4 = input border */
+  --dxds-color-border-neutral-default-hovered: #adb5bd;
+  --dxds-color-border-neutral-default-active: #868e96;
+  --dxds-color-border-neutral-default-disabled: #dee2e6;
+  --dxds-color-border-neutral-accessible-rest: #868e96;
+  --dxds-color-border-neutral-accessible-hovered: #495057;
+  --dxds-color-border-neutral-accessible-active: #212529;
+  --dxds-color-border-neutral-accessible-disabled: #ced4da;
+
+  --dxds-color-border-primary-default-rest: #74c0fc;
+  --dxds-color-border-primary-default-hovered: #228be6;
+  --dxds-color-border-primary-compound-rest: #228be6;
+  --dxds-color-border-primary-compound-hovered: #1c7ed6;
+  --dxds-color-border-primary-compound-active: #1971c2;
+
+  --dxds-color-border-danger-default-rest: #ff8787;
+  --dxds-color-border-danger-default-hovered: #fa5252;
+  --dxds-color-border-danger-compound-rest: #fa5252;
+  --dxds-color-border-success-default-rest: #69db7c;
+  --dxds-color-border-success-compound-rest: #40c057;
+  --dxds-color-border-warning-default-rest: #ffd43b;
+  --dxds-color-border-info-default-rest: #748ffc;
+
+  /* Mantine focus ring = primary color (Fluent default is near-black) */
+  --dxds-color-border-focus-default: #228be6;
+
+  /* Mantine table/divider lines = gray.3 (lighter than input borders).
+     Consumed by .dxbl-grid in mantine-components.css. */
+  --mantine-table-border: #dee2e6;
+
+  /* App logo is a white SVG; darken it on light surfaces */
+  --mantine-logo-filter: brightness(0.15);
+}

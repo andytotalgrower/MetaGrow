@@ -1,0 +1,23 @@
+.tile {
+    border: 1px solid var(--dxds-color-border-neutral-default-rest);
+    border-radius: 0.75rem;
+    height: 8.75rem;
+    transition: box-shadow 0.2s;
+    width: 14.375rem;
+}
+
+.tile:hover { box-shadow: 0 4px 8px rgba(80, 90, 96, 0.18); }
+.tile ::deep > a { text-decoration: none; }
+::deep .tile-content { padding: 1rem; }
+
+::deep .tile-icon {
+    border: 1px solid var(--dxds-color-border-neutral-default-rest);
+    border-radius: 0.375rem;
+    color: var(--mg-blue, #007cba);
+    height: 2.75rem;
+    padding: 0.75rem;
+    width: 2.75rem;
+}
+
+::deep .tile-title { align-self: center; color: var(--dxds-color-content-neutral-default-rest); font-weight: var(--dxds-font-weight-base-strong); }
+::deep .tile-description { color: var(--dxds-color-content-neutral-subdued-rest); font-size: var(--dxds-font-size-base-sm); }

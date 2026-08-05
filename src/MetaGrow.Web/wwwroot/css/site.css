@@ -1,0 +1,249 @@
+@import url('open-iconic/font/css/open-iconic-bootstrap.min.css');
+@import url('./icons.css');
+
+html, body {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    margin: 0;
+}
+
+.w-100 {
+    width: 100% !important;
+}
+
+.h-100 {
+    height: 100% !important;
+}
+
+.h-auto {
+    height: auto !important;
+}
+
+.overflow-hidden {
+    overflow: hidden !important;
+}
+
+.text-danger {
+    color: var(--dxds-color-content-danger-default-rest);
+}
+
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid var(--dxds-color-border-success-default-rest);
+}
+
+.invalid {
+    outline: 1px solid var(--dxds-color-border-danger-default-rest);
+}
+
+.validation-message {
+    color: var(--dxds-color-content-danger-default-rest);
+}
+
+.button-link {
+    text-decoration: unset;
+}
+
+.title {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem 0;
+}
+
+.title.title-secondary {
+    padding: 0.313rem 0 0;
+    color: var(--dxds-color-content-secondary-default-rest);
+}
+
+.title-header-text {
+    font-size: var(--dxds-font-size-headline-lg);
+    font-weight: var(--dxds-font-weight-headline-default);
+    letter-spacing: var(--dxds-letter-spacing-headline-lg);
+    line-height: var(--dxds-line-height-headline-lg);
+}
+
+.title-content-text {
+    font-size: var(--dxds-font-size-base-lg);
+    font-weight: var(--dxds-font-weight-base-default);
+    letter-spacing: var(--dxds-letter-spacing-base-lg);
+    line-height: var(--dxds-line-height-base-lg);
+}
+
+.main-content {
+    align-items: center;
+    display: flex;
+    height: 100%;
+    justify-content: center;
+    width: 100%;
+}
+
+/* ---- Account/auth page layout (MetaSales pattern) ---- */
+
+.block-content {
+    width: 31.25rem;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    max-width: 100%;
+}
+
+.or {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+    .or .or-line {
+        border-bottom: 1px solid currentColor;
+        width: 100%;
+        opacity: 0.2;
+    }
+
+    .or .or-text {
+        padding: 0 0.625rem;
+        font-size: 0.75rem;
+        line-height: 1.125rem;
+        opacity: 0.7;
+    }
+
+.links-area {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    padding-top: 0.625rem;
+}
+
+.links-container {
+    display: flex;
+    gap: 0.25rem;
+    justify-content: center;
+    align-items: center;
+}
+
+    .links-container a {
+        color: var(--mg-link, #0d8ecb);
+    }
+
+    .links-container .dot {
+        height: 0.3125rem;
+        width: 0.3125rem;
+        margin: 0 0.1875rem;
+        border-radius: 50%;
+        background-color: currentColor;
+        opacity: 0.7;
+    }
+
+.alert {
+    padding: 0.625rem 1rem;
+    border-radius: 0.375rem;
+    border: 1px solid transparent;
+}
+
+.alert-danger {
+    color: #842029;
+    background-color: #f8d7da;
+    border-color: #f5c2c7;
+}
+
+.alert-success {
+    color: #0f5132;
+    background-color: #d1e7dd;
+    border-color: #badbcc;
+}
+
+.alert-warning {
+    color: #664d03;
+    background-color: #fff3cd;
+    border-color: #ffecb5;
+}
+
+.display-desktop {
+    display: block;
+}
+
+.display-mobile {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .display-desktop {
+        display: none;
+    }
+
+    .display-mobile {
+        display: block;
+    }
+}
+
+/* ---- Change request status badges (brand palette) ---- */
+
+.mc-badge {
+    display: inline-block;
+    padding: 0.125rem 0.625rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    white-space: nowrap;
+}
+
+.mc-badge-new        { background: var(--mg-blue-0, #e5f4fb); color: var(--mg-blue-8, #015682); }
+.mc-badge-review     { background: #fdf3d7; color: #8a6203; }
+.mc-badge-dev        { background: var(--mg-blue-1, #bfe0f0); color: var(--mg-blue-9, #014366); }
+.mc-badge-test       { background: #e9e2f7; color: #4d3690; }
+.mc-badge-done       { background: #d9ece7; color: var(--mg-crop-green, #00654e); }
+.mc-badge-cancelled  { background: #e7e9ea; color: var(--mg-grey, #4a4f54); }
+.mc-badge-rejected   { background: #fadcdd; color: var(--mg-red, #d1242b); }
+.mc-badge-rolledback { background: #fbe7d4; color: #97551a; }
+
+body.mantine-dark .mc-badge { filter: brightness(0.92) saturate(1.05); }
+
+/* ---- MFA pages (ported from MetaSales) ---- */
+
+.large-input {
+    height: 4.3125rem;
+    font-size: 1.875rem;
+}
+
+.title-content-text-secondary {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+}
+
+.twofactor-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    max-width: 40rem;
+}
+
+    .twofactor-content .list li {
+        margin-bottom: 0.75rem;
+    }
+
+    .twofactor-content kbd {
+        background: rgba(0, 124, 186, 0.12);
+        border-radius: 0.25rem;
+        padding: 0.125rem 0.375rem;
+    }
+
+.manage-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+}
+
+/* ---- 2FA management pages (PLAN.md §10 Phase 6) ---- */
+
+.button-group {
+    display: flex;
+    gap: 0.625rem;
+    flex-wrap: wrap;
+}
+
+    .button-group .button-link {
+        flex: 1 1 12rem;
+    }

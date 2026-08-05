@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="DevExpress.Blazor" Version="26.1.*" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <!-- Overrides DevExpress's older transitive reference; .NET 10 otherwise reports its security advisories. -->
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.10">
+      <NoWarn>NU1510</NoWarn>
+    </PackageReference>
+    <ProjectReference Include="..\MetaGrow.Shared\MetaGrow.Shared.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+</Project>

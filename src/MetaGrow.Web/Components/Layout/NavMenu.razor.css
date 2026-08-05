@@ -1,0 +1,17 @@
+::deep .menu {
+    --dxbl-menu-bottom-left-border-radius: 0;
+    --dxbl-menu-bottom-right-border-radius: 0;
+    --dxbl-menu-top-left-border-radius: 0;
+    --dxbl-menu-top-right-border-radius: 0;
+    --dxbl-menu-item-padding-x: 1.125rem;
+    --dxbl-menu-item-padding-y: 0.5rem;
+    --dxbl-menu-item-color: var(--dxds-color-content-neutral-default-static-dark-rest);
+    --dxbl-menu-item-image-color: var(--dxds-color-content-neutral-default-static-dark-rest);
+    --dxbl-menu-item-hover-bg: rgb(from var(--dxds-color-surface-neutral-default-static-light-rest) r g b / 0.15);
+    --dxbl-menu-item-hover-color: var(--dxds-color-content-neutral-default-static-dark-hovered);
+    --dxbl-menu-item-hover-image-color: var(--dxds-color-content-neutral-default-static-dark-hovered);
+    background: none;
+}
+
+::deep .menu-item-active { background-color: rgb(from var(--dxds-color-surface-neutral-default-static-light-rest) r g b / 0.08); }
+::deep .menu-separator { border: none; border-top: 1px solid rgb(from var(--dxds-color-surface-neutral-default-static-light-rest) r g b / 0.25); margin: 0.5rem 1.125rem; }

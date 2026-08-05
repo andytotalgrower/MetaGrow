@@ -1,0 +1,408 @@
+/* ==========================================================================
+   metagen-branding.css
+   Metagen brand layer — extends the Mantine UI theme (mantine-*.css).
+   Named "metagen-branding" to avoid clashes with any existing metagen.css.
+
+   SOURCES (nothing else):
+   - Brand_Guide_Book_Metagen.docx  (File Marketing Branding/Business Info)
+       Logo Blue  #007cba  (PANTONE 7461 C)
+       Logo Grey  #4a4f54  (PANTONE 7540 C)
+       Label middle panel Dark Grey #323e48 (PANTONE 432 C)
+   - metagen.com.au (live site): header navy #304254, link blue #0d8ecb
+   - Current drum labels (Marketing_Material_current/Drum_Labels_and_Images):
+       per-product accent colors sampled from each 2025 label PDF
+   - 2025 Crop Program PDFs: shared deep green #00654e cover design
+     (the 2025 program design does NOT define per-crop colors — all crop
+     classes below share the green; adjust individually if that changes)
+
+   USAGE
+   - Load AFTER the mantine files (add to AddFilePaths in App.razor).
+   - Page scope:  <div class="mg-product-digestor"> ... </div>
+     then use .mg-product-hero / -band / -badge / -card / -btn inside.
+   - Crop pages:  <div class="mg-crop-potatoes"> + .mg-crop-hero inside.
+   - Whole-app brand blue (swaps Mantine blue for Metagen #007cba on all
+     DevExpress components): add class "mg-brand-primary" to <body>.
+   ========================================================================== */
+
+/* ==========================================================================
+   1. BRAND TOKENS
+   ========================================================================== */
+:root {
+  /* Core identity (brand guide) */
+  --mg-blue: #007cba;            /* logo blue, PANTONE 7461 C */
+  --mg-grey: #4a4f54;            /* logo grey, PANTONE 7540 C */
+  --mg-dark: #323e48;            /* label panel dark grey, PANTONE 432 C */
+
+  /* Website palette (metagen.com.au) */
+  --mg-navy: #304254;            /* site header/section dark */
+  --mg-link: #0d8ecb;            /* site link blue */
+
+  /* Recurring label accents */
+  --mg-red: #d1242b;             /* small red accent used across labels */
+
+  /* 2025 crop program design */
+  --mg-crop-green: #00654e;
+
+  /* Brand blue tints/shades (generated from #007cba) */
+  --mg-blue-0: #e5f4fb;
+  --mg-blue-1: #bfe0f0;
+  --mg-blue-3: #72b8da;
+  --mg-blue-6: #007cba;          /* = --mg-blue */
+  --mg-blue-7: #00699e;
+  --mg-blue-8: #015682;
+  --mg-blue-9: #014366;
+
+  /* Neutral brand surfaces */
+  --mg-surface-dark: var(--mg-dark);
+  --mg-surface-dark-2: var(--mg-navy);
+}
+
+/* ==========================================================================
+   2. OPT-IN: WHOLE-APP METAGEN PRIMARY (body.mg-brand-primary)
+   Replaces the Mantine blue DevExpress primary scale + semantic primaries
+   with Metagen brand blue. 17-step scale interpolated, anchor 100 = #007cba.
+   ========================================================================== */
+body.mg-brand-primary {
+  --dxds-primary-10: #e5f4fb;
+  --dxds-primary-20: #cce7f4;
+  --dxds-primary-30: #b2d9ec;
+  --dxds-primary-40: #99cce5;
+  --dxds-primary-50: #7fbfde;
+  --dxds-primary-60: #65b1d7;
+  --dxds-primary-70: #4ca4d0;
+  --dxds-primary-80: #3397c9;
+  --dxds-primary-90: #1989c1;
+  --dxds-primary-100: #007cba;
+  --dxds-primary-110: #0074ae;
+  --dxds-primary-120: #006ca2;
+  --dxds-primary-130: #006496;
+  --dxds-primary-140: #015b8a;
+  --dxds-primary-150: #01537e;
+  --dxds-primary-160: #014b72;
+  --dxds-primary-170: #014366;
+
+  /* Semantic primaries (light-mode values; see dark note below) */
+  --dxds-color-surface-primary-default-rest: #007cba;
+  --dxds-color-surface-primary-default-hovered: #00699e;
+  --dxds-color-surface-primary-default-active: #015682;
+  --dxds-color-surface-primary-default-selected: #00699e;
+  --dxds-color-surface-primary-deep-rest: #e5f4fb;
+  --dxds-color-surface-primary-deep-hovered: #bfe0f0;
+  --dxds-color-surface-primary-deep-active: #99cce5;
+  --dxds-color-surface-primary-deep-selected: #bfe0f0;
+  --dxds-color-content-primary-default-rest: #007cba;
+  --dxds-color-content-primary-default-hovered: #00699e;
+  --dxds-color-content-primary-default-active: #015682;
+  --dxds-color-border-primary-compound-rest: #007cba;
+  --dxds-color-border-primary-compound-hovered: #00699e;
+  --dxds-color-border-focus-default: #007cba;
+}
+
+/* Dark theme: shift filled primary one step darker, content lighter
+   (mirrors the Mantine light-6/dark-8 convention) */
+body.mg-brand-primary.mantine-dark {
+  --dxds-color-surface-primary-default-rest: #015682;
+  --dxds-color-surface-primary-default-hovered: #014366;
+  --dxds-color-content-primary-default-rest: #4ca4d0;
+  --dxds-color-border-focus-default: #2690c5;
+}
+
+/* ==========================================================================
+   3. GENERAL BRANDING UTILITIES
+   ========================================================================== */
+
+/* Dark hero band — the label "middle panel" look used across all materials */
+.mg-hero {
+  background: linear-gradient(160deg, var(--mg-dark) 0%, var(--mg-navy) 100%);
+  color: #ffffff;
+  padding: var(--mantine-spacing-xl, 2rem);
+  border-radius: var(--mantine-radius-md, 0.5rem);
+}
+
+.mg-hero h1, .mg-hero h2, .mg-hero h3 { color: #ffffff; }
+
+/* Brand-blue hero variant */
+.mg-hero--blue {
+  background: linear-gradient(160deg, var(--mg-blue-8) 0%, var(--mg-blue-6) 100%);
+}
+
+/* 2025 crop-program green hero variant */
+.mg-hero--crop {
+  background: linear-gradient(160deg, #004a39 0%, var(--mg-crop-green) 100%);
+}
+
+/* Section surfaces */
+.mg-section       { padding: var(--mantine-spacing-xl, 2rem) 0; }
+.mg-section--alt  { background: var(--dxds-color-surface-neutral-subdued-rest, #f8f9fa); }
+.mg-section--dark { background: var(--mg-dark); color: #fff; }
+
+/* Text / background / border helpers */
+.mg-text-brand  { color: var(--mg-blue); }
+.mg-text-dark   { color: var(--mg-dark); }
+.mg-bg-brand    { background-color: var(--mg-blue); color: #fff; }
+.mg-bg-dark     { background-color: var(--mg-dark); color: #fff; }
+.mg-bg-crop     { background-color: var(--mg-crop-green); color: #fff; }
+.mg-border-brand { border-color: var(--mg-blue) !important; }
+
+/* Brand link styling (site convention) */
+.mg-link { color: var(--mg-link); text-decoration: none; }
+.mg-link:hover { text-decoration: underline; }
+
+/* Accent rule — thin brand-red keyline used on labels */
+.mg-keyline { border: 0; border-top: 3px solid var(--mg-red); width: 4rem; margin: 1rem 0; }
+
+/* ==========================================================================
+   4. PRODUCT BRANDING
+   Scope a page/section with .mg-product-<name>; the pieces below consume
+   the scoped variables. Every product defines:
+     --mg-product-accent  label band color (sampled from current label)
+     --mg-product-deep    darkened accent — safe under white text
+     --mg-product-tint    pale accent — light-mode section background
+   ========================================================================== */
+
+/* ----- Product color scopes (sampled from 2025 label PDFs) ----- */
+.mg-product-digestor,
+.mg-product-digestor-np,
+.mg-product-digestor-challenge,
+.mg-product-digestor-plus {           /* Digestor family: warm gold/orange */
+  --mg-product-accent: #e58555;
+  --mg-product-deep: #853a14;
+  --mg-product-tint: #fbece4;
+}
+
+.mg-product-evergrow,
+.mg-product-evergrow-plus {           /* Evergrow family: green */
+  --mg-product-accent: #59944f;
+  --mg-product-deep: #317326;
+  --mg-product-tint: #ecf4eb;
+}
+
+.mg-product-headstart {               /* teal */
+  --mg-product-accent: #00b7ba;
+  --mg-product-deep: #009799;
+  --mg-product-tint: #e4fbfb;
+}
+
+.mg-product-hydro-tl {                /* blue */
+  --mg-product-accent: #0a79be;
+  --mg-product-deep: #085d91;
+  --mg-product-tint: #e4f2fb;
+}
+
+.mg-product-infiltrate {              /* copper/tan */
+  --mg-product-accent: #d38d55;
+  --mg-product-deep: #7a471f;
+  --mg-product-tint: #f9efe7;
+}
+
+.mg-product-setbest {                 /* violet slate */
+  --mg-product-accent: #524f81;
+  --mg-product-deep: #2b2673;
+  --mg-product-tint: #ececf3;
+}
+
+.mg-product-lipoguard {               /* amber */
+  --mg-product-accent: #eba151;
+  --mg-product-deep: #894f10;
+  --mg-product-tint: #fbf0e4;
+}
+
+.mg-product-c-star {                  /* lime */
+  --mg-product-accent: #b1ce55;
+  --mg-product-deep: #637722;
+  --mg-product-tint: #f4f8e7;
+}
+
+.mg-product-bio-chelator {            /* orange */
+  --mg-product-accent: #dd6e1c;
+  --mg-product-deep: #884411;
+  --mg-product-tint: #fbeee4;
+}
+
+.mg-product-metabolt,                 /* Metabolt range: brand-adjacent blue */
+.mg-product-metabolt-boron,
+.mg-product-metabolt-calcium,
+.mg-product-metabolt-copper,
+.mg-product-metabolt-iron,
+.mg-product-metabolt-manganese,
+.mg-product-metabolt-zinc,
+.mg-product-mineral-foliar {
+  --mg-product-accent: #009dd1;
+  --mg-product-deep: #007399;
+  --mg-product-tint: #e4f5fb;
+}
+
+.mg-product-metaplex-200 {            /* pale sky blue */
+  --mg-product-accent: #9fdbea;
+  --mg-product-deep: #1b6a7e;
+  --mg-product-tint: #e6f6fa;
+}
+
+.mg-product-septicfix {               /* aqua */
+  --mg-product-accent: #63c4ce;
+  --mg-product-deep: #256d74;
+  --mg-product-tint: #e8f6f8;
+}
+
+.mg-product-rhizobium {               /* green */
+  --mg-product-accent: #569d63;
+  --mg-product-deep: #267334;
+  --mg-product-tint: #ebf4ed;
+}
+
+.mg-product-green-carbon-activate {   /* shares Evergrow green (per label) */
+  --mg-product-accent: #59944f;
+  --mg-product-deep: #317326;
+  --mg-product-tint: #ecf4eb;
+}
+
+.mg-product-custom-blend {            /* gold */
+  --mg-product-accent: #d2ac51;
+  --mg-product-deep: #7a5f1f;
+  --mg-product-tint: #f9f3e7;
+}
+
+.mg-product-miz {                     /* plum/berry */
+  --mg-product-accent: #95435e;
+  --mg-product-deep: #73263f;
+  --mg-product-tint: #f6eaee;
+}
+
+.mg-product-zinc-mo-plus {            /* deep green */
+  --mg-product-accent: #32731a;
+  --mg-product-deep: #32731a;
+  --mg-product-tint: #ebf9e6;
+}
+
+/* ----- Product page pieces (use inside a product scope) ----- */
+
+/* Hero: label look — dark panel with the product band along the bottom */
+.mg-product-hero {
+  background: linear-gradient(160deg, var(--mg-dark) 0%, var(--mg-navy) 100%);
+  border-bottom: 6px solid var(--mg-product-accent, var(--mg-blue));
+  border-radius: var(--mantine-radius-md, 0.5rem);
+  color: #ffffff;
+  padding: var(--mantine-spacing-xl, 2rem);
+}
+
+.mg-product-hero h1, .mg-product-hero h2 { color: #ffffff; }
+
+/* Full-strength accent band (like the label color band) */
+.mg-product-band {
+  background: var(--mg-product-accent, var(--mg-blue));
+  color: var(--mg-dark);
+  padding: var(--mantine-spacing-md, 1rem) var(--mantine-spacing-xl, 2rem);
+}
+
+/* Pale section background in the product color */
+.mg-product-section {
+  background: var(--mg-product-tint, var(--mg-blue-0));
+  border-radius: var(--mantine-radius-md, 0.5rem);
+  padding: var(--mantine-spacing-lg, 1.25rem);
+}
+
+/* Card with product accent top edge (Mantine Paper + accent) */
+.mg-product-card {
+  background: var(--dxds-color-surface-neutral-default-rest, #fff);
+  border: 1px solid var(--mantine-table-border, #dee2e6);
+  border-top: 4px solid var(--mg-product-accent, var(--mg-blue));
+  border-radius: var(--mantine-radius-md, 0.5rem);
+  box-shadow: var(--mantine-shadow-xs);
+  padding: var(--mantine-spacing-lg, 1.25rem);
+}
+
+/* Badge / chip in product colors (Mantine light-variant style) */
+.mg-product-badge {
+  background: rgb(from var(--mg-product-accent, var(--mg-blue)) r g b / 15%);
+  border-radius: var(--mantine-radius-xl, 2rem);
+  color: var(--mg-product-deep, var(--mg-blue-8));
+  display: inline-block;
+  font-size: var(--mantine-font-size-xs, 0.75rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.25rem 0.75rem;
+  text-transform: uppercase;
+}
+
+/* Solid button in product colors (matches Mantine button metrics) */
+.mg-product-btn {
+  background: var(--mg-product-deep, var(--mg-blue));
+  border: 0;
+  border-radius: var(--mantine-radius-sm, 0.25rem);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: var(--mantine-font-size-sm, 0.875rem);
+  font-weight: 600;
+  min-height: var(--mantine-control-height, 2.25rem);
+  padding: 0 1.125rem;
+}
+
+.mg-product-btn:hover { filter: brightness(1.12); }
+
+/* Accent text + divider */
+.mg-product-text    { color: var(--mg-product-deep, var(--mg-blue)); }
+.mg-product-divider { border: 0; border-top: 3px solid var(--mg-product-accent, var(--mg-blue)); }
+
+/* ==========================================================================
+   5. CROP PROGRAM PAGES
+   The 2025 crop program design uses ONE deep green across all crops —
+   per-crop classes exist so pages are ready to go and can diverge later.
+   ========================================================================== */
+.mg-crop-brassica,
+.mg-crop-cucurbits,
+.mg-crop-leafy-vegetables,
+.mg-crop-onion,
+.mg-crop-potatoes,
+.mg-crop-solanaceous-fruit,
+.mg-crop-sweet-corn,
+.mg-crop-green-bean,
+.mg-crop-root-stem-vegetables {
+  --mg-crop-accent: var(--mg-crop-green);
+  --mg-crop-deep: #004a39;
+  --mg-crop-tint: #e4f1ee;
+}
+
+.mg-crop-hero {
+  background: linear-gradient(160deg, var(--mg-crop-deep, #004a39) 0%, var(--mg-crop-accent, var(--mg-crop-green)) 100%);
+  border-radius: var(--mantine-radius-md, 0.5rem);
+  color: #ffffff;
+  padding: var(--mantine-spacing-xl, 2rem);
+}
+
+.mg-crop-hero h1, .mg-crop-hero h2 { color: #ffffff; }
+
+.mg-crop-section {
+  background: var(--mg-crop-tint, #e4f1ee);
+  border-radius: var(--mantine-radius-md, 0.5rem);
+  padding: var(--mantine-spacing-lg, 1.25rem);
+}
+
+.mg-crop-badge {
+  background: rgb(from var(--mg-crop-accent, var(--mg-crop-green)) r g b / 15%);
+  border-radius: var(--mantine-radius-xl, 2rem);
+  color: var(--mg-crop-deep, #004a39);
+  display: inline-block;
+  font-size: var(--mantine-font-size-xs, 0.75rem);
+  font-weight: 600;
+  padding: 0.25rem 0.75rem;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   6. DARK-MODE ADJUSTMENTS
+   Tint backgrounds are light-mode surfaces; in the Mantine Dark theme use
+   alpha fills instead. Requires the "mantine-dark" body class the theme
+   toggle already sets.
+   ========================================================================== */
+body.mantine-dark .mg-product-section,
+body.mantine-dark .mg-crop-section {
+  background: rgb(from var(--mg-product-accent, var(--mg-crop-accent, var(--mg-blue))) r g b / 12%);
+}
+
+body.mantine-dark .mg-product-card {
+  background: var(--dxds-color-surface-neutral-default-rest, #2e2e2e);
+}
+
+body.mantine-dark .mg-section--alt {
+  background: var(--dxds-color-surface-neutral-subdued-rest, #242424);
+}

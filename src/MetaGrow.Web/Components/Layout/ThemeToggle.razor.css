@@ -1,0 +1,20 @@
+.theme-toggle {
+    align-items: center;
+    background: transparent;
+    border: 1px solid var(--dxds-color-border-neutral-default-rest);
+    border-radius: 0.25rem;
+    color: var(--dxds-color-content-neutral-subdued-rest);
+    cursor: pointer;
+    display: inline-flex;
+    height: 2.25rem;
+    justify-content: center;
+    padding: 0;
+    width: 2.25rem;
+}
+
+.theme-toggle:hover {
+    background: var(--dxds-color-surface-neutral-default-hovered);
+    color: var(--dxds-color-content-neutral-default-rest);
+}
+
+.theme-toggle:focus-visible { outline: 2px solid var(--dxds-color-border-focus-default); outline-offset: 2px; }

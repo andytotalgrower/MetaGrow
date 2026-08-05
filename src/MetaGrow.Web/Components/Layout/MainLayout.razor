@@ -1,0 +1,63 @@
+@inherits DrawerStateLayoutComponentBase
+@inject NavigationManager NavigationManager
+
+<div class="page">
+    <Drawer CssClass="navigation-drawer" PanelWidth="240px">
+        <HeaderTemplate>
+            <div class="navigation-drawer-header">
+                <NavLink href="@AddDrawerStateToUrl("/")">
+                    <img class="logo" src="images/logo-metagen-inverted.png" alt="Metagen logo" />
+                </NavLink>
+                <NavLink aria-label="Close menu" href="@AddDrawerStateToUrlToggled(LocalPath)">
+                    <DxButton aria-label="Close menu" RenderStyle="ButtonRenderStyle.Light"
+                              RenderStyleMode="ButtonRenderStyleMode.Text" CssClass="btn-icon-only"
+                              IconCssClass="@(ToggledDrawer ? "icon icon-close" : "icon icon-menu")" />
+                </NavLink>
+            </div>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <div class="w-100"><NavMenu /></div>
+        </BodyTemplate>
+        <FooterTemplate>
+            <div class="navigation-drawer-footer">
+                <span class="mg-text-brand">Metagen MetaGrow</span>
+            </div>
+        </FooterTemplate>
+        <TargetContent>
+            <div class="drawer-content">
+                <div class="nav-buttons-container">
+                    <NavLink aria-label="Open menu" href="@AddDrawerStateToUrlToggled(LocalPath)" class="menu-button">
+                        <DxButton aria-label="Open menu" RenderStyle="ButtonRenderStyle.Secondary"
+                                  RenderStyleMode="ButtonRenderStyleMode.Text" CssClass="btn-icon-only"
+                                  IconCssClass="icon icon-menu" />
+                    </NavLink>
+                    @if (LocalPath != "/")
+                    {
+                        <NavLink href="@AddDrawerStateToUrl("/")" class="button-link">
+                            <DxButton Text="Back to Home" RenderStyle="ButtonRenderStyle.Secondary"
+                                      RenderStyleMode="ButtonRenderStyleMode.Text" CssClass="back-button"
+                                      IconCssClass="icon icon-back" />
+                        </NavLink>
+                    }
+                    <div class="switcher-panel"><ThemeToggle /></div>
+                    <span class="display-desktop">
+                        <DxButton Text="Authentication coming next" Enabled="false"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  RenderStyleMode="ButtonRenderStyleMode.Text" IconCssClass="icon icon-user" />
+                    </span>
+                </div>
+                <div class="page-content-container">@Body</div>
+            </div>
+        </TargetContent>
+    </Drawer>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">×</span>
+</div>
+
+@code {
+    private string LocalPath => new Uri(NavigationManager.Uri).LocalPath;
+}

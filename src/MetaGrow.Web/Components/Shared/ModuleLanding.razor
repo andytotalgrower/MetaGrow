@@ -1,0 +1,17 @@
+<div class="module-page">
+    <div class="mg-hero">
+        <span class="mg-eyebrow">MetaGrow work area</span>
+        <h1>@Title</h1>
+        <p>@Description</p>
+        <hr class="mg-keyline" />
+    </div>
+    <div class="module-placeholder">
+        <strong>Shell ready</strong>
+        <p>This area is intentionally a placeholder. Its data model, API integration and workflow will be added in a later phase.</p>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
+}

@@ -1,0 +1,237 @@
+/* ============================================================
+   mantine-palette.css
+   Mantine design tokens mapped to DevExpress Design System
+   palette scales. Mode-independent (load for light AND dark).
+
+   Source values: Mantine default theme (mantinedev/mantine,
+   default-colors.ts). 10-shade Mantine scales interpolated to
+   DevExpress 17-step scales, anchored so step 100 = Mantine
+   shade 6 (Mantine's "filled" shade).
+
+   Target: DevExpress Blazor v26.1.3 Fluent theme.
+   Public API per DevExpress docs: --dxds-* variables.
+   ============================================================ */
+
+:root {
+  /* ---- Primary (Mantine blue, filled = blue.6 #228be6) ---- */
+  --dxds-primary-10: #e7f5ff;
+  --dxds-primary-20: #d8eeff;
+  --dxds-primary-30: #c2e5ff;
+  --dxds-primary-40: #a5d8ff;
+  --dxds-primary-50: #84c8fd;
+  --dxds-primary-60: #67b9fa;
+  --dxds-primary-70: #4dabf7;
+  --dxds-primary-80: #3ca0f2;
+  --dxds-primary-90: #2d95ed;
+  --dxds-primary-100: #228be6;
+  --dxds-primary-110: #1f85df;
+  --dxds-primary-120: #1d80d8;
+  --dxds-primary-130: #1b7ad0;
+  --dxds-primary-140: #1a75c8;
+  --dxds-primary-150: #196fbf;
+  --dxds-primary-160: #186ab5;
+  --dxds-primary-170: #1864ab;
+
+  /* ---- Secondary (Mantine grape) ---- */
+  --dxds-secondary-10: #f8f0fc;
+  --dxds-secondary-20: #f5e1fb;
+  --dxds-secondary-30: #f1d0fa;
+  --dxds-secondary-40: #eebefa;
+  --dxds-secondary-50: #e8a5f8;
+  --dxds-secondary-60: #e18ef5;
+  --dxds-secondary-70: #da77f2;
+  --dxds-secondary-80: #d166eb;
+  --dxds-secondary-90: #c757e4;
+  --dxds-secondary-100: #be4bdb;
+  --dxds-secondary-110: #b745d3;
+  --dxds-secondary-120: #b040cc;
+  --dxds-secondary-130: #a93cc3;
+  --dxds-secondary-140: #a138bb;
+  --dxds-secondary-150: #9935b1;
+  --dxds-secondary-160: #8f31a7;
+  --dxds-secondary-170: #862e9c;
+
+  /* ---- Info (Mantine indigo) ---- */
+  --dxds-info-10: #edf2ff;
+  --dxds-info-20: #e1e9ff;
+  --dxds-info-30: #d0dbff;
+  --dxds-info-40: #bac8ff;
+  --dxds-info-50: #9fb2ff;
+  --dxds-info-60: #879ffe;
+  --dxds-info-70: #748ffc;
+  --dxds-info-80: #6482fb;
+  --dxds-info-90: #5777f8;
+  --dxds-info-100: #4c6ef5;
+  --dxds-info-110: #4869f1;
+  --dxds-info-120: #4365ec;
+  --dxds-info-130: #4061e6;
+  --dxds-info-140: #3d5de0;
+  --dxds-info-150: #3a59d8;
+  --dxds-info-160: #3854d0;
+  --dxds-info-170: #364fc7;
+
+  /* ---- Success (Mantine green) ---- */
+  --dxds-success-10: #ebfbee;
+  --dxds-success-20: #dbfadf;
+  --dxds-success-30: #c8f7ce;
+  --dxds-success-40: #b2f2bb;
+  --dxds-success-50: #99eca5;
+  --dxds-success-60: #80e490;
+  --dxds-success-70: #69db7c;
+  --dxds-success-80: #59d36d;
+  --dxds-success-90: #4bca61;
+  --dxds-success-100: #40c057;
+  --dxds-success-110: #3cba53;
+  --dxds-success-120: #38b44e;
+  --dxds-success-130: #35ac4a;
+  --dxds-success-140: #31a447;
+  --dxds-success-150: #2e9b43;
+  --dxds-success-160: #2d9341;
+  --dxds-success-170: #2b8a3e;
+
+  /* ---- Warning (Mantine yellow) ---- */
+  --dxds-warning-10: #fff9db;
+  --dxds-warning-20: #fff5c8;
+  --dxds-warning-30: #fff1b2;
+  --dxds-warning-40: #ffec99;
+  --dxds-warning-50: #ffe477;
+  --dxds-warning-60: #ffdc58;
+  --dxds-warning-70: #ffd43b;
+  --dxds-warning-80: #fdc924;
+  --dxds-warning-90: #fbbd12;
+  --dxds-warning-100: #fab005;
+  --dxds-warning-110: #f8a903;
+  --dxds-warning-120: #f6a101;
+  --dxds-warning-130: #f49a00;
+  --dxds-warning-140: #f19100;
+  --dxds-warning-150: #ef8900;
+  --dxds-warning-160: #ea8000;
+  --dxds-warning-170: #e67700;
+
+  /* ---- Danger (Mantine red) ---- */
+  --dxds-danger-10: #fff5f5;
+  --dxds-danger-20: #ffe9e9;
+  --dxds-danger-30: #ffdada;
+  --dxds-danger-40: #ffc9c9;
+  --dxds-danger-50: #ffb3b3;
+  --dxds-danger-60: #ff9d9d;
+  --dxds-danger-70: #ff8787;
+  --dxds-danger-80: #ff7474;
+  --dxds-danger-90: #fd6363;
+  --dxds-danger-100: #fa5252;
+  --dxds-danger-110: #f64949;
+  --dxds-danger-120: #f14141;
+  --dxds-danger-130: #eb3a3a;
+  --dxds-danger-140: #e53535;
+  --dxds-danger-150: #dd3030;
+  --dxds-danger-160: #d32d2d;
+  --dxds-danger-170: #c92a2a;
+
+  /* ---- Neutral: 25 steps. Light half = Mantine gray scale,
+          dark half = Mantine dark scale, endpoints white/black ---- */
+  --dxds-neutral-10: #ffffff;
+  --dxds-neutral-20: #f8f9fa;   /* gray.0 */
+  --dxds-neutral-30: #f1f3f5;   /* gray.1 */
+  --dxds-neutral-40: #e9ecef;   /* gray.2 */
+  --dxds-neutral-50: #dee2e6;   /* gray.3 — Mantine table/divider border */
+  --dxds-neutral-60: #ced4da;   /* gray.4 — Mantine input border */
+  --dxds-neutral-70: #adb5bd;   /* gray.5 — placeholder/disabled text */
+  --dxds-neutral-80: #868e96;   /* gray.6 — dimmed text */
+  --dxds-neutral-90: #696969;   /* dark.3 */
+  --dxds-neutral-100: #495057;  /* gray.7 */
+  --dxds-neutral-110: #424242;  /* dark.4 — dark-mode border */
+  --dxds-neutral-120: #3b3b3b;  /* dark.5 */
+  --dxds-neutral-130: #343a40;  /* gray.8 */
+  --dxds-neutral-140: #2e2e2e;  /* dark.6 — dark-mode surface (Paper) */
+  --dxds-neutral-150: #242424;  /* dark.7 — dark-mode body */
+  --dxds-neutral-160: #212529;  /* gray.9 */
+  --dxds-neutral-170: #1f1f1f;  /* dark.8 */
+  --dxds-neutral-180: #1a1a1a;
+  --dxds-neutral-190: #161616;
+  --dxds-neutral-200: #141414;  /* dark.9 */
+  --dxds-neutral-210: #101010;
+  --dxds-neutral-220: #0d0d0d;
+  --dxds-neutral-230: #0a0a0a;
+  --dxds-neutral-240: #050505;
+  --dxds-neutral-250: #000000;
+
+  /* ---- Mantine reference tokens (our own namespace, used by
+          the other stylesheets in this set) ---- */
+  --mantine-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --mantine-font-family-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --mantine-font-size-xs: 0.75rem;   /* 12px */
+  --mantine-font-size-sm: 0.875rem;  /* 14px — component default */
+  --mantine-font-size-md: 1rem;      /* 16px */
+  --mantine-font-size-lg: 1.125rem;  /* 18px */
+  --mantine-font-size-xl: 1.25rem;   /* 20px */
+  --mantine-line-height: 1.55;
+
+  --mantine-radius-xs: 0.125rem;  /* 2px  */
+  --mantine-radius-sm: 0.25rem;   /* 4px  — default for controls */
+  --mantine-radius-md: 0.5rem;    /* 8px  — cards, modals, dropdowns */
+  --mantine-radius-lg: 1rem;      /* 16px */
+  --mantine-radius-xl: 2rem;      /* 32px */
+
+  --mantine-spacing-xs: 0.625rem; /* 10px */
+  --mantine-spacing-sm: 0.75rem;  /* 12px */
+  --mantine-spacing-md: 1rem;     /* 16px */
+  --mantine-spacing-lg: 1.25rem;  /* 20px */
+  --mantine-spacing-xl: 2rem;     /* 32px */
+
+  --mantine-shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
+  --mantine-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05),
+    rgba(0, 0, 0, 0.05) 0 10px 15px -5px, rgba(0, 0, 0, 0.04) 0 7px 7px -5px;
+  --mantine-shadow-md: 0 1px 3px rgba(0, 0, 0, 0.05),
+    rgba(0, 0, 0, 0.05) 0 20px 25px -5px, rgba(0, 0, 0, 0.04) 0 10px 10px -5px;
+  --mantine-shadow-lg: 0 1px 3px rgba(0, 0, 0, 0.05),
+    rgba(0, 0, 0, 0.05) 0 28px 23px -7px, rgba(0, 0, 0, 0.04) 0 12px 12px -7px;
+  --mantine-shadow-xl: 0 1px 3px rgba(0, 0, 0, 0.05),
+    rgba(0, 0, 0, 0.05) 0 36px 28px -7px, rgba(0, 0, 0, 0.04) 0 17px 17px -7px;
+
+  /* Control metrics (Mantine md size) */
+  --mantine-control-height: 2.25rem;      /* 36px inputs/buttons */
+  --mantine-control-height-sm: 1.875rem;  /* 30px */
+  --mantine-control-height-lg: 2.625rem;  /* 42px */
+}
+
+/* ============================================================
+   DevExpress semantic TYPOGRAPHY variables → Mantine
+   (names from Design System → Typography docs; mode-independent)
+   ============================================================ */
+:root {
+  /* Mantine system font stack replaces Segoe-first Fluent stack */
+  --dxds-font-family-sans-serif: var(--mantine-font-family);
+  --dxds-font-family-mono: var(--mantine-font-family-monospace);
+
+  /* Base text: DX base-md 0.875rem already equals Mantine sm (14px).
+     Bump base line heights toward Mantine's 1.55 ratio. */
+  --dxds-line-height-base-md: 1.375rem;   /* 22px @ 14px ≈ 1.57 */
+  --dxds-line-height-base-lg: 1.5rem;     /* 24px @ 16px = 1.5  */
+
+  /* Mantine headings use weight 700 (Fluent defaults to 600) */
+  --dxds-font-weight-title-default: 700;
+  --dxds-font-weight-headline-default: 700;
+
+  /* Approximate Mantine heading scale (h1 34 / h2 26 / h3 22 / h4 18px) */
+  --dxds-font-size-headline-lg: 2.125rem; /* ≈ Mantine h1 */
+  --dxds-font-size-headline-md: 1.625rem; /* ≈ Mantine h2 */
+  --dxds-font-size-headline-sm: 1.375rem; /* ≈ Mantine h3 */
+  --dxds-font-size-title-md: 1.125rem;    /* ≈ Mantine h4 */
+}
+
+/* ============================================================
+   DevExpress semantic SHADOW variables → Mantine shadows
+   (names from Design System → Shadows docs). Mantine uses the
+   same shadow set in light and dark, so these are mode-independent.
+   ============================================================ */
+:root {
+  --dxds-box-shadow-xs: var(--mantine-shadow-xs);
+  --dxds-box-shadow-sm: var(--mantine-shadow-sm);
+  --dxds-box-shadow-md: var(--mantine-shadow-md);  /* cards, flyouts */
+  --dxds-box-shadow-lg: var(--mantine-shadow-md);  /* dropdowns/popovers: Mantine uses md */
+  --dxds-box-shadow-xl: var(--mantine-shadow-xl);  /* modals */
+  --dxds-box-shadow-2xl: var(--mantine-shadow-xl);
+}

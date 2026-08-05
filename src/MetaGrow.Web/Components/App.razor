@@ -1,0 +1,68 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <script>
+        window.mantineScheme = {
+            get: function () { var m = document.cookie.match(/(?:^|; )mantine-color-scheme=([^;]*)/); return m ? m[1] : 'light'; },
+            set: function (v) { document.cookie = 'mantine-color-scheme=' + v + '; path=/; max-age=31536000; SameSite=Lax'; },
+            applyBody: function (dark) { document.body.classList.toggle('mantine-dark', dark); }
+        };
+    </script>
+    @DxResourceManager.RegisterTheme(ActiveTheme)
+    @DxResourceManager.RegisterScripts()
+    <link rel="stylesheet" href="@Assets["css/site.css"]" />
+    <link rel="stylesheet" href="@Assets["MetaGrow.Web.styles.css"]" />
+    <ImportMap />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+
+<body class="@BodyClass">
+    <script>
+        if (window.mantineScheme.get() === 'dark') document.body.classList.add('mantine-dark');
+    </script>
+    <Routes @rendermode="InteractiveServer" />
+    <ReconnectModal />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>
+
+@code {
+    public static readonly ITheme MantineLight = Themes.Fluent.Clone(properties => {
+        properties.Name = "MetaGrow Light";
+        properties.Mode = ThemeMode.Light;
+        properties.AddFilePaths(
+            "css/mantine/mantine-palette.css",
+            "css/mantine/mantine-light.css",
+            "css/mantine/mantine-components.css",
+            "css/metagen-branding.css");
+    });
+
+    public static readonly ITheme MantineDark = Themes.Fluent.Clone(properties => {
+        properties.Name = "MetaGrow Dark";
+        properties.Mode = ThemeMode.Dark;
+        properties.AddFilePaths(
+            "css/mantine/mantine-palette.css",
+            "css/mantine/mantine-dark.css",
+            "css/mantine/mantine-components.css",
+            "css/metagen-branding.css");
+    });
+
+    private ITheme ActiveTheme = MantineLight;
+    private string BodyClass = string.Empty;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    protected override void OnInitialized()
+    {
+        var isDark = HttpContext.Request.Cookies["mantine-color-scheme"] == "dark";
+        ActiveTheme = isDark ? MantineDark : MantineLight;
+        BodyClass = isDark ? "mantine-dark" : string.Empty;
+    }
+}

@@ -1,0 +1,8 @@
+.module-page { display: flex; flex-direction: column; gap: 2rem; padding: 0.5rem 0 2rem; }
+.mg-hero { max-width: 48rem; }
+.mg-eyebrow { color: var(--mg-blue, #007cba); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+.mg-hero h1 { font-size: 2rem; margin: 0.4rem 0; }
+.mg-hero p, .module-placeholder p { color: var(--dxds-color-content-neutral-subdued-rest); }
+.mg-keyline { border: 0; border-top: 2px solid var(--mg-red, #d1242b); margin: 1.25rem 0 0; width: 5rem; }
+.module-placeholder { border: 1px solid var(--dxds-color-border-neutral-default-rest); border-radius: 0.5rem; max-width: 46rem; padding: 1.25rem; }
+.module-placeholder p { margin-bottom: 0; }
