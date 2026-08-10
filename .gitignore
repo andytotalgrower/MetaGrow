@@ -483,3 +483,5 @@ $RECYCLE.BIN/
 
 # Data Protection keys (must never be committed)
 src/MetaChange.Web/App_Data/
+# Persistent ASP.NET Data Protection keys are machine/runtime state.
+src/MetaGrow.Web/App_Data/keys/

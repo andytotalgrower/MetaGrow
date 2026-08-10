@@ -1,0 +1,19 @@
+@page "/Account/Manage/TwoFactorAuthentication"
+@attribute [Authorize]
+@inject AccountApiClient Api
+@inject MfaFlowState MfaFlow
+<PageTitle>Two-factor authentication | MetaGrow</PageTitle>
+<div class="main-content"><div class="block-content" style="width:40rem"><div class="title"><div class="title-header-text">Two-factor authentication</div></div>
+    @if (error is not null) { <div class="alert alert-danger">@error</div> }
+    @if (status is not null) {
+        <p>Authenticator: <strong>@(status.TwoFactorEnabled ? "Enabled" : "Disabled")</strong></p><p>Recovery codes remaining: <strong>@status.RecoveryCodesLeft</strong></p>
+        <div class="links-container"><a href="Account/Manage/GenerateRecoveryCodes">Generate new recovery codes</a></div>
+        <div class="links-container"><a href="Account/Manage/ResetAuthenticator">Reset authenticator</a></div>
+        @if (MfaFlow.ReadDeviceToken(HttpContext) is not null) { <EditForm Model="forgetModel" method="post" OnValidSubmit="Forget" FormName="forget-device"><DxButton SubmitFormOnClick="true" Text="Forget this browser" /></EditForm> }
+    }
+</div></div>
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!; private MetaGrowMfaStatusResponse? status; private string? error; private readonly object forgetModel=new();
+    protected override async Task OnInitializedAsync(){var result=await Api.GetMfaStatusAsync();status=result.Item1;error=result.Item2;}
+    private void Forget()=>MfaFlow.ClearDeviceToken(HttpContext);
+}

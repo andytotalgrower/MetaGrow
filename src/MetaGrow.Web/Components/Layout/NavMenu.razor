@@ -14,7 +14,13 @@
     <hr class="menu-separator" />
     <DxMenu Orientation="Orientation.Vertical" CssClass="menu">
         <Items>
-            <DxMenuItem NavigateUrl="/admin" Text="Administration" CssClass="@MenuItemCssClass("/admin")" IconCssClass="icon icon-settings" />
+            <AuthorizeView Roles="@ApiModels.MetaGrow.MetaGrowRoles.Admin">
+                <DxMenuItem NavigateUrl="/admin" Text="Administration" CssClass="@MenuItemCssClass("/admin")" IconCssClass="icon icon-settings" />
+            </AuthorizeView>
+            <AuthorizeView>
+                <DxMenuItem NavigateUrl="/Account/Manage/EmailAddresses" Text="My email addresses" CssClass="@MenuItemCssClass("/Account/Manage/EmailAddresses")" IconCssClass="icon icon-user" />
+                <DxMenuItem NavigateUrl="/Account/Manage/TwoFactorAuthentication" Text="Two-factor auth" CssClass="@MenuItemCssClass("/Account/Manage/TwoFactorAuthentication")" IconCssClass="icon icon-settings" />
+            </AuthorizeView>
         </Items>
     </DxMenu>
 </div>

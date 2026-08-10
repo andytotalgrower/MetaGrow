@@ -1,9 +1,12 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/MetaGrow.Api/MetaGrow.Api.csproj" />
     <Project Path="src/MetaGrow.Shared/MetaGrow.Shared.csproj" />
     <Project Path="src/MetaGrow.Web/MetaGrow.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/MetaGrow.Api.Tests/MetaGrow.Api.Tests.csproj" />
     <Project Path="tests/MetaGrow.Web.Tests/MetaGrow.Web.Tests.csproj" />
   </Folder>
+  <Project Path="../ApiModels/ApiModels.csproj" />
 </Solution>

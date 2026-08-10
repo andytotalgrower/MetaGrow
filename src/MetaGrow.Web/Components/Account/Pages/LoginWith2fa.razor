@@ -1,0 +1,23 @@
+@page "/Account/LoginWith2fa"
+@using System.ComponentModel.DataAnnotations
+@inject AuthApiClient AuthApi
+@inject ServerTokenStore TokenStore
+@inject MfaFlowState MfaFlow
+@inject MetaGrow.Web.Components.Account.IdentityRedirectManager Redirect
+<PageTitle>Two-factor authentication | MetaGrow</PageTitle>
+<div class="main-content"><div class="block-content"><div class="title"><div class="title-header-text">Two-factor authentication</div><div class="title-content-text">Enter the code from your authenticator app.</div></div>
+    @if (error is not null) { <div class="alert alert-danger">@error</div> }
+    @if (pending is null) { <p>Your login session has expired. <a href="Account/Login">Log in again</a>.</p> } else {
+        <EditForm Model="Input" method="post" OnValidSubmit="Submit" FormName="mfa-login" Context="mfaForm"><DataAnnotationsValidator /><ValidationSummary class="text-danger" />
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical"><DxFormLayoutItem Caption="Authenticator code" ColSpanMd="12"><InputText class="form-control" @bind-Value="Input.Code" name="Input.Code" /></DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanMd="12"><label><InputCheckbox @bind-Value="Input.RememberMachine" name="Input.RememberMachine" /> Remember this machine for 30 days</label></DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanMd="12"><DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Log in" /></DxFormLayoutItem></DxFormLayout>
+        </EditForm><div class="links-container"><a href="Account/LoginWithRecoveryCode">Use a recovery code</a></div>
+    }
+</div></div>
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!; [SupplyParameterFromForm(Name = "Input")] private CodeInput? FormInput { get; set; } private CodeInput Input => FormInput ??= new(); [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+    private MfaPending? pending; private string? error; protected override void OnInitialized() => pending = MfaFlow.ReadPending(HttpContext);
+    private async Task Submit() { pending = MfaFlow.ReadPending(HttpContext); if (pending is null) return; var (auth, errors) = await AuthApi.MfaVerifyAsync(new() { ChallengeToken=pending.ChallengeToken, Code=Input.Code, RememberMachine=Input.RememberMachine }); if (auth is null) { error=string.Join(" ", errors); return; } if (auth.DeviceToken is not null) MfaFlow.WriteDeviceToken(HttpContext, auth.DeviceToken); MfaFlow.ClearPending(HttpContext); await AuthCookieHelper.SignInAsync(HttpContext, TokenStore, auth, pending.RememberMe); Redirect.RedirectTo(ReturnUrl); }
+    private sealed class CodeInput { [Required, StringLength(7, MinimumLength=6)] public string Code { get; set; } = ""; public bool RememberMachine { get; set; } }
+}

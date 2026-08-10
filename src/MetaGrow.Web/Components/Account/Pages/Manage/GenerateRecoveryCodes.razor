@@ -1,0 +1,10 @@
+@page "/Account/Manage/GenerateRecoveryCodes"
+@attribute [Authorize]
+@inject AccountApiClient Api
+<PageTitle>Recovery codes | MetaGrow</PageTitle>
+<div class="main-content"><div class="block-content"><div class="title"><div class="title-header-text">Recovery codes</div><div class="title-content-text">Generating new codes invalidates any previous codes.</div></div>
+    @if(error is not null){<div class="alert alert-danger">@error</div>}
+    @if(codes is null){<EditForm Model="model" method="post" OnValidSubmit="Generate" FormName="generate-codes"><DxButton SubmitFormOnClick="true" Text="Generate new recovery codes" /></EditForm>}
+    else {<div class="alert alert-warning"><strong>Save these codes now.</strong></div><ul>@foreach(var recoveryCode in codes){<li><kbd>@recoveryCode</kbd></li>}</ul>}
+</div></div>
+@code { private readonly object model=new(); private string[]? codes; private string? error; private async Task Generate(){var result=await Api.NewRecoveryCodesAsync();codes=result.Item1?.RecoveryCodes;error=result.Item2;} }

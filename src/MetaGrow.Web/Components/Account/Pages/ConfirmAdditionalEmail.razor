@@ -1,0 +1,12 @@
+@page "/Account/ConfirmAdditionalEmail"
+@attribute [Authorize]
+@inject AccountApiClient Api
+<PageTitle>Confirm additional email | MetaGrow</PageTitle>
+<div class="main-content"><div class="block-content"><div class="title"><div class="title-header-text">Confirm additional email</div></div>
+    @if (working) { <p>Confirming…</p> } else if (error is null) { <div class="alert alert-success">The additional address is confirmed. <a href="Account/Manage/EmailAddresses">View email addresses</a>.</div> } else { <div class="alert alert-danger">@error</div> }
+</div></div>
+@code {
+    [SupplyParameterFromQuery] private long EmailAddressId { get; set; } [SupplyParameterFromQuery] private string? Code { get; set; }
+    private bool working=true; private string? error;
+    protected override async Task OnInitializedAsync() { error=EmailAddressId<=0||string.IsNullOrWhiteSpace(Code)?"The confirmation link is incomplete.":await Api.ConfirmEmailAsync(EmailAddressId,Code); working=false; }
+}

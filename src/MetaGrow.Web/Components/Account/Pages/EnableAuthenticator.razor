@@ -1,0 +1,56 @@
+@page "/Account/EnableAuthenticator"
+@using System.ComponentModel.DataAnnotations
+@inject AuthApiClient AuthApi
+@inject ServerTokenStore TokenStore
+@inject MfaFlowState MfaFlow
+
+<PageTitle>Set up authenticator | MetaGrow</PageTitle>
+<div class="main-content"><div class="block-content" style="width:40rem"><div class="title"><div class="title-header-text">Two-factor authentication</div><div class="title-content-text">Set up an authenticator app to finish logging in.</div></div>
+    @if (error is not null) { <div class="alert alert-danger">@error</div> }
+    @if (recoveryCodes is not null) {
+        <div class="alert alert-success"><strong>Save these one-time recovery codes now.</strong></div>
+        <ul>@foreach (var recoveryCode in recoveryCodes) { <li><kbd>@recoveryCode</kbd></li> }</ul>
+        <a href="@(string.IsNullOrWhiteSpace(ReturnUrl) ? "/" : ReturnUrl)">I’ve saved my recovery codes—continue</a>
+    } else if (setup is not null) {
+        <ol><li>Add a new work or other account in Microsoft Authenticator, Google Authenticator, or an equivalent app.</li>
+            <li>Scan the QR code or enter this setup key: <kbd>@setup.SharedKey</kbd><br /><br />
+                <div id="qrCode"></div>
+                <div id="qrCodeData" data-url="@setup.AuthenticatorUri"></div>
+            </li><li>Enter the six-digit code below.</li></ol>
+        <EditForm Model="Input" method="post" OnValidSubmit="Submit" FormName="mfa-setup" Context="setupForm"><DataAnnotationsValidator /><ValidationSummary class="text-danger" />
+            <input type="hidden" name="Input.ChallengeToken" value="@Input.ChallengeToken" />
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical"><DxFormLayoutItem Caption="Verification code" ColSpanMd="12"><InputText class="form-control" @bind-Value="Input.Code" name="Input.Code" /></DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanMd="12"><DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Verify" /></DxFormLayoutItem></DxFormLayout>
+        </EditForm>
+        <script src="scripts/qrcode.min.js"></script>
+        <script>
+            (function () {
+                var data = document.getElementById('qrCodeData');
+                if (data) new QRCode(document.getElementById('qrCode'), { text: data.getAttribute('data-url'), width: 200, height: 200 });
+            })();
+        </script>
+    } else { <p>Your setup session has expired. <a href="Account/Login">Log in again</a>.</p> }
+</div></div>
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromForm(Name = "Input")] private SetupInput? FormInput { get; set; } private SetupInput Input => FormInput ??= new(); [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+    private MetaGrowMfaSetupInfo? setup; private string[]? recoveryCodes; private string? error; private MfaPending? pending;
+    protected override async Task OnInitializedAsync()
+    {
+        pending = MfaFlow.ReadPending(HttpContext);
+        if (pending is null) return;
+        Input.ChallengeToken = pending.ChallengeToken;
+        var result = await AuthApi.MfaSetupInfoAsync(pending.ChallengeToken); setup = result.Item1;
+        if (setup is null) error = string.Join(" ", result.Item2);
+    }
+    private async Task Submit()
+    {
+        pending = MfaFlow.ReadPending(HttpContext);
+        if (pending is null) { error = "Your setup session has expired."; return; }
+        var (response, errors) = await AuthApi.MfaSetupAsync(pending.ChallengeToken, Input.Code);
+        if (response is null) { error = string.Join(" ", errors); return; }
+        MfaFlow.ClearPending(HttpContext); await AuthCookieHelper.SignInAsync(HttpContext, TokenStore, response.Auth, pending.RememberMe);
+        recoveryCodes = response.RecoveryCodes; setup = null;
+    }
+    private sealed class SetupInput { public string ChallengeToken { get; set; } = ""; [Required, StringLength(7, MinimumLength=6)] public string Code { get; set; } = ""; }
+}

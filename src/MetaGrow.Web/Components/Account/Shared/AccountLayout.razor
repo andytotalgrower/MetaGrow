@@ -1,0 +1,13 @@
+@inherits LayoutComponentBase
+@layout MetaGrow.Web.Components.Layout.MainLayout
+@inject NavigationManager Navigation
+
+@if (HttpContext is not null) { @Body }
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+    protected override void OnParametersSet()
+    {
+        if (HttpContext is null) Navigation.Refresh(forceReload: true);
+    }
+}

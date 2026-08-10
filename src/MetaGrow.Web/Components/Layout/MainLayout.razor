@@ -40,11 +40,22 @@
                         </NavLink>
                     }
                     <div class="switcher-panel"><ThemeToggle /></div>
-                    <span class="display-desktop">
-                        <DxButton Text="Authentication coming next" Enabled="false"
-                                  RenderStyle="ButtonRenderStyle.Secondary"
-                                  RenderStyleMode="ButtonRenderStyleMode.Text" IconCssClass="icon icon-user" />
-                    </span>
+                    <AuthorizeView>
+                        <Authorized Context="auth">
+                            <span class="display-desktop mg-user-name">@auth.User.Identity?.Name</span>
+                            <form action="Account/Logout" method="post" class="display-desktop">
+                                <AntiforgeryToken />
+                                <DxButton Text="Log out" SubmitFormOnClick="true" RenderStyle="ButtonRenderStyle.Secondary"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text" IconCssClass="icon icon-log-out" />
+                            </form>
+                        </Authorized>
+                        <NotAuthorized>
+                            <NavLink href="Account/Login" class="button-link display-desktop">
+                                <DxButton Text="Log in" RenderStyle="ButtonRenderStyle.Secondary"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text" IconCssClass="icon icon-log-in" />
+                            </NavLink>
+                        </NotAuthorized>
+                    </AuthorizeView>
                 </div>
                 <div class="page-content-container">@Body</div>
             </div>

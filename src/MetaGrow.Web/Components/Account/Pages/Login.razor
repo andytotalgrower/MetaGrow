@@ -1,0 +1,51 @@
+@page "/Account/Login"
+@using System.ComponentModel.DataAnnotations
+@inject AuthApiClient AuthApi
+@inject ServerTokenStore TokenStore
+@inject MfaFlowState MfaFlow
+@inject MetaGrow.Web.Components.Account.IdentityRedirectManager Redirect
+
+<PageTitle>Log in | MetaGrow</PageTitle>
+<div class="main-content"><div class="block-content">
+    <div class="title"><div class="title-header-text">Log in</div><div class="title-content-text">Use your MetaGrow account.</div></div>
+    @if (error is not null) { <div class="alert alert-danger">@error</div> }
+    <EditForm Model="Input" method="post" OnValidSubmit="Submit" FormName="login" Context="loginForm">
+        <DataAnnotationsValidator /><ValidationSummary class="text-danger" />
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Email" ColSpanMd="12"><InputText class="form-control" @bind-Value="Input.Email" name="Input.Email" /></DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Password" ColSpanMd="12"><InputText class="form-control" type="password" @bind-Value="Input.Password" name="Input.Password" /></DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanMd="12"><label><InputCheckbox @bind-Value="Input.RememberMe" name="Input.RememberMe" /> Remember me</label></DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanMd="12"><DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Log in" /></DxFormLayoutItem>
+        </DxFormLayout>
+    </EditForm>
+    <div class="links-container"><a href="Account/ForgotPassword">Forgot your password?</a></div>
+    <div class="links-container"><span>Need an account?</span> <a href="Account/Register">Register</a></div>
+</div></div>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromForm(Name = "Input")] private LoginInput? FormInput { get; set; }
+    private LoginInput Input => FormInput ??= new();
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+    private string? error;
+    private async Task Submit()
+    {
+        var (response, errors) = await AuthApi.LoginAsync(new() { Email = Input.Email, Password = Input.Password, DeviceToken = MfaFlow.ReadDeviceToken(HttpContext) });
+        if (response is null) { error = string.Join(" ", errors); return; }
+        if (response.Status != MetaGrowLoginStatus.Ok)
+        {
+            MfaFlow.WritePending(HttpContext, response.ChallengeToken!, Input.RememberMe);
+            Redirect.RedirectTo(response.Status == MetaGrowLoginStatus.MfaSetupRequired ? "Account/EnableAuthenticator" : "Account/LoginWith2fa",
+                new() { ["returnUrl"] = ReturnUrl });
+            return;
+        }
+        await AuthCookieHelper.SignInAsync(HttpContext, TokenStore, response.Auth!, Input.RememberMe);
+        Redirect.RedirectTo(ReturnUrl);
+    }
+    private sealed class LoginInput
+    {
+        [Required, EmailAddress] public string Email { get; set; } = string.Empty;
+        [Required, DataType(DataType.Password)] public string Password { get; set; } = string.Empty;
+        public bool RememberMe { get; set; }
+    }
+}

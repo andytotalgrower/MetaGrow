@@ -1,0 +1,40 @@
+@page "/Account/Register"
+@using System.ComponentModel.DataAnnotations
+@inject AuthApiClient AuthApi
+
+<PageTitle>Register | MetaGrow</PageTitle>
+<div class="main-content"><div class="block-content">
+    <div class="title"><div class="title-header-text">Register</div><div class="title-content-text">Create your MetaGrow account using a registration code.</div></div>
+    @if (error is not null) { <div class="alert alert-danger">@error</div> }
+    @if (message is not null) { <div class="alert alert-success">@message</div> }
+    <EditForm Model="Input" method="post" OnValidSubmit="Submit" FormName="register" Context="registerForm">
+        <DataAnnotationsValidator /><ValidationSummary class="text-danger" />
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Registration code" ColSpanMd="12"><InputText class="form-control w-100" @bind-Value="Input.RegistrationCode" name="Input.RegistrationCode" /></DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Email" ColSpanMd="12"><InputText class="form-control w-100" @bind-Value="Input.Email" name="Input.Email" /></DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Password" ColSpanMd="12"><InputText class="form-control w-100" type="password" @bind-Value="Input.Password" name="Input.Password" /></DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Confirm password" ColSpanMd="12"><InputText class="form-control w-100" type="password" @bind-Value="Input.ConfirmPassword" name="Input.ConfirmPassword" /></DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanMd="12"><DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Register" /></DxFormLayoutItem>
+        </DxFormLayout>
+    </EditForm>
+    <div class="links-container"><span>Already registered?</span> <a href="Account/Login">Log in</a></div>
+</div></div>
+
+@code {
+    [SupplyParameterFromForm(Name = "Input")] private RegisterInput? FormInput { get; set; }
+    private RegisterInput Input => FormInput ??= new();
+    private string? error; private string? message;
+    private async Task Submit()
+    {
+        var (response, errors) = await AuthApi.RegisterAsync(new() { RegistrationCode = Input.RegistrationCode, Email = Input.Email, Password = Input.Password });
+        if (response is null) { error = string.Join(" ", errors); return; }
+        error = null; message = response.Message ?? "Account created. Check your email to confirm it before logging in.";
+    }
+    private sealed class RegisterInput
+    {
+        [Required] public string RegistrationCode { get; set; } = string.Empty;
+        [Required, EmailAddress] public string Email { get; set; } = string.Empty;
+        [Required, StringLength(100, MinimumLength = 8), DataType(DataType.Password)] public string Password { get; set; } = string.Empty;
+        [Compare(nameof(Password)), DataType(DataType.Password)] public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

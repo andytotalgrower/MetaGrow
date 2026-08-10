@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <PackageReference Include="DevExpress.Blazor" Version="26.1.*" />
+    <PackageReference Include="Microsoft.Extensions.Caching.SqlServer" Version="10.0.10" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <!-- Overrides DevExpress's older transitive reference; .NET 10 otherwise reports its security advisories. -->
@@ -9,6 +10,7 @@
       <NoWarn>NU1510</NoWarn>
     </PackageReference>
     <ProjectReference Include="..\MetaGrow.Shared\MetaGrow.Shared.csproj" />
+    <ProjectReference Include="..\..\..\Metagen.Shared\Metagen.Shared.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

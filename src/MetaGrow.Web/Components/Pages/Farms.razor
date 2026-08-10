@@ -1,3 +1,4 @@
 @page "/farms"
+@attribute [Authorize(Roles = ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager)]
 <PageTitle>Farm setup | MetaGrow</PageTitle>
 <ModuleLanding Title="Farm setup" Description="Properties, growers and blocks will be managed here." />

@@ -1,0 +1,21 @@
+@page "/Account/Manage/EmailAddresses"
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@inject AccountApiClient Api
+<PageTitle>Email addresses | MetaGrow</PageTitle>
+<div class="main-content"><div class="block-content" style="width:40rem"><div class="title"><div class="title-header-text">Email addresses</div><div class="title-content-text">Add current or historical work addresses used to match your TGS data.</div></div>
+    @if (error is not null) { <div class="alert alert-danger">@error</div> }
+    @if (message is not null) { <div class="alert alert-success">@message</div> }
+    @if (addresses is not null) { <table class="table"><thead><tr><th>Email</th><th>Type</th><th>Status</th></tr></thead><tbody>@foreach(var address in addresses){<tr><td>@address.Email</td><td>@(address.IsPrimary ? "Login" : "Additional")</td><td>@(address.IsConfirmed ? "Confirmed" : "Awaiting confirmation")</td></tr>}</tbody></table> }
+    <EditForm Model="Input" method="post" OnValidSubmit="Add" FormName="add-email" Context="emailForm"><DataAnnotationsValidator /><ValidationSummary class="text-danger" />
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical"><DxFormLayoutItem Caption="Additional email" ColSpanMd="12"><InputText class="form-control" @bind-Value="Input.Email" name="Input.Email" /></DxFormLayoutItem>
+        <DxFormLayoutItem ColSpanMd="12"><DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Send confirmation" /></DxFormLayoutItem></DxFormLayout>
+    </EditForm>
+</div></div>
+@code {
+    [SupplyParameterFromForm(Name = "Input")] private EmailInput? FormInput { get; set; } private EmailInput Input => FormInput ??= new();
+    private MetaGrowUserEmailDto[]? addresses; private string? error; private string? message;
+    protected override async Task OnInitializedAsync() { var result=await Api.GetEmailsAsync(); addresses=result.Item1; error=result.Item2; }
+    private async Task Add() { var result=await Api.AddEmailAsync(Input.Email); error=result.Item2; if(result.Item1 is not null){message="A confirmation link has been sent to the additional address."; var refreshed=await Api.GetEmailsAsync(); addresses=refreshed.Item1;} }
+    private sealed class EmailInput { [Required, EmailAddress] public string Email { get; set; } = ""; }
+}

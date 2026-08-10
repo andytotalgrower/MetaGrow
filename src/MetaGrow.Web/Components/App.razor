@@ -18,14 +18,14 @@
     <link rel="stylesheet" href="@Assets["MetaGrow.Web.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
 <body class="@BodyClass">
     <script>
         if (window.mantineScheme.get() === 'dark') document.body.classList.add('mantine-dark');
     </script>
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="PageRenderMode" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>
@@ -58,6 +58,9 @@
 
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
+
+    private IComponentRenderMode? PageRenderMode =>
+        HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
 
     protected override void OnInitialized()
     {

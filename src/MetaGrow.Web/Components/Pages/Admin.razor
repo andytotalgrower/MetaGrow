@@ -1,3 +1,4 @@
 @page "/admin"
+@attribute [Authorize(Roles = ApiModels.MetaGrow.MetaGrowRoles.Admin)]
 <PageTitle>Administration | MetaGrow</PageTitle>
 <ModuleLanding Title="Administration" Description="Users, roles, MFA and application access will be managed here." />

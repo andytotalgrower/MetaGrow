@@ -1,0 +1,58 @@
+@* Reusable styled confirmation dialog (replaces browser confirm()). Await ShowAsync(...) to get the user's choice. *@
+
+<DxPopup @bind-Visible="_visible" ShowFooter="true" HeaderText="@_title"
+         AllowDrag="true"
+         ShowCloseButton="false" CloseOnOutsideClick="false" CloseOnEscape="true"
+         Width="440px" Closed="OnClosed">
+    <BodyContentTemplate>
+        <div class="confirm-body">
+            <span class="confirm-icon @(_danger ? "confirm-icon-danger" : "confirm-icon-info")" aria-hidden="true">
+                @(_danger ? "\u26A0" : "\u2753")
+            </span>
+            <div class="confirm-message">@_message</div>
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="confirm-footer">
+            <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => Close(false))" />
+            <DxButton Text="@_confirmText" RenderStyle="@(_danger ? ButtonRenderStyle.Danger : ButtonRenderStyle.Primary)"
+                      Click="@(() => Close(true))" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    private bool _visible;
+    private bool _danger;
+    private string _title = "Confirm";
+    private string _message = string.Empty;
+    private string _confirmText = "Confirm";
+    private TaskCompletionSource<bool>? _tcs;
+
+    /// <summary>Shows the dialog and completes with true when confirmed, false when cancelled.</summary>
+    public Task<bool> ShowAsync(string message, string title = "Confirm", string confirmText = "Confirm", bool danger = false)
+    {
+        _tcs?.TrySetResult(false);
+        _tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _message = message;
+        _title = title;
+        _confirmText = confirmText;
+        _danger = danger;
+        _visible = true;
+        StateHasChanged();
+        return _tcs.Task;
+    }
+
+    private void Close(bool result)
+    {
+        _visible = false;
+        _tcs?.TrySetResult(result);
+    }
+
+    private void OnClosed()
+    {
+        // Covers Escape key: resolve as cancelled if still pending.
+        _tcs?.TrySetResult(false);
+    }
+}
