@@ -9,4 +9,5 @@
     <Project Path="tests/MetaGrow.Web.Tests/MetaGrow.Web.Tests.csproj" />
   </Folder>
   <Project Path="../ApiModels/ApiModels.csproj" />
+  <Project Path="../Metagen.Shared/Metagen.Shared.csproj" />
 </Solution>

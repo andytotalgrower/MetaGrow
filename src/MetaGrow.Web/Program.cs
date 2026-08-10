@@ -42,9 +42,17 @@ builder.Services.AddSingleton<ServerTokenStore>();
 builder.Services.AddScoped<AuthApiClient>();
 builder.Services.AddScoped<ApiTokenService>();
 builder.Services.AddScoped<AccountApiClient>();
-builder.Services.AddScoped<MultiCropApiClient>();
 builder.Services.AddScoped<MfaFlowState>();
 builder.Services.AddScoped<MetaGrow.Web.Components.Account.IdentityRedirectManager>();
+
+builder.Services.AddScoped<EncryptionService>();
+builder.Services.AddScoped<ISettingsService, SettingsService>();
+builder.Services.AddHttpClient<ITgsApiService, TgsApiService>(client =>
+{
+    var developmentBaseUrl = builder.Configuration["TgsApi:DevelopmentBaseUrl"];
+    if (builder.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(developmentBaseUrl))
+        client.BaseAddress = new Uri(developmentBaseUrl);
+});
 
 var bootstrapSettings = new SettingsService(builder.Configuration, new EncryptionService());
 var cacheConnection = GetConnectionString(bootstrapSettings)

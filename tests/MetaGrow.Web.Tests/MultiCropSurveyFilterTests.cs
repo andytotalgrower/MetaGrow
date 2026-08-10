@@ -42,4 +42,45 @@ public sealed class MultiCropSurveyFilterTests
         Assert.Equal("Survey #2026-4, P.O.# PO-123", survey.SurveyReference);
         Assert.True(survey.HasPhotos);
     }
+
+    [Fact]
+    public void Apply_FiltersByStatus()
+    {
+        MultiCropSurveySummaryDto[] surveys =
+        [
+            new() { SurveyId = 1, SurveyDate = new DateTime(2026, 6, 10), StatusId = 1, StatusName = "Completed" },
+            new() { SurveyId = 2, SurveyDate = new DateTime(2026, 7, 1), StatusId = 2, StatusName = "Awaiting QA" }
+        ];
+
+        var result = MultiCropSurveyFilter.Apply(surveys, null, null, 2);
+
+        Assert.Equal([2], result.Select(survey => survey.SurveyId));
+    }
+
+    [Fact]
+    public void Apply_PutsSurveysRequiringActionFirst()
+    {
+        MultiCropSurveySummaryDto[] surveys =
+        [
+            new() { SurveyId = 1, SurveyDate = new DateTime(2026, 8, 20), StatusName = "Completed" },
+            new() { SurveyId = 2, SurveyDate = new DateTime(2026, 6, 1), StatusName = "In Progress" },
+            new() { SurveyId = 3, SurveyDate = new DateTime(2026, 7, 1), StatusName = "Awaiting QA" }
+        ];
+
+        var result = MultiCropSurveyFilter.Apply(surveys, null, null);
+
+        Assert.Equal([3, 2, 1], result.Select(survey => survey.SurveyId));
+    }
+
+    [Theory]
+    [InlineData("Awaiting QA", "status-awaiting-qa")]
+    [InlineData("In Progress", "status-in-progress")]
+    [InlineData("Completed", "status-completed")]
+    [InlineData("Cancelled", "status-cancelled")]
+    [InlineData("Something Else", "status-other")]
+    [InlineData(null, "status-other")]
+    public void StatusBadgeClass_MapsStatusNames(string? statusName, string expected)
+    {
+        Assert.Equal(expected, MultiCropSurveyFilter.StatusBadgeClass(statusName));
+    }
 }

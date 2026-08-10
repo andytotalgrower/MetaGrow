@@ -36,7 +36,7 @@
 .filter-grid {
     display: grid;
     gap: 0.75rem;
-    grid-template-columns: 10rem 10rem minmax(14rem, 1fr) minmax(13rem, 0.8fr);
+    grid-template-columns: 10rem 10rem minmax(12rem, 1fr) minmax(11rem, 0.8fr) minmax(11rem, 0.8fr);
     margin-top: 1rem;
 }
 
@@ -81,8 +81,35 @@
     display: inline-block;
     font-size: 0.75rem;
     font-weight: 600;
+    max-width: 100%;
+    overflow: hidden;
     padding: 0.2rem 0.55rem;
+    text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Still being surveyed / written up. */
+.status-badge.status-in-progress {
+    background: var(--mg-blue, #007cba);
+    color: #fff;
+}
+
+/* Waiting on QA review; needs attention. */
+.status-badge.status-awaiting-qa {
+    background: #ffc107;
+    color: #4d3a00;
+}
+
+/* All done. */
+.status-badge.status-completed {
+    background: #198754;
+    color: #fff;
+}
+
+/* Cancelled or abandoned. */
+.status-badge.status-cancelled {
+    background: #6c757d;
+    color: #fff;
 }
 
 .mobile-results { display: none; }

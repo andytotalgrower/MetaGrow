@@ -2,9 +2,9 @@
 @using ApiModels
 @using ApiModels.MetaGrow
 @using MetaGrow.Shared
-@using MetaGrow.Web.Services
+@using Metagen.Shared.Services
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
-@inject MultiCropApiClient Api
+@inject ITgsApiService TgsApi
 
 <PageTitle>Multi-crop surveys | MetaGrow</PageTitle>
 
@@ -43,6 +43,14 @@
                             TextFieldName="@nameof(MultiCropSurveyTypeDto.ApplicationName)"
                             ValueFieldName="@nameof(MultiCropSurveyTypeDto.ApplicationId)"
                             NullText="All survey types" AllowUserInput="false"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div class="filter-field">
+                <label for="survey-status">Status</label>
+                <DxComboBox Id="survey-status" Data="@StatusOptions" @bind-Value="_statusId"
+                            TextFieldName="@nameof(StatusOption.StatusName)"
+                            ValueFieldName="@nameof(StatusOption.StatusId)"
+                            NullText="All statuses" AllowUserInput="false"
                             ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
             </div>
         </div>
@@ -85,7 +93,7 @@
         {
             <div class="empty-state">
                 <strong>No surveys match the current filters.</strong>
-                <span>Clear the property or survey type filter to see more results.</span>
+                <span>Clear the property, survey type or status filter to see more results.</span>
             </div>
         }
         else
@@ -96,14 +104,15 @@
                         CssClass="multicrop-grid">
                     <Columns>
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyDate)" Caption="Date" Width="110px"
-                                          DisplayFormat="dd/MM/yyyy" SortIndex="0" SortOrder="GridColumnSortOrder.Descending" />
+                                          DisplayFormat="dd/MM/yyyy" />
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.PropertyName)" Caption="Property" MinWidth="180" />
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ApplicationName)" Caption="Survey type" MinWidth="140" />
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.CropTypeName)" Caption="Crop" MinWidth="120" />
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.AgronomistName)" Caption="Agronomist" MinWidth="150" />
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.StatusName)" Caption="Status" Width="120px">
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.StatusName)" Caption="Status" Width="150px">
                             <CellDisplayTemplate Context="cell">
-                                <span class="status-badge">@((cell.DataItem as MultiCropSurveySummaryDto)?.StatusName)</span>
+                                @{ var statusName = (cell.DataItem as MultiCropSurveySummaryDto)?.StatusName; }
+                                <span class="status-badge @MultiCropSurveyFilter.StatusBadgeClass(statusName)">@statusName</span>
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyReference)" Caption="Reference" MinWidth="150">
@@ -139,7 +148,7 @@
                                 <strong>@survey.PropertyName</strong>
                                 <span>@survey.SurveyDate.ToString("dd MMM yyyy")</span>
                             </div>
-                            <span class="status-badge">@survey.StatusName</span>
+                            <span class="status-badge @MultiCropSurveyFilter.StatusBadgeClass(survey.StatusName)">@survey.StatusName</span>
                         </div>
                         <dl>
                             <div><dt>Type</dt><dd>@survey.ApplicationName</dd></div>
@@ -166,13 +175,22 @@
     private DateTime _endDate;
     private string? _propertySearch;
     private int? _applicationId;
+    private int? _statusId;
     private bool _loading;
     private string? _errorMessage;
     private List<MultiCropSurveySummaryDto> _surveys = [];
     private List<MultiCropSurveyTypeDto> _surveyTypes = [];
 
+    private sealed record StatusOption(int StatusId, string StatusName);
+
+    private IReadOnlyList<StatusOption> StatusOptions => _surveys
+        .GroupBy(survey => new { survey.StatusId, survey.StatusName })
+        .Select(group => new StatusOption(group.Key.StatusId, group.Key.StatusName))
+        .OrderBy(status => status.StatusName)
+        .ToList();
+
     private IReadOnlyList<MultiCropSurveySummaryDto> FilteredSurveys =>
-        MultiCropSurveyFilter.Apply(_surveys, _propertySearch, _applicationId);
+        MultiCropSurveyFilter.Apply(_surveys, _propertySearch, _applicationId, _statusId);
 
     private string ResultSummary => FilteredSurveys.Count == _surveys.Count
         ? $"{_surveys.Count} survey{(_surveys.Count == 1 ? string.Empty : "s")}"
@@ -183,8 +201,7 @@
         _startDate = _today.AddMonths(-2);
         _endDate = _today;
 
-        var (types, _) = await Api.GetSurveyTypesAsync();
-        _surveyTypes = types ?? [];
+        _surveyTypes = await TgsApi.GetMultiCropSurveyTypes() ?? [];
         await LoadSurveysAsync();
     }
 
@@ -200,9 +217,11 @@
         _errorMessage = null;
         try
         {
-            var (surveys, error) = await Api.GetSurveysAsync(_startDate.Date, _endDate.Date);
+            var surveys = await TgsApi.GetMultiCropSurveySummaries(_startDate.Date, _endDate.Date);
             _surveys = surveys ?? [];
-            _errorMessage = error;
+            _errorMessage = surveys is null
+                ? TgsApi.ErrorMessage ?? "The multi-crop surveys could not be loaded from the TGS API."
+                : null;
 
             if (_surveyTypes.Count == 0 && _surveys.Count > 0)
             {
