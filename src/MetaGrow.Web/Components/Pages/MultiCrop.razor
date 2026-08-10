@@ -1,3 +1,229 @@
 @page "/surveys/multicrop"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using MetaGrow.Shared
+@using MetaGrow.Web.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject MultiCropApiClient Api
+
 <PageTitle>Multi-crop surveys | MetaGrow</PageTitle>
-<ModuleLanding Title="Multi-crop surveys" Description="Find existing multi-crop surveys and open online or printable reports." />
+
+<div class="multicrop-page">
+    <div class="title">
+        <div class="title-header-text">Multi-crop surveys</div>
+        <div class="title-content-text">Find an existing survey and open its online or printable report.</div>
+    </div>
+
+    <section class="filter-panel" aria-labelledby="survey-search-heading">
+        <div class="filter-heading">
+            <div>
+                <h2 id="survey-search-heading">Find surveys</h2>
+                <p>Choose the survey period, then narrow the results by property or survey type.</p>
+            </div>
+            <DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="LoadSurveysAsync" Enabled="@(!_loading)" />
+        </div>
+
+        <div class="filter-grid">
+            <div class="filter-field">
+                <label for="survey-start-date">From</label>
+                <DxDateEdit Id="survey-start-date" @bind-Date="_startDate" DisplayFormat="dd/MM/yyyy" />
+            </div>
+            <div class="filter-field">
+                <label for="survey-end-date">To</label>
+                <DxDateEdit Id="survey-end-date" @bind-Date="_endDate" DisplayFormat="dd/MM/yyyy" />
+            </div>
+            <div class="filter-field property-filter">
+                <label for="survey-property">Property</label>
+                <DxTextBox Id="survey-property" @bind-Text="_propertySearch" NullText="Type a property name"
+                           BindValueMode="BindValueMode.OnDelayedInput" InputDelay="300" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div class="filter-field">
+                <label for="survey-type">Survey type</label>
+                <DxComboBox Id="survey-type" Data="@_surveyTypes" @bind-Value="_applicationId"
+                            TextFieldName="@nameof(MultiCropSurveyTypeDto.ApplicationName)"
+                            ValueFieldName="@nameof(MultiCropSurveyTypeDto.ApplicationId)"
+                            NullText="All survey types" AllowUserInput="false"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+        </div>
+    </section>
+
+    @if (_loading)
+    {
+        <div class="loading-state" role="status">
+            <div class="spinner-border spinner-border-sm" aria-hidden="true"></div>
+            <span>Loading multi-crop surveys…</span>
+        </div>
+    }
+    else if (_errorMessage is not null)
+    {
+        <div class="alert alert-danger" role="alert">
+            <strong>Surveys could not be loaded.</strong> @_errorMessage
+        </div>
+    }
+    else
+    {
+        <div class="result-heading">
+            <div>
+                <h2>Results</h2>
+                <span>@ResultSummary</span>
+            </div>
+            @if (_surveys.Count > 0)
+            {
+                <DxButton Text="Choose columns" RenderStyle="ButtonRenderStyle.Secondary" Click="ShowColumnChooser" CssClass="desktop-only" />
+            }
+        </div>
+
+        @if (_surveys.Count == 0)
+        {
+            <div class="empty-state">
+                <strong>No surveys were found.</strong>
+                <span>Try a wider date range.</span>
+            </div>
+        }
+        else if (FilteredSurveys.Count == 0)
+        {
+            <div class="empty-state">
+                <strong>No surveys match the current filters.</strong>
+                <span>Clear the property or survey type filter to see more results.</span>
+            </div>
+        }
+        else
+        {
+            <div class="desktop-results">
+                <DxGrid @ref="_grid" Data="@FilteredSurveys" PageSize="20" ShowAllRows="false"
+                        TextWrapEnabled="false" HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn"
+                        CssClass="multicrop-grid">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyDate)" Caption="Date" Width="110px"
+                                          DisplayFormat="dd/MM/yyyy" SortIndex="0" SortOrder="GridColumnSortOrder.Descending" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.PropertyName)" Caption="Property" MinWidth="180" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ApplicationName)" Caption="Survey type" MinWidth="140" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.CropTypeName)" Caption="Crop" MinWidth="120" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.AgronomistName)" Caption="Agronomist" MinWidth="150" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.StatusName)" Caption="Status" Width="120px">
+                            <CellDisplayTemplate Context="cell">
+                                <span class="status-badge">@((cell.DataItem as MultiCropSurveySummaryDto)?.StatusName)</span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyReference)" Caption="Reference" MinWidth="150">
+                            <CellDisplayTemplate Context="cell">
+                                @{ var survey = (MultiCropSurveySummaryDto)cell.DataItem; }
+                                <a href="@OnlineReportUrl(survey)">@survey.SurveyReference</a>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.PhotoCount)" Caption="Photos" Width="80px" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.LastModified)" Caption="Modified" Width="110px" DisplayFormat="dd/MM/yyyy" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyHours)" Caption="Survey hours" Width="110px" DisplayFormat="N2" Visible="false" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ReportHours)" Caption="Report hours" Width="110px" DisplayFormat="N2" Visible="false" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ModifiedBy)" Caption="Modified by" MinWidth="150" Visible="false" />
+                        <DxGridDataColumn Caption="Reports" Width="135px" AllowSort="false">
+                            <CellDisplayTemplate Context="cell">
+                                @{ var survey = (MultiCropSurveySummaryDto)cell.DataItem; }
+                                <div class="report-links">
+                                    <a href="@OnlineReportUrl(survey)">Online</a>
+                                    <a href="@PrintReportUrl(survey)">Print</a>
+                                </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </div>
+
+            <div class="mobile-results">
+                @foreach (var survey in FilteredSurveys)
+                {
+                    <article class="survey-card">
+                        <div class="survey-card-heading">
+                            <div>
+                                <strong>@survey.PropertyName</strong>
+                                <span>@survey.SurveyDate.ToString("dd MMM yyyy")</span>
+                            </div>
+                            <span class="status-badge">@survey.StatusName</span>
+                        </div>
+                        <dl>
+                            <div><dt>Type</dt><dd>@survey.ApplicationName</dd></div>
+                            <div><dt>Crop</dt><dd>@survey.CropTypeName</dd></div>
+                            <div><dt>Agronomist</dt><dd>@survey.AgronomistName</dd></div>
+                            <div><dt>Reference</dt><dd>@survey.SurveyReference</dd></div>
+                            <div><dt>Photos</dt><dd>@survey.PhotoCount</dd></div>
+                        </dl>
+                        <div class="survey-card-actions">
+                            <a class="btn btn-primary" href="@OnlineReportUrl(survey)">Online report</a>
+                            <a class="btn btn-outline-secondary" href="@PrintReportUrl(survey)">Print report</a>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private IGrid? _grid;
+    private readonly DateTime _today = DateTime.Today;
+    private DateTime _startDate;
+    private DateTime _endDate;
+    private string? _propertySearch;
+    private int? _applicationId;
+    private bool _loading;
+    private string? _errorMessage;
+    private List<MultiCropSurveySummaryDto> _surveys = [];
+    private List<MultiCropSurveyTypeDto> _surveyTypes = [];
+
+    private IReadOnlyList<MultiCropSurveySummaryDto> FilteredSurveys =>
+        MultiCropSurveyFilter.Apply(_surveys, _propertySearch, _applicationId);
+
+    private string ResultSummary => FilteredSurveys.Count == _surveys.Count
+        ? $"{_surveys.Count} survey{(_surveys.Count == 1 ? string.Empty : "s")}"
+        : $"{FilteredSurveys.Count} of {_surveys.Count} surveys";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _startDate = _today.AddMonths(-2);
+        _endDate = _today;
+
+        var (types, _) = await Api.GetSurveyTypesAsync();
+        _surveyTypes = types ?? [];
+        await LoadSurveysAsync();
+    }
+
+    private async Task LoadSurveysAsync()
+    {
+        if (_endDate.Date < _startDate.Date)
+        {
+            _errorMessage = "The end date must be on or after the start date.";
+            return;
+        }
+
+        _loading = true;
+        _errorMessage = null;
+        try
+        {
+            var (surveys, error) = await Api.GetSurveysAsync(_startDate.Date, _endDate.Date);
+            _surveys = surveys ?? [];
+            _errorMessage = error;
+
+            if (_surveyTypes.Count == 0 && _surveys.Count > 0)
+            {
+                _surveyTypes = _surveys
+                    .GroupBy(survey => new { survey.ApplicationId, survey.ApplicationName })
+                    .Select(group => new MultiCropSurveyTypeDto
+                    {
+                        ApplicationId = group.Key.ApplicationId,
+                        ApplicationName = group.Key.ApplicationName
+                    })
+                    .OrderBy(type => type.ApplicationName)
+                    .ToList();
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ShowColumnChooser() => _grid?.ShowColumnChooser();
+    private static string OnlineReportUrl(MultiCropSurveySummaryDto survey) => $"/surveys/multicrop/{survey.SurveyId}/report";
+    private static string PrintReportUrl(MultiCropSurveySummaryDto survey) => $"/surveys/multicrop/{survey.SurveyId}/report?print=true";
+}

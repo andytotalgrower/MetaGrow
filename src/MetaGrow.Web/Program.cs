@@ -42,6 +42,7 @@ builder.Services.AddSingleton<ServerTokenStore>();
 builder.Services.AddScoped<AuthApiClient>();
 builder.Services.AddScoped<ApiTokenService>();
 builder.Services.AddScoped<AccountApiClient>();
+builder.Services.AddScoped<MultiCropApiClient>();
 builder.Services.AddScoped<MfaFlowState>();
 builder.Services.AddScoped<MetaGrow.Web.Components.Account.IdentityRedirectManager>();
 

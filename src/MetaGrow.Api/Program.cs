@@ -69,7 +69,12 @@ builder.Services.AddHostedService<MailDispatcher>();
 builder.Services.AddScoped<EncryptionService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddHttpClient();
-builder.Services.AddScoped<ITgsApiService, TgsApiService>();
+builder.Services.AddHttpClient<ITgsApiService, TgsApiService>(client =>
+{
+    var developmentBaseUrl = builder.Configuration["TgsApi:DevelopmentBaseUrl"];
+    if (builder.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(developmentBaseUrl))
+        client.BaseAddress = new Uri(developmentBaseUrl);
+});
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddRateLimiter(options =>

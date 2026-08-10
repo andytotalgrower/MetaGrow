@@ -1,0 +1,23 @@
+@page "/surveys/multicrop/{SurveyId:int}/report"
+@using ApiModels.MetaGrow
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject NavigationManager Navigation
+
+<PageTitle>Multi-crop survey @SurveyId | MetaGrow</PageTitle>
+
+<div class="title">
+    <div class="title-header-text">Multi-crop survey @SurveyId</div>
+    <div class="title-content-text">@(Print ? "Printable report" : "Online report")</div>
+</div>
+
+<div class="alert alert-info mt-3" role="status">
+    The finder link is ready. The combined online and photo report will be implemented in the reporting phase.
+</div>
+
+<DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary"
+          Click="@(() => Navigation.NavigateTo("/surveys/multicrop"))" />
+
+@code {
+    [Parameter] public int SurveyId { get; set; }
+    [SupplyParameterFromQuery(Name = "print")] public bool Print { get; set; }
+}
