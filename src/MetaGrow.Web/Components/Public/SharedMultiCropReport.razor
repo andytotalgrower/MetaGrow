@@ -1,0 +1,74 @@
+@page "/r/{ShareId:guid}"
+@layout SharedReportLayout
+@attribute [AllowAnonymous]
+@using ApiModels
+@using MetaGrow.Web.Components.Pages
+@using MetaGrow.Web.Services
+@using Metagen.Shared.Services
+@inject ReportShareApiClient Shares
+@inject ITgsApiService TgsApi
+@inject IJSRuntime JavaScript
+@inject ILogger<SharedMultiCropReport> Logger
+
+<PageTitle>Shared survey report | MetaGrow</PageTitle>
+
+@if (_loading)
+{
+    <div class="shared-report-state" role="status">
+        <div class="spinner-border" aria-hidden="true"></div>
+        <span>Opening shared report...</span>
+    </div>
+}
+else if (_report is not null)
+{
+    <MultiCropReport SurveyId="@_report.SurveyId" Report="@_report" Shared="true" />
+}
+else
+{
+    <div class="shared-report-state">
+        <h1>Shared report unavailable</h1>
+        <p>@_errorMessage</p>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid ShareId { get; set; }
+
+    private MultiCropOnlineReportDto? _report;
+    private string _errorMessage = "This report link is invalid or has been revoked.";
+    private bool _loading = true;
+    private bool _started;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _started) return;
+        _started = true;
+
+        try
+        {
+            var token = await JavaScript.InvokeAsync<string>("metaGrowReportSharing.getFragmentToken");
+            if (string.IsNullOrWhiteSpace(token)) return;
+
+            var (access, accessError) = await Shares.ResolveAsync(ShareId, token);
+            if (access is null)
+            {
+                _errorMessage = accessError ?? _errorMessage;
+                return;
+            }
+
+            _report = await TgsApi.GetMultiCropOnlineReport(access.SurveyId);
+            if (_report is null)
+                _errorMessage = TgsApi.ErrorMessage ?? "The survey report could not be loaded.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to open shared report {ReportShareId}.", ShareId);
+            _errorMessage = "The shared report could not be loaded. Please try again shortly.";
+        }
+        finally
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+}

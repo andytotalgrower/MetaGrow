@@ -7,6 +7,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     : IdentityDbContext<ApplicationUser>(options)
 {
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<ReportShare> ReportShares => Set<ReportShare>();
     public DbSet<UserEmailAddress> UserEmailAddresses => Set<UserEmailAddress>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -36,6 +37,19 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
                 .WithMany(user => user.EmailAddresses)
                 .HasForeignKey(address => address.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ReportShare>(entity =>
+        {
+            entity.Property(share => share.Name).HasMaxLength(120).IsRequired();
+            entity.Property(share => share.TokenHash).HasMaxLength(44).IsRequired();
+            entity.Property(share => share.ProtectedToken).HasMaxLength(1000).IsRequired();
+            entity.Property(share => share.CreatedByUserId).HasMaxLength(450).IsRequired();
+            entity.Property(share => share.CreatedByEmail).HasMaxLength(256).IsRequired();
+            entity.Property(share => share.RevokedByUserId).HasMaxLength(450);
+            entity.Property(share => share.RevokedByEmail).HasMaxLength(256);
+            entity.HasIndex(share => share.TokenHash).IsUnique();
+            entity.HasIndex(share => new { share.SurveyId, share.CreatedUtc });
         });
     }
 }

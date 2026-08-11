@@ -1,0 +1,13 @@
+.shared-report-layout { display: flex; flex-direction: column; height: 100%; overflow: auto; }
+.shared-report-layout > header { align-items: center; background: linear-gradient(90deg, var(--mg-blue, #007cba), var(--mg-blue-8, #015682)); color: white; display: flex; justify-content: space-between; padding: 0.85rem clamp(1rem, 4vw, 3rem); }
+.shared-report-layout > header img { height: 1.8rem; width: auto; }
+.shared-report-layout > header span { font-size: 0.85rem; font-weight: 600; }
+.shared-report-layout > main { flex: 1; padding: 0 clamp(1rem, 4vw, 3rem); }
+.shared-report-layout > footer { color: var(--dxds-color-content-neutral-subdued-rest); font-size: 0.75rem; padding: 1rem; text-align: center; }
+#blazor-error-ui { background: lightyellow; bottom: 0; display: none; left: 0; padding: 0.7rem 1rem; position: fixed; right: 0; z-index: 1000; }
+
+@media print {
+    .shared-report-layout > header,
+    .shared-report-layout > footer { display: none; }
+    .shared-report-layout > main { padding: 0; }
+}

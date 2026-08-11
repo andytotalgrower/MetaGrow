@@ -3,8 +3,10 @@
 @using ApiModels.MetaGrow
 @using MetaGrow.Shared
 @using Metagen.Shared.Services
+@using System.Text.Json
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
 @inject ITgsApiService TgsApi
+@inject IJSRuntime JS
 
 <PageTitle>Multi-crop surveys | MetaGrow</PageTitle>
 
@@ -20,26 +22,29 @@
                 <h2 id="survey-search-heading">Find surveys</h2>
                 <p>Choose the survey period, then narrow the results by property or survey type.</p>
             </div>
-            <DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="LoadSurveysAsync" Enabled="@(!_loading)" />
+            <div class="filter-actions">
+                <DxButton Text="Clear" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearFiltersAsync" Enabled="@(!_loading)" />
+                <DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="SearchAsync" Enabled="@(!_loading)" />
+            </div>
         </div>
 
         <div class="filter-grid">
             <div class="filter-field">
                 <label for="survey-start-date">From</label>
-                <DxDateEdit Id="survey-start-date" @bind-Date="_startDate" DisplayFormat="dd/MM/yyyy" />
+                <DxDateEdit Id="survey-start-date" @bind-Date="_startDate" @bind-Date:after="DateRangeChangedAsync" DisplayFormat="dd/MM/yyyy" />
             </div>
             <div class="filter-field">
                 <label for="survey-end-date">To</label>
-                <DxDateEdit Id="survey-end-date" @bind-Date="_endDate" DisplayFormat="dd/MM/yyyy" />
+                <DxDateEdit Id="survey-end-date" @bind-Date="_endDate" @bind-Date:after="DateRangeChangedAsync" DisplayFormat="dd/MM/yyyy" />
             </div>
             <div class="filter-field property-filter">
                 <label for="survey-property">Property</label>
-                <DxTextBox Id="survey-property" @bind-Text="_propertySearch" NullText="Type a property name"
+                <DxTextBox Id="survey-property" @bind-Text="_propertySearch" @bind-Text:after="SaveFiltersAsync" NullText="Type a property name"
                            BindValueMode="BindValueMode.OnDelayedInput" InputDelay="300" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
             </div>
             <div class="filter-field">
                 <label for="survey-type">Survey type</label>
-                <DxComboBox Id="survey-type" Data="@_surveyTypes" @bind-Value="_applicationId"
+                <DxComboBox Id="survey-type" Data="@_surveyTypes" @bind-Value="_applicationId" @bind-Value:after="SaveFiltersAsync"
                             TextFieldName="@nameof(MultiCropSurveyTypeDto.ApplicationName)"
                             ValueFieldName="@nameof(MultiCropSurveyTypeDto.ApplicationId)"
                             NullText="All survey types" AllowUserInput="false"
@@ -47,7 +52,7 @@
             </div>
             <div class="filter-field">
                 <label for="survey-status">Status</label>
-                <DxComboBox Id="survey-status" Data="@StatusOptions" @bind-Value="_statusId"
+                <DxComboBox Id="survey-status" Data="@StatusOptions" @bind-Value="_statusId" @bind-Value:after="SaveFiltersAsync"
                             TextFieldName="@nameof(StatusOption.StatusName)"
                             ValueFieldName="@nameof(StatusOption.StatusId)"
                             NullText="All statuses" AllowUserInput="false"
@@ -170,13 +175,14 @@
 
 @code {
     private IGrid? _grid;
+    private const string FilterCookieName = "metagrow.multicrop.filters";
     private readonly DateTime _today = DateTime.Today;
     private DateTime _startDate;
     private DateTime _endDate;
     private string? _propertySearch;
     private int? _applicationId;
     private int? _statusId;
-    private bool _loading;
+    private bool _loading = true;
     private string? _errorMessage;
     private List<MultiCropSurveySummaryDto> _surveys = [];
     private List<MultiCropSurveyTypeDto> _surveyTypes = [];
@@ -198,11 +204,20 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _startDate = _today.AddMonths(-2);
-        _endDate = _today;
-
+        ApplyFilters(MultiCropSurveyFilterPreferences.CreateDefault(_today));
         _surveyTypes = await TgsApi.GetMultiCropSurveyTypes() ?? [];
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await RestoreFiltersAsync();
         await LoadSurveysAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadSurveysAsync()
@@ -240,6 +255,68 @@
         {
             _loading = false;
         }
+    }
+
+    private async Task SearchAsync()
+    {
+        await SaveFiltersAsync();
+        await LoadSurveysAsync();
+    }
+
+    private async Task DateRangeChangedAsync()
+    {
+        await SaveFiltersAsync();
+        await LoadSurveysAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        ApplyFilters(MultiCropSurveyFilterPreferences.CreateDefault(_today));
+        await SaveFiltersAsync();
+        await LoadSurveysAsync();
+    }
+
+    private async Task RestoreFiltersAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("metaGrowFilterPreferences.get", FilterCookieName);
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return;
+            }
+
+            var filters = JsonSerializer.Deserialize<MultiCropSurveyFilterPreferences>(json);
+            if (filters?.HasValidDateRange == true)
+            {
+                ApplyFilters(filters);
+            }
+        }
+        catch (JsonException)
+        {
+            ApplyFilters(MultiCropSurveyFilterPreferences.CreateDefault(_today));
+        }
+    }
+
+    private async Task SaveFiltersAsync()
+    {
+        var filters = new MultiCropSurveyFilterPreferences(
+            _startDate.Date,
+            _endDate.Date,
+            _propertySearch,
+            _applicationId,
+            _statusId);
+        var json = JsonSerializer.Serialize(filters);
+        await JS.InvokeVoidAsync("metaGrowFilterPreferences.set", FilterCookieName, json);
+    }
+
+    private void ApplyFilters(MultiCropSurveyFilterPreferences filters)
+    {
+        _startDate = filters.StartDate.Date;
+        _endDate = filters.EndDate.Date;
+        _propertySearch = filters.PropertySearch;
+        _applicationId = filters.ApplicationId;
+        _statusId = filters.StatusId;
     }
 
     private void ShowColumnChooser() => _grid?.ShowColumnChooser();

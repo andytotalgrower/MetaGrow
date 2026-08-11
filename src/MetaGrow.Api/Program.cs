@@ -5,6 +5,7 @@ using MetaGrow.Api.Data;
 using MetaGrow.Api.Services;
 using Metagen.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
@@ -58,6 +59,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 });
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IReportShareTokenService, ReportShareTokenService>();
+
+var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys");
+Directory.CreateDirectory(dataProtectionKeysPath);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
+    .SetApplicationName("MetaGrow.Api");
 
 var graphMail = builder.Configuration.GetSection(GraphMailOptions.SectionName).Get<GraphMailOptions>() ?? new();
 DecryptGraphMailOptions(graphMail);
@@ -86,6 +94,12 @@ builder.Services.AddRateLimiter(options =>
         _ => new FixedWindowRateLimiterOptions
         {
             Window = TimeSpan.FromMinutes(1), PermitLimit = permits, QueueLimit = 0
+        }));
+    options.AddPolicy("report-share", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            Window = TimeSpan.FromMinutes(1), PermitLimit = 30, QueueLimit = 0
         }));
 });
 

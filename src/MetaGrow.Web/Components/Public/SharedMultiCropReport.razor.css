@@ -1,0 +1,3 @@
+.shared-report-state { align-items: center; display: flex; flex-direction: column; gap: 0.8rem; justify-content: center; min-height: 65vh; text-align: center; }
+.shared-report-state h1 { margin-bottom: 0; }
+.shared-report-state p { color: var(--dxds-color-content-neutral-subdued-rest); max-width: 38rem; }

@@ -1,0 +1,232 @@
+@using ApiModels.MetaGrow
+@using MetaGrow.Web.Services
+@inject ReportShareApiClient Shares
+@inject NavigationManager Navigation
+@inject IJSRuntime JavaScript
+
+<DxButton Text="Share report" RenderStyle="ButtonRenderStyle.Secondary" Click="OpenAsync" />
+
+<DxPopup @bind-Visible="_visible" ShowFooter="true" HeaderText="Share this report"
+         AllowDrag="true" ShowCloseButton="true" CloseOnEscape="true" Width="760px">
+    <BodyContentTemplate>
+        <div class="share-dialog">
+            <div class="alert alert-warning" role="note">
+                Anyone with a link can view the complete report and full-size photos without signing in.
+                Links are permanent until a MetaGrow user revokes them.
+            </div>
+
+            <div class="share-create">
+                <label for="share-name">Link name</label>
+                <input id="share-name" class="form-control" maxlength="120" @bind="_newName"
+                       placeholder="For example, Farm hands" />
+                <DxButton Text="Create permanent link" RenderStyle="ButtonRenderStyle.Primary"
+                          Click="CreateAsync" Enabled="@(!_working)" />
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_message))
+            {
+                <div class="alert @(_messageIsError ? "alert-danger" : "alert-success")" role="status">@_message</div>
+            }
+
+            @if (_loading)
+            {
+                <p>Loading shared links...</p>
+            }
+            else if (_shares.Count == 0)
+            {
+                <p>No shared links have been created for this report.</p>
+            }
+            else
+            {
+                <div class="share-list">
+                    @foreach (var share in _shares)
+                    {
+                        <article class="share-card @(share.IsActive ? "" : "share-card-revoked")">
+                            <div class="share-card-heading">
+                                <div>
+                                    <strong>@share.Name</strong>
+                                    <span>Created @share.CreatedUtc.ToLocalTime().ToString("dd MMM yyyy") by @share.CreatedByEmail</span>
+                                </div>
+                                <span class="share-status">@(share.IsActive ? "Permanent" : "Revoked")</span>
+                            </div>
+                            <div class="share-stats">
+                                <span>@share.ViewCount view@(share.ViewCount == 1 ? "" : "s")</span>
+                                @if (share.LastViewedUtc.HasValue)
+                                {
+                                    <span>Last viewed @share.LastViewedUtc.Value.ToLocalTime().ToString("dd MMM yyyy HH:mm")</span>
+                                }
+                                @if (share.RevokedUtc.HasValue)
+                                {
+                                    <span>Revoked @share.RevokedUtc.Value.ToLocalTime().ToString("dd MMM yyyy") by @share.RevokedByEmail</span>
+                                }
+                            </div>
+                            @if (share.IsActive && !string.IsNullOrWhiteSpace(share.Token))
+                            {
+                                <input class="form-control share-url" value="@ShareUrl(share)" readonly
+                                       aria-label="Permanent link for @share.Name" />
+                                <div class="share-actions">
+                                    <DxButton Text="Copy link" RenderStyle="ButtonRenderStyle.Secondary"
+                                              Click="@(() => CopyAsync(share))" />
+                                    <DxButton Text="Show QR code" RenderStyle="ButtonRenderStyle.Secondary"
+                                              Click="@(() => ShowQr(share))" />
+                                    <DxButton Text="Revoke" RenderStyle="ButtonRenderStyle.Danger"
+                                              Click="@(() => RevokeAsync(share))" />
+                                </div>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Click="Close" />
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="_qrVisible" ShowFooter="true" HeaderText="Shared report QR code"
+         ShowCloseButton="true" CloseOnEscape="true" Width="420px">
+    <BodyContentTemplate>
+        @if (_qrShare is not null)
+        {
+            <div class="qr-content">
+                <strong>@_qrShare.Name</strong>
+                <div id="report-share-qr" class="qr-code" aria-label="QR code for the shared report"></div>
+                <p>Scanning this code opens the complete report without sign-in.</p>
+            </div>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton Text="Copy link" RenderStyle="ButtonRenderStyle.Secondary" Click="CopyQrLinkAsync" />
+        <DxButton Text="Download QR" RenderStyle="ButtonRenderStyle.Primary" Click="DownloadQrAsync" />
+        <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseQr" />
+    </FooterContentTemplate>
+</DxPopup>
+
+<ConfirmDialog @ref="_confirm" />
+
+@code {
+    [Parameter] public int SurveyId { get; set; }
+    [Parameter] public string? PropertyName { get; set; }
+
+    private readonly List<MetaGrowReportShareDto> _shares = [];
+    private ConfirmDialog? _confirm;
+    private MetaGrowReportShareDto? _qrShare;
+    private string _newName = string.Empty;
+    private string? _message;
+    private bool _messageIsError;
+    private bool _visible;
+    private bool _qrVisible;
+    private bool _loading;
+    private bool _working;
+    private bool _renderQr;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_renderQr || _qrShare is null) return;
+        _renderQr = false;
+        await JavaScript.InvokeVoidAsync("metaGrowReportSharing.renderQr", "report-share-qr", ShareUrl(_qrShare));
+    }
+
+    private async Task OpenAsync()
+    {
+        _visible = true;
+        _newName = string.IsNullOrWhiteSpace(PropertyName) ? $"Survey {SurveyId}" : PropertyName;
+        _message = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        var (shares, error) = await Shares.GetForSurveyAsync(SurveyId);
+        _shares.Clear();
+        if (shares is not null) _shares.AddRange(shares);
+        if (error is not null) SetMessage(error, true);
+        _loading = false;
+    }
+
+    private async Task CreateAsync()
+    {
+        _working = true;
+        try
+        {
+            var (share, error) = await Shares.CreateAsync(SurveyId, _newName);
+            if (share is null)
+            {
+                SetMessage(error ?? "The shared link could not be created.", true);
+            }
+            else
+            {
+                _shares.Insert(0, share);
+                SetMessage("Permanent shared link created. It remains available until revoked.", false);
+                await CopyAsync(share, updateMessage: false);
+            }
+        }
+        finally
+        {
+            _working = false;
+        }
+    }
+
+    private async Task CopyAsync(MetaGrowReportShareDto share, bool updateMessage = true)
+    {
+        try
+        {
+            await JavaScript.InvokeVoidAsync("metaGrowReportSharing.copyText", ShareUrl(share));
+            if (updateMessage) SetMessage("Shared report link copied.", false);
+        }
+        catch (JSException)
+        {
+            SetMessage("The link was created, but the browser could not copy it. Use the QR code or try Copy link again.", true);
+        }
+    }
+
+    private void ShowQr(MetaGrowReportShareDto share)
+    {
+        _qrShare = share;
+        _qrVisible = true;
+        _renderQr = true;
+    }
+
+    private async Task CopyQrLinkAsync()
+    {
+        if (_qrShare is not null) await CopyAsync(_qrShare);
+    }
+
+    private async Task DownloadQrAsync()
+    {
+        if (_qrShare is null) return;
+        await JavaScript.InvokeVoidAsync("metaGrowReportSharing.downloadQr", "report-share-qr",
+            $"MetaGrow-survey-{SurveyId}-QR.png");
+    }
+
+    private async Task RevokeAsync(MetaGrowReportShareDto share)
+    {
+        if (_confirm is null || !await _confirm.ShowAsync(
+                $"Revoke '{share.Name}'? Anyone using that link or QR code will immediately lose access.",
+                "Revoke shared report", "Revoke link", danger: true)) return;
+
+        var error = await Shares.RevokeAsync(share.Id);
+        if (error is not null)
+        {
+            SetMessage(error, true);
+            return;
+        }
+
+        SetMessage("Shared report link revoked.", false);
+        await LoadAsync();
+    }
+
+    private string ShareUrl(MetaGrowReportShareDto share) =>
+        $"{Navigation.BaseUri.TrimEnd('/')}/r/{share.Id}#{share.Token}";
+
+    private void SetMessage(string message, bool error)
+    {
+        _message = message;
+        _messageIsError = error;
+    }
+
+    private void Close() => _visible = false;
+    private void CloseQr() => _qrVisible = false;
+}

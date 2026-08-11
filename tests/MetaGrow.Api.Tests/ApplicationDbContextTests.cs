@@ -33,4 +33,31 @@ public sealed class ApplicationDbContextTests
 
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
+
+    [Fact]
+    public async Task Report_share_token_hash_must_be_unique()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var db = new ApplicationDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+        db.ReportShares.Add(new ReportShare
+        {
+            Id = Guid.NewGuid(), SurveyId = 1, Name = "First", TokenHash = "same-hash",
+            ProtectedToken = "protected-one", CreatedByUserId = "user", CreatedByEmail = "user@example.com"
+        });
+        await db.SaveChangesAsync();
+
+        db.ReportShares.Add(new ReportShare
+        {
+            Id = Guid.NewGuid(), SurveyId = 2, Name = "Second", TokenHash = "same-hash",
+            ProtectedToken = "protected-two", CreatedByUserId = "user", CreatedByEmail = "user@example.com"
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+    }
 }

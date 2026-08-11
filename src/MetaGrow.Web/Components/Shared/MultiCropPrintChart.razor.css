@@ -1,0 +1,28 @@
+.print-chart { display: none; }
+
+@media print {
+    .print-chart {
+        display: block;
+        max-width: none;
+        width: 273mm;
+    }
+
+    .print-chart ::deep svg {
+        display: block;
+        height: 140mm;
+        max-width: none;
+        overflow: visible;
+        width: 273mm;
+    }
+
+    .print-chart ::deep .grid-line { stroke: #d2d2d2; stroke-width: 1; }
+    .print-chart ::deep .axis-line { stroke: #555; stroke-width: 1.4; }
+    .print-chart ::deep .axis-tick { stroke: #555; stroke-width: 1; }
+    .print-chart ::deep .axis-label { fill: #333; font-family: Arial, sans-serif; font-size: 15px; }
+    .print-chart ::deep .y-label { font-size: 14px; }
+    .print-chart ::deep .category-label { font-size: 12px; }
+    .print-chart ::deep .bar-value { fill: #222; font-family: Arial, sans-serif; font-size: 13px; }
+    .print-chart ::deep .legend-label { fill: #222; font-family: Arial, sans-serif; font-size: 14px; }
+    .print-chart ::deep .history-line { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 4; }
+    .print-chart ::deep .history-point { stroke: #fff; stroke-width: 2; }
+}

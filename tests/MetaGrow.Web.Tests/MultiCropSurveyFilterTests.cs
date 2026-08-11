@@ -83,4 +83,30 @@ public sealed class MultiCropSurveyFilterTests
     {
         Assert.Equal(expected, MultiCropSurveyFilter.StatusBadgeClass(statusName));
     }
+
+    [Fact]
+    public void FilterPreferences_DefaultToPreviousTwoMonths_WithOtherFiltersCleared()
+    {
+        var filters = MultiCropSurveyFilterPreferences.CreateDefault(new DateTime(2026, 8, 11, 14, 30, 0));
+
+        Assert.Equal(new DateTime(2026, 6, 11), filters.StartDate);
+        Assert.Equal(new DateTime(2026, 8, 11), filters.EndDate);
+        Assert.Null(filters.PropertySearch);
+        Assert.Null(filters.ApplicationId);
+        Assert.Null(filters.StatusId);
+        Assert.True(filters.HasValidDateRange);
+    }
+
+    [Fact]
+    public void FilterPreferences_RejectAnEndDateBeforeTheStartDate()
+    {
+        var filters = new MultiCropSurveyFilterPreferences(
+            new DateTime(2026, 8, 11),
+            new DateTime(2026, 8, 10),
+            null,
+            null,
+            null);
+
+        Assert.False(filters.HasValidDateRange);
+    }
 }

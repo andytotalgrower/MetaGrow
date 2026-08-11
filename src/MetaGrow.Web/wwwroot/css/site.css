@@ -189,6 +189,32 @@ html, body {
     }
 }
 
+@media print {
+    html,
+    body {
+        display: block;
+        height: auto;
+        overflow: visible;
+    }
+
+    .navigation-drawer > .dxbl-drawer-panel,
+    .nav-buttons-container,
+    #blazor-error-ui {
+        display: none !important;
+    }
+
+    .dxbl-drawer-target-content {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+
+    .drawer-content {
+        height: auto !important;
+        overflow: visible !important;
+        padding: 0 !important;
+    }
+}
+
 /* ---- Change request status badges (brand palette) ---- */
 
 .mc-badge {

@@ -485,3 +485,4 @@ $RECYCLE.BIN/
 src/MetaChange.Web/App_Data/
 # Persistent ASP.NET Data Protection keys are machine/runtime state.
 src/MetaGrow.Web/App_Data/keys/
+src/MetaGrow.Api/App_Data/keys/

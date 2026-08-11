@@ -42,6 +42,7 @@ builder.Services.AddSingleton<ServerTokenStore>();
 builder.Services.AddScoped<AuthApiClient>();
 builder.Services.AddScoped<ApiTokenService>();
 builder.Services.AddScoped<AccountApiClient>();
+builder.Services.AddScoped<ReportShareApiClient>();
 builder.Services.AddScoped<MfaFlowState>();
 builder.Services.AddScoped<MetaGrow.Web.Components.Account.IdentityRedirectManager>();
 
@@ -77,11 +78,28 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/r"))
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow, noarchive";
+        context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    }
+    await next();
+});
 app.UseHttpsRedirection();
 app.UseSerilogRequestLogging();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+app.MapGet("/downloads/surveys/multicrop/{surveyId:int}/pbd", async (int surveyId, ITgsApiService tgsApi) =>
+{
+    var file = await tgsApi.GetMultiCropPbdWorkbook(surveyId);
+    return file == null
+        ? Results.Problem(tgsApi.ErrorMessage ?? "The PBD workbook could not be generated.")
+        : Results.File(file.Content, file.ContentType, file.FileName);
+}).RequireAuthorization();
 app.MapStaticAssets();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode().AllowAnonymous();
 app.MapAccountEndpoints();

@@ -1,0 +1,222 @@
+@page "/surveys/multicrop/{SurveyId:int}/block-groups"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject ITgsApiService TgsApi
+@inject NavigationManager Navigation
+
+<PageTitle>Report block groups | MetaGrow</PageTitle>
+
+<div class="block-groups-page">
+    @if (_loading)
+    {
+        <div class="editor-loading"><DxWaitIndicator Visible="true" /><span>Loading report groups...</span></div>
+    }
+    else if (_report is null)
+    {
+        <div class="editor-message error">@_message</div>
+        <DxButton Text="Back to report" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToReport" />
+    }
+    else
+    {
+        <header class="editor-header">
+            <div>
+                <span class="editor-kicker">Multi-crop survey @SurveyId</span>
+                <h1>Block groups for report</h1>
+                <p>@_report.PropertyName · @_report.SurveyDate.ToString("dd MMMM yyyy")</p>
+            </div>
+            <DxButton Text="Back to report" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToReport" />
+        </header>
+
+        <section class="editor-intro">
+            <h2>How grouping affects the report</h2>
+            <p>Each current-survey chart is produced once per group. A block can appear in one group only; blocks left unselected are omitted from grouped charts.</p>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="editor-message @(_saved ? "success" : "error")">@_message</div>
+        }
+
+        <div class="group-list">
+            @for (var index = 0; index < _groups.Count; index++)
+            {
+                var group = _groups[index];
+                <section class="group-card">
+                    <div class="group-card-header">
+                        <div class="group-name">
+                            <label for="@($"group-name-{index}")">Group @(index + 1) name</label>
+                            <DxTextBox Id="@($"group-name-{index}")" @bind-Text="group.GroupName" NullText="e.g. North orchard" />
+                        </div>
+                        <div class="group-actions">
+                            <DxButton Text="Up" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(index > 0)" Click="@(() => MoveGroup(index, -1))" />
+                            <DxButton Text="Down" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(index < _groups.Count - 1)" Click="@(() => MoveGroup(index, 1))" />
+                            <DxButton Text="Remove" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => RemoveGroup(group))" />
+                        </div>
+                    </div>
+                    <div class="block-options">
+                        @foreach (var block in _report.Blocks.OrderBy(item => item.BlockOrder).ThenBy(item => item.BlockName))
+                        {
+                            var selected = group.BlockIds.Contains(block.BlockId);
+                            <label class="block-option @(selected ? "selected" : string.Empty)">
+                                <input type="checkbox"
+                                       checked="@selected"
+                                       @onchange="@(args => ToggleBlock(group, block.BlockId, args.Value is true))" />
+                                <span>@BlockName(block)</span>
+                            </label>
+                        }
+                    </div>
+                </section>
+            }
+        </div>
+
+        <div class="editor-footer">
+            <DxButton Text="Add group" RenderStyle="ButtonRenderStyle.Secondary" Click="AddGroup" />
+            <DxButton Text="Save block groups" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_saving)" Click="SaveAsync" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int SurveyId { get; set; }
+
+    private MultiCropOnlineReportDto? _report;
+    private List<MultiCropReportBlockGroupDto> _groups = [];
+    private bool _loading = true;
+    private bool _saving;
+    private bool _saved;
+    private string? _message;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _message = null;
+        _report = await TgsApi.GetMultiCropOnlineReport(SurveyId);
+        if (_report == null)
+        {
+            _message = TgsApi.ErrorMessage ?? "The survey report could not be loaded.";
+        }
+        else
+        {
+            _groups = _report.BlockGroups.Select(CloneGroup).ToList();
+            if (_groups.Count == 0) AddGroup();
+        }
+        _loading = false;
+    }
+
+    private void AddGroup()
+    {
+        _groups.Add(new MultiCropReportBlockGroupDto
+        {
+            GroupGuid = Guid.NewGuid().ToString(),
+            GroupSequenceNo = _groups.Count + 1,
+            GroupName = _groups.Count == 0 ? "All blocks" : string.Empty,
+            BlockIds = _groups.Count == 0 && _report != null
+                ? _report.Blocks.Select(block => block.BlockId).ToList()
+                : []
+        });
+        ClearMessage();
+    }
+
+    private void RemoveGroup(MultiCropReportBlockGroupDto group)
+    {
+        if (_groups.Count == 1)
+        {
+            SetError("At least one report group is required.");
+            return;
+        }
+        _groups.Remove(group);
+        Resequence();
+        ClearMessage();
+    }
+
+    private void MoveGroup(int index, int direction)
+    {
+        var destination = index + direction;
+        if (destination < 0 || destination >= _groups.Count) return;
+        (_groups[index], _groups[destination]) = (_groups[destination], _groups[index]);
+        Resequence();
+        ClearMessage();
+    }
+
+    private void ToggleBlock(MultiCropReportBlockGroupDto target, int blockId, bool selected)
+    {
+        if (selected)
+        {
+            foreach (var group in _groups) group.BlockIds.Remove(blockId);
+            target.BlockIds.Add(blockId);
+        }
+        else
+        {
+            target.BlockIds.Remove(blockId);
+        }
+        ClearMessage();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!Validate()) return;
+        _saving = true;
+        _message = null;
+
+        var saved = await TgsApi.SaveMultiCropReportBlockGroups(SurveyId, _groups);
+        if (saved == null)
+        {
+            SetError(TgsApi.ErrorMessage ?? "The report groups could not be saved.");
+        }
+        else
+        {
+            _groups = saved.Select(CloneGroup).ToList();
+            _saved = true;
+            _message = "Report groups saved. The online and printed charts now use this grouping.";
+        }
+        _saving = false;
+    }
+
+    private bool Validate()
+    {
+        if (_groups.Any(group => string.IsNullOrWhiteSpace(group.GroupName)))
+        {
+            SetError("Enter a name for every report group.");
+            return false;
+        }
+        var emptyGroup = _groups.FirstOrDefault(group => group.BlockIds.Count == 0);
+        if (emptyGroup != null)
+        {
+            SetError($"Select at least one block for '{emptyGroup.GroupName}'.");
+            return false;
+        }
+        return true;
+    }
+
+    private void Resequence()
+    {
+        for (var index = 0; index < _groups.Count; index++) _groups[index].GroupSequenceNo = index + 1;
+    }
+
+    private void SetError(string message)
+    {
+        _saved = false;
+        _message = message;
+    }
+
+    private void ClearMessage()
+    {
+        _saved = false;
+        _message = null;
+    }
+
+    private void BackToReport() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/report");
+
+    private static string BlockName(MultiCropReportBlockDto block) =>
+        string.IsNullOrWhiteSpace(block.ShortCode) ? block.BlockName : $"{block.ShortCode} · {block.BlockName}";
+
+    private static MultiCropReportBlockGroupDto CloneGroup(MultiCropReportBlockGroupDto group) => new()
+    {
+        GroupGuid = group.GroupGuid,
+        GroupSequenceNo = group.GroupSequenceNo,
+        GroupName = group.GroupName,
+        BlockIds = [.. group.BlockIds]
+    };
+}

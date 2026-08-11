@@ -1,23 +1,652 @@
 @page "/surveys/multicrop/{SurveyId:int}/report"
+@using ApiModels
 @using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@using MetaGrow.Web.Services
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject ITgsApiService TgsApi
 @inject NavigationManager Navigation
+@inject IJSRuntime JavaScript
 
 <PageTitle>Multi-crop survey @SurveyId | MetaGrow</PageTitle>
 
-<div class="title">
-    <div class="title-header-text">Multi-crop survey @SurveyId</div>
-    <div class="title-content-text">@(Print ? "Printable report" : "Online report")</div>
-</div>
+<div class="online-report @(Print ? "print-layout" : string.Empty) @(_includePhotosForPrint ? "include-print-photos" : string.Empty)">
+    @if (_loading)
+    {
+        <div class="report-loading" role="status">
+            <div class="spinner-border" aria-hidden="true"></div>
+            <span>Building survey report…</span>
+        </div>
+    }
+    else if (_report is null)
+    {
+        <div class="title">
+            <h1 class="title-header-text">Multi-crop survey @SurveyId</h1>
+            <div class="title-content-text">Online report</div>
+        </div>
+        <div class="alert alert-danger" role="alert">
+            <strong>The report could not be loaded.</strong>
+            @if (!string.IsNullOrWhiteSpace(_errorMessage))
+            {
+                <span> @_errorMessage</span>
+            }
+        </div>
+        <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary"
+                  Click="BackToSurveys" />
+    }
+    else
+    {
+        <div class="report-toolbar no-print" role="toolbar" aria-label="Multi-crop report tools">
+            <div class="report-toolbar-navigation">
+                @if (!Shared)
+                {
+                    <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
+                }
+            </div>
+            <div class="report-toolbar-controls">
+                @if (!Shared)
+                {
+                    <DxButton Text="Block groups" RenderStyle="ButtonRenderStyle.Secondary" Click="ManageBlockGroups" />
+                    <DxButton Text="Edit photos" RenderStyle="ButtonRenderStyle.Secondary" Click="ManagePhotos" />
+                    <DxButton Text="PBD matrix" RenderStyle="ButtonRenderStyle.Secondary" Click="DownloadPbd" />
+                    <ReportShareButton SurveyId="@_report.SurveyId" PropertyName="@_report.PropertyName" />
+                    <span class="report-toolbar-divider" aria-hidden="true"></span>
+                }
+                <div class="report-brand-option">
+                    <label for="report-brand">Report brand</label>
+                    <DxComboBox Id="report-brand"
+                                Data="@ReportBranding.Options"
+                                @bind-Value="_reportBrandKey"
+                                TextFieldName="Label"
+                                ValueFieldName="Key"
+                                AllowUserInput="false" />
+                </div>
+                @if (_report.Photos.Count > 0)
+                {
+                    <div class="print-photo-option" title="Photos are excluded from printed reports unless selected">
+                        <DxCheckBox @bind-Checked="_includePhotosForPrint">Include photos in printout</DxCheckBox>
+                    </div>
+                }
+                <DxButton Text="Print / save PDF" RenderStyle="ButtonRenderStyle.Primary" Click="PrintReportAsync" />
+            </div>
+        </div>
 
-<div class="alert alert-info mt-3" role="status">
-    The finder link is ready. The combined online and photo report will be implemented in the reporting phase.
-</div>
+        <header class="report-header">
+            <div class="report-title-block">
+                <img class="report-cover-logo"
+                     src="@SelectedBrand.LogoPath"
+                     alt="@SelectedBrand.AltText" />
+                <span class="report-eyebrow">Multi-crop survey</span>
+                <h1>@_report.PropertyName</h1>
+                <p>@_report.ApplicationName · @_report.CropTypeName</p>
+            </div>
+        </header>
 
-<DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary"
-          Click="@(() => Navigation.NavigateTo("/surveys/multicrop"))" />
+        <section class="report-meta" aria-label="Survey details">
+            <div><span>Survey date</span><strong>@_report.SurveyDate.ToString("dd MMMM yyyy")</strong></div>
+            <div><span>Reference</span><strong>@_report.SurveyReference</strong></div>
+            <div><span>Agronomist</span><strong>@_report.AgronomistName</strong></div>
+            <div><span>Survey ID</span><strong>@_report.SurveyId</strong></div>
+        </section>
+
+        @if (_report.KeyFindings.Count > 0)
+        {
+            <section class="report-panel key-findings" aria-labelledby="key-findings-title">
+                <div class="section-heading">
+                    <span class="section-kicker">At a glance</span>
+                    <h2 id="key-findings-title">Key findings</h2>
+                </div>
+                <ol>
+                    @foreach (var finding in _report.KeyFindings)
+                    {
+                        <li>@finding</li>
+                    }
+                </ol>
+            </section>
+        }
+
+        @if (_report.Blocks.Count > 0 && SummaryMetrics.Count > 0)
+        {
+            <section class="report-panel summary-panel wide-print-section" aria-labelledby="summary-title">
+                <img class="section-brand-logo print-only"
+                     src="@SelectedBrand.LogoPath"
+                     alt="@SelectedBrand.AltText" />
+                <div class="section-heading">
+                    <span class="section-kicker">Current survey</span>
+                    <h2 id="summary-title">Block summary</h2>
+                    <p>Scroll horizontally on smaller screens to compare every measurement.</p>
+                </div>
+                <div class="summary-scroll">
+                    <table class="summary-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Block</th>
+                                @foreach (var metric in SummaryMetrics)
+                                {
+                                    <th scope="col">
+                                        <span class="summary-header-text">
+                                            <span>@metric.MetricLabel</span>
+                                            @if (!string.IsNullOrWhiteSpace(metric.ScaleText))
+                                            {
+                                                <small>@metric.ScaleText</small>
+                                            }
+                                        </span>
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var block in _report.Blocks)
+                            {
+                                <tr>
+                                    <th scope="row">@BlockDisplayName(block)</th>
+                                    @foreach (var metric in SummaryMetrics)
+                                    {
+                                        <td>@FormatValue(SummaryValue(block, metric.MetricCode))</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (_report.BlockGroups.Count > 0)
+                {
+                    <div class="report-group-summary no-print" aria-label="Report block groups">
+                        @foreach (var group in _report.BlockGroups)
+                        {
+                            <span><strong>@group.GroupName:</strong> @BlockGroupNames(group)</span>
+                        }
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_report.ComplianceText))
+                {
+                    <p class="compliance-note">@_report.ComplianceText</p>
+                }
+            </section>
+        }
+
+        @foreach (var reportSection in ReportSections)
+        {
+            var section = reportSection.Section;
+            var chartId = $"section-{section.Code}-{reportSection.Sequence}";
+            <section class="report-panel chart-panel" aria-labelledby="@chartId">
+                <img class="section-brand-logo print-only"
+                     src="@SelectedBrand.LogoPath"
+                     alt="@SelectedBrand.AltText" />
+                <div class="section-heading">
+                    <span class="section-kicker">@(section.IsHistorical ? "Survey history" : reportSection.GroupName)</span>
+                    <h2 id="@chartId">@section.Title</h2>
+                    <p class="no-print">Move over a point or bar for its value. Select a legend item to show or hide that series.</p>
+                </div>
+
+                @if (section.IsHistorical)
+                {
+                    var points = HistoricalChartPoints(section);
+                    <DxChart Data="@points" Width="100%" CssClass="report-chart interactive-chart">
+                        <DxChartArgumentAxis>
+                            <DxChartAxisLabel Format="ChartElementFormat.ShortDate" />
+                        </DxChartArgumentAxis>
+                        @foreach (var series in section.Series)
+                        {
+                            var seriesName = series.Name;
+                            <DxChartLineSeries Name="@seriesName"
+                                               ArgumentField="@((ReportHistoryChartPoint point) => point.Date)"
+                                               ValueField="@((ReportHistoryChartPoint point) => point.Value)"
+                                               Filter="@((ReportHistoryChartPoint point) => point.SeriesName == seriesName)" />
+                        }
+                        <DxChartLegend Position="RelativePosition.Outside" Orientation="Orientation.Horizontal" AllowToggleSeries="true" />
+                        <DxChartTooltip Enabled="true" Position="RelativePosition.Outside">
+                            <div class="chart-tooltip">
+                                <strong>@context.Point.SeriesName</strong>
+                                <span>@context.Point.Argument</span>
+                                <span>@context.Point.Value</span>
+                            </div>
+                        </DxChartTooltip>
+                    </DxChart>
+                    <MultiCropPrintChart Section="@section" />
+                }
+                else
+                {
+                    var points = CurrentChartPoints(section);
+                    <DxChart Data="@points" Width="100%" CssClass="report-chart interactive-chart">
+                        <DxChartArgumentAxis Type="ChartAxisType.Discrete" DiscreteDivisionMode="ChartDiscreteAxisDivisionMode.CrossLabels">
+                            <DxChartAxisMinorTick Visible="false" />
+                        </DxChartArgumentAxis>
+                        @foreach (var series in section.Series)
+                        {
+                            var seriesName = series.Name;
+                            <DxChartBarSeries Name="@seriesName"
+                                              ArgumentField="@((ReportCurrentChartPoint point) => point.MetricLabel)"
+                                              ValueField="@((ReportCurrentChartPoint point) => point.Value)"
+                                              Filter="@((ReportCurrentChartPoint point) => point.SeriesName == seriesName)" />
+                        }
+                        <DxChartLegend Position="RelativePosition.Outside" Orientation="Orientation.Horizontal" AllowToggleSeries="true" />
+                        <DxChartTooltip Enabled="true" Position="RelativePosition.Outside">
+                            <div class="chart-tooltip">
+                                <strong>@context.Point.SeriesName</strong>
+                                <span>@context.Point.Argument</span>
+                                <span>@context.Point.Value</span>
+                            </div>
+                        </DxChartTooltip>
+                    </DxChart>
+                    <MultiCropPrintChart Section="@section" />
+                }
+            </section>
+        }
+
+        @if (_report.Comments.Count > 0)
+        {
+            <section class="report-panel observations-section" aria-labelledby="observations-title">
+                <img class="section-brand-logo print-only"
+                     src="@SelectedBrand.LogoPath"
+                     alt="@SelectedBrand.AltText" />
+                <div class="section-heading">
+                    <span class="section-kicker">Agronomist notes</span>
+                    <h2 id="observations-title">Observations</h2>
+                </div>
+                <div class="comment-grid">
+                    @foreach (var comment in _report.Comments)
+                    {
+                        <article>
+                            <h3>@comment.Title</h3>
+                            <p>@comment.Text</p>
+                        </article>
+                    }
+                </div>
+            </section>
+        }
+
+        @foreach (var actionGroup in ActionGroups)
+        {
+            var actionGroupId = $"actions-{actionGroup.ActionGroupId}";
+            <section class="report-panel operational-section" aria-labelledby="@actionGroupId">
+                <div class="operational-heading">
+                    <div>
+                        <span class="section-kicker">Work instructions</span>
+                        <h2 id="@actionGroupId">@ActionGroupTitle(actionGroup.Name)</h2>
+                    </div>
+                    <span class="handout-brand">
+                        <img class="handout-brand-logo"
+                             src="@SelectedBrand.LogoPath"
+                             alt="@SelectedBrand.AltText" />
+                    </span>
+                </div>
+                <dl class="handout-context">
+                    <div><dt>Property</dt><dd>@_report.PropertyName</dd></div>
+                    <div><dt>Survey date</dt><dd>@_report.SurveyDate.ToString("dd MMMM yyyy")</dd></div>
+                    <div><dt>Reference</dt><dd>@_report.SurveyReference</dd></div>
+                    <div><dt>Agronomist</dt><dd>@_report.AgronomistName</dd></div>
+                </dl>
+                <div class="action-table-scroll">
+                    <table class="action-table">
+                        <thead>
+                            <tr>
+                                <th class="action-date" scope="col">Date</th>
+                                <th scope="col">Recommendation</th>
+                                <th class="action-blocks" scope="col">Blocks / map</th>
+                                <th class="action-notes" scope="col">Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var action in actionGroup.Actions)
+                            {
+                                <tr>
+                                    <td>@ActionDateText(action)</td>
+                                    <td>@action.ActionName</td>
+                                    <td>
+                                        @if (!string.IsNullOrWhiteSpace(action.Blocks))
+                                        {
+                                            <span>@action.Blocks</span>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(action.MapName))
+                                        {
+                                            <small>Map: @action.MapName</small>
+                                        }
+                                    </td>
+                                    <td>@action.Notes</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+
+        @if (_report.Actions.Count > 0 && ChecklistBlocks.Count > 0)
+        {
+            <section class="report-panel operational-section action-checklist-section print-only" aria-labelledby="action-checklist-title">
+                <div class="operational-heading">
+                    <div>
+                        <span class="section-kicker">Work instructions</span>
+                        <h2 id="action-checklist-title">Action checklist</h2>
+                    </div>
+                    <span class="handout-brand">
+                        <img class="handout-brand-logo"
+                             src="@SelectedBrand.LogoPath"
+                             alt="@SelectedBrand.AltText" />
+                    </span>
+                </div>
+                <dl class="handout-context">
+                    <div><dt>Property</dt><dd>@_report.PropertyName</dd></div>
+                    <div><dt>Survey date</dt><dd>@_report.SurveyDate.ToString("dd MMMM yyyy")</dd></div>
+                    <div><dt>Reference</dt><dd>@_report.SurveyReference</dd></div>
+                    <div><dt>Agronomist</dt><dd>@_report.AgronomistName</dd></div>
+                </dl>
+                <div class="action-checklist-scroll">
+                    <table class="action-checklist-table">
+                        <thead>
+                            <tr>
+                                <th class="checklist-date" scope="col">Date</th>
+                                <th class="checklist-action" scope="col">Action</th>
+                                @foreach (var block in ChecklistBlocks)
+                                {
+                                    <th class="checklist-block" scope="col"><span>@block.BlockName</span></th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var action in _report.Actions.OrderBy(item => item.ActionDate).ThenBy(item => item.ActionGroupName))
+                            {
+                                <tr>
+                                    <td>@ActionDateText(action)</td>
+                                    <td>
+                                        <strong>@ActionGroupTitle(action.ActionGroupName ?? "Action")</strong>
+                                        <span>@action.ActionName</span>
+                                    </td>
+                                    @foreach (var block in ChecklistBlocks)
+                                    {
+                                        var applies = ActionAppliesToBlock(action, block);
+                                        <td class="@(applies ? "checklist-target" : "checklist-not-applicable")">@(applies ? "☐" : string.Empty)</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="checklist-note">Tick each applicable block when the work has been completed.</p>
+            </section>
+        }
+
+        @if (_report.Photos.Count > 0)
+        {
+            <section class="report-panel photo-section" aria-labelledby="photos-title">
+                <img class="section-brand-logo print-only"
+                     src="@SelectedBrand.LogoPath"
+                     alt="@SelectedBrand.AltText" />
+                <div class="section-heading">
+                    <span class="section-kicker">Field images</span>
+                    <h2 id="photos-title">Survey photos</h2>
+                    <p>Photos remain securely referenced from the existing Total Grower Services image library.</p>
+                </div>
+                <div class="photo-grid">
+                    @foreach (var photo in _report.Photos)
+                    {
+                        <figure>
+                            <a class="photo-link"
+                               href="@photo.Url"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               aria-label="@OpenFullSizeLabel(photo)">
+                                <img src="@photo.Url" alt="@PhotoAltText(photo)" loading="lazy" />
+                                <span class="photo-open-cue no-print" aria-hidden="true">Open full size</span>
+                            </a>
+                            <figcaption>
+                                <strong>@PhotoHeading(photo)</strong>
+                                @if (!string.IsNullOrWhiteSpace(photo.Comments))
+                                {
+                                    <span>@photo.Comments</span>
+                                }
+                            </figcaption>
+                        </figure>
+                    }
+                </div>
+            </section>
+        }
+
+        <footer class="report-footer">
+            <span>MetaGrow · @SelectedBrand.Label</span>
+            <span>Survey @_report.SurveyId</span>
+        </footer>
+    }
+</div>
 
 @code {
     [Parameter] public int SurveyId { get; set; }
+    [Parameter] public MultiCropOnlineReportDto? Report { get; set; }
+    [Parameter] public bool Shared { get; set; }
     [SupplyParameterFromQuery(Name = "print")] public bool Print { get; set; }
+
+    private MultiCropOnlineReportDto? _report;
+    private bool _loading;
+    private bool _printInvoked;
+    private bool _includePhotosForPrint;
+    private string _reportBrandKey = ReportBranding.MetagenKey;
+    private string? _errorMessage;
+
+    private ReportBrandOption SelectedBrand => ReportBranding.Get(_reportBrandKey);
+
+    private sealed record ReportCurrentChartPoint(string SeriesName, string MetricLabel, double Value);
+    private sealed record ReportHistoryChartPoint(string SeriesName, DateTime Date, double Value);
+    private sealed record ReportActionGroup(int ActionGroupId, string Name, IReadOnlyList<MultiCropReportActionDto> Actions);
+    private sealed record GroupedReportSection(int Sequence, string GroupName, MultiCropReportSectionDto Section);
+
+    private IReadOnlyList<MultiCropReportMetricValueDto> SummaryMetrics => _report?.Blocks
+        .SelectMany(block => block.SummaryValues)
+        .GroupBy(metric => metric.MetricCode, StringComparer.OrdinalIgnoreCase)
+        .Select(group => group.First())
+        .ToList() ?? [];
+
+    private IReadOnlyList<ReportActionGroup> ActionGroups => _report?.Actions
+        .GroupBy(action => new
+        {
+            action.ActionGroupId,
+            Name = string.IsNullOrWhiteSpace(action.ActionGroupName) ? "Actions" : action.ActionGroupName.Trim()
+        })
+        .Select(group => new ReportActionGroup(group.Key.ActionGroupId, group.Key.Name, group.ToList()))
+        .ToList() ?? [];
+
+    private IReadOnlyList<MultiCropReportChecklistBlockDto> ChecklistBlocks
+    {
+        get
+        {
+            if (_report is null) return [];
+
+            var blocks = _report.ActionChecklistBlocks
+                .GroupBy(block => block.BlockId)
+                .Select(group => group.First())
+                .ToList();
+            var includedBlockIds = blocks.Select(block => block.BlockId).ToHashSet();
+
+            blocks.AddRange(_report.Blocks
+                .Where(block => includedBlockIds.Add(block.BlockId))
+                .Select(block => new MultiCropReportChecklistBlockDto
+                {
+                    BlockId = block.BlockId,
+                    BlockName = block.BlockName,
+                    BlockOrder = block.BlockOrder
+                }));
+
+            return blocks
+                .OrderBy(block => block.BlockOrder)
+                .ThenBy(block => block.BlockName)
+                .ToList();
+        }
+    }
+
+    private IReadOnlyList<GroupedReportSection> ReportSections
+    {
+        get
+        {
+            if (_report is null) return [];
+
+            var result = new List<GroupedReportSection>();
+            var sequence = 0;
+            IReadOnlyList<MultiCropReportBlockGroupDto> reportGroups = _report.BlockGroups.Count > 0
+                ? _report.BlockGroups
+                :
+                [
+                    new MultiCropReportBlockGroupDto
+                    {
+                        GroupSequenceNo = 1,
+                        GroupName = "All blocks",
+                        BlockIds = _report.Blocks.Select(block => block.BlockId).ToList()
+                    }
+                ];
+            foreach (var section in _report.Sections)
+            {
+                if (section.IsHistorical)
+                {
+                    result.Add(new GroupedReportSection(++sequence, "Survey history", section));
+                    continue;
+                }
+
+                foreach (var group in reportGroups.OrderBy(item => item.GroupSequenceNo))
+                {
+                    var blockIds = group.BlockIds.ToHashSet();
+                    var groupedSeries = section.Series
+                        .Where(series => series.BlockId.HasValue && blockIds.Contains(series.BlockId.Value))
+                        .ToList();
+                    if (groupedSeries.Count == 0) continue;
+
+                    result.Add(new GroupedReportSection(++sequence, group.GroupName, new MultiCropReportSectionDto
+                    {
+                        Code = section.Code,
+                        Title = section.Title,
+                        IsHistorical = false,
+                        Metrics = section.Metrics,
+                        Series = groupedSeries
+                    }));
+                }
+            }
+
+            return result;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _report = null;
+        _errorMessage = null;
+        _printInvoked = false;
+        _includePhotosForPrint = false;
+        _reportBrandKey = ReportBranding.MetagenKey;
+
+        try
+        {
+            if (Report is not null)
+            {
+                _report = Report;
+                return;
+            }
+
+            _report = await TgsApi.GetMultiCropOnlineReport(SurveyId);
+            if (_report is null)
+            {
+                _errorMessage = TgsApi.ErrorMessage ?? "No report data was found for this survey.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Print && _report is not null && !_printInvoked)
+        {
+            _printInvoked = true;
+            await PrintReportAsync();
+        }
+    }
+
+    private void BackToSurveys() => Navigation.NavigateTo("/surveys/multicrop");
+    private void ManageBlockGroups() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/block-groups");
+    private void ManagePhotos() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/photos");
+    private void DownloadPbd() => Navigation.NavigateTo($"/downloads/surveys/multicrop/{SurveyId}/pbd", forceLoad: true);
+    private async Task PrintReportAsync()
+    {
+        if (_report is null) return;
+
+        var fileName = MultiCropReportFileName.Build(
+            _report.PropertyName,
+            _report.PropertyId,
+            _report.SurveyDate);
+
+        var renderDelayMilliseconds = Print ? 1500 : 0;
+        await JavaScript.InvokeVoidAsync(
+            "metaGrowReportPrinting.print",
+            fileName,
+            renderDelayMilliseconds);
+    }
+
+    private static string BlockDisplayName(MultiCropReportBlockDto block) =>
+        string.IsNullOrWhiteSpace(block.ShortCode) ? block.BlockName : block.ShortCode;
+
+    private static double? SummaryValue(MultiCropReportBlockDto block, string metricCode) =>
+        block.SummaryValues.FirstOrDefault(metric =>
+            string.Equals(metric.MetricCode, metricCode, StringComparison.OrdinalIgnoreCase))?.Value;
+
+    private static string FormatValue(double? value) => value?.ToString("0.##") ?? "—";
+
+    private static string ActionGroupTitle(string name)
+    {
+        if (name.Contains("spray", StringComparison.OrdinalIgnoreCase)) return "Spray recommendations";
+        return string.Equals(name, "Action", StringComparison.OrdinalIgnoreCase) ? "Actions" : name;
+    }
+
+    private static string ActionDateText(MultiCropReportActionDto action) =>
+        action.ActionDate?.ToString("dd/MM/yyyy") ?? "—";
+
+    private string BlockGroupNames(MultiCropReportBlockGroupDto group)
+    {
+        if (_report is null) return string.Empty;
+        var blockIds = group.BlockIds.ToHashSet();
+        return string.Join(", ", _report.Blocks
+            .Where(block => blockIds.Contains(block.BlockId))
+            .OrderBy(block => block.BlockOrder)
+            .Select(BlockDisplayName));
+    }
+
+    private static bool ActionAppliesToBlock(
+        MultiCropReportActionDto action,
+        MultiCropReportChecklistBlockDto block)
+    {
+        if (action.BlockIds.Count > 0) return action.BlockIds.Contains(block.BlockId);
+
+        return (action.Blocks ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(blockName => string.Equals(blockName, block.BlockName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static List<ReportCurrentChartPoint> CurrentChartPoints(MultiCropReportSectionDto section) =>
+        section.Series.SelectMany(series => series.Points
+            .Where(point => point.Value.HasValue)
+            .Select(point => new ReportCurrentChartPoint(series.Name, point.MetricLabel, point.Value!.Value)))
+            .ToList();
+
+    private static List<ReportHistoryChartPoint> HistoricalChartPoints(MultiCropReportSectionDto section) =>
+        section.Series.SelectMany(series => series.Points
+            .Where(point => point.Date.HasValue && point.Value.HasValue)
+            .Select(point => new ReportHistoryChartPoint(series.Name, point.Date!.Value, point.Value!.Value)))
+            .ToList();
+
+    private static string PhotoHeading(MultiCropReportPhotoDto photo)
+    {
+        if (!string.IsNullOrWhiteSpace(photo.BlockName) && photo.PlantNo.HasValue)
+            return $"{photo.BlockName}, plant {photo.PlantNo}";
+        if (!string.IsNullOrWhiteSpace(photo.BlockName)) return photo.BlockName;
+        return photo.PlantNo.HasValue ? $"Plant {photo.PlantNo}" : "Survey photo";
+    }
+
+    private static string PhotoAltText(MultiCropReportPhotoDto photo) =>
+        $"{PhotoHeading(photo)} for multi-crop survey";
+
+    private static string OpenFullSizeLabel(MultiCropReportPhotoDto photo) =>
+        $"Open full-size {PhotoHeading(photo)} in a new tab";
 }
