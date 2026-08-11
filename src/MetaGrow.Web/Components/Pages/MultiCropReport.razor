@@ -41,6 +41,7 @@
                 @if (!Shared)
                 {
                     <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
+                    <DxButton Text="Edit survey" RenderStyle="ButtonRenderStyle.Secondary" Click="EditSurvey" />
                 }
             </div>
             <div class="report-toolbar-controls">
@@ -566,6 +567,7 @@
     }
 
     private void BackToSurveys() => Navigation.NavigateTo("/surveys/multicrop");
+    private void EditSurvey() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/edit");
     private void ManageBlockGroups() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/block-groups");
     private void ManagePhotos() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/photos");
     private void DownloadPbd() => Navigation.NavigateTo($"/downloads/surveys/multicrop/{SurveyId}/pbd", forceLoad: true);

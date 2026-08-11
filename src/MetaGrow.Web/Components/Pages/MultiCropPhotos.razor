@@ -7,12 +7,12 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JavaScript
 
-<PageTitle>Survey photos | MetaGrow</PageTitle>
+<PageTitle>Edit Survey Images | MetaGrow</PageTitle>
 
 <div class="photo-manager-page">
     @if (_loading)
     {
-        <div class="photo-loading"><DxWaitIndicator Visible="true" /><span>Loading survey photos...</span></div>
+        <div class="photo-loading"><DxWaitIndicator Visible="true" /><span>Loading survey images...</span></div>
     }
     else if (_report is null)
     {
@@ -24,7 +24,7 @@
         <header class="photo-manager-header">
             <div>
                 <span class="photo-kicker">Multi-crop survey @SurveyId</span>
-                <h1>Edit survey photos</h1>
+                <h1>Edit Survey Images</h1>
                 <p>@_report.PropertyName · @_report.SurveyDate.ToString("dd MMMM yyyy")</p>
             </div>
             <DxButton Text="Back to report" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToReport" />
@@ -36,43 +36,55 @@
         }
 
         <section class="photo-upload-card">
-            <div>
-                <span class="photo-kicker">Add forgotten or replacement image</span>
-                <h2>Add a photo</h2>
-                <p>JPEG images are stored in the existing Total Grower Services survey-image location.</p>
+            <div class="photo-section-heading">
+                <div>
+                    <span class="photo-kicker">Add an image</span>
+                    <h2>Upload survey image</h2>
+                </div>
+                <p>Choose the image details, then drag in a JPEG or select one from your device.</p>
             </div>
-            <div class="photo-upload-grid">
-                <label class="photo-field file-field">
-                    <span>JPEG file</span>
-                    <InputFile OnChange="SelectFile" accept=".jpg,.jpeg,image/jpeg" />
-                    @if (_selectedFile != null)
-                    {
-                        <small>@_selectedFile.Name · @FormatFileSize(_selectedFile.Size)</small>
-                    }
-                </label>
-                <label class="photo-field">
-                    <span>Block</span>
-                    <DxComboBox Data="@_report.Blocks"
-                                @bind-Value="_newBlockId"
-                                TextFieldName="@nameof(MultiCropReportBlockDto.BlockName)"
-                                ValueFieldName="@nameof(MultiCropReportBlockDto.BlockId)"
-                                AllowUserInput="false" />
-                </label>
-                <label class="photo-field">
-                    <span>Plant number</span>
-                    <InputNumber @bind-Value="_newPlantNo" min="1" />
-                </label>
-                <label class="photo-field">
-                    <span>Display order</span>
-                    <InputNumber @bind-Value="_newDisplayOrder" min="1" />
-                </label>
-                <label class="photo-field comments-field">
-                    <span>Comments</span>
-                    <textarea @bind="_newComments" rows="3"></textarea>
-                </label>
-            </div>
-            <div class="photo-upload-actions">
-                <DxButton Text="Upload photo" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_saving && _selectedFile != null)" Click="UploadAsync" />
+
+            <div class="photo-upload-layout">
+                <div class="photo-drop-zone" id="survey-photo-drop-zone">
+                    <span class="photo-drop-icon" aria-hidden="true">⇧</span>
+                    <strong>Drag and drop a JPEG here</strong>
+                    <span>or choose a file</span>
+                    <DxUpload @ref="_upload"
+                              Name="file"
+                              UploadUrl="@UploadUrl"
+                              AllowMultiFileUpload="false"
+                              MaxFileSize="@MaxPhotoBytes"
+                              AllowedFileExtensions="@AllowedFileExtensions"
+                              ExternalDropZoneCssSelector="#survey-photo-drop-zone"
+                              ExternalDropZoneDragOverCssClass="drop-zone-active"
+                              FileUploaded="@OnFileUploadedAsync"
+                              FileUploadError="@OnFileUploadError"
+                              CssClass="photo-upload-control" />
+                    <small>JPEG only · maximum 20 MB</small>
+                </div>
+
+                <div class="photo-upload-details">
+                    <label class="photo-field">
+                        <span>Block</span>
+                        <DxComboBox Data="@_report.Blocks"
+                                    @bind-Value="_newBlockId"
+                                    TextFieldName="@nameof(MultiCropReportBlockDto.BlockName)"
+                                    ValueFieldName="@nameof(MultiCropReportBlockDto.BlockId)"
+                                    AllowUserInput="false" />
+                    </label>
+                    <label class="photo-field">
+                        <span>Plant number</span>
+                        <InputNumber @bind-Value="_newPlantNo" min="1" />
+                    </label>
+                    <label class="photo-field comments-field">
+                        <span>Comments <small>optional</small></span>
+                        <DxMemo @bind-Text="_newComments"
+                                Rows="4"
+                                NullText="What should the report reader notice?"
+                                CssClass="w-100" />
+                    </label>
+                    <p class="upload-order-note">New images are added at the end. Use the arrow buttons below to change their report order.</p>
+                </div>
             </div>
         </section>
 
@@ -80,38 +92,51 @@
             <div class="existing-photos-heading">
                 <div>
                     <span class="photo-kicker">Current report images</span>
-                    <h2>@_report.Photos.Count photo@(_report.Photos.Count == 1 ? string.Empty : "s")</h2>
+                    <h2>@_report.Photos.Count image@(_report.Photos.Count == 1 ? string.Empty : "s")</h2>
                 </div>
-                <p>Removing a photo hides it from the survey and reports; the original server file is retained as a safety archive.</p>
+                <p>Changes appear in the online and printed reports. Removing an image retains the original server file as a safety archive.</p>
             </div>
 
             @if (_report.Photos.Count == 0)
             {
-                <div class="empty-photos">This survey does not currently have any photos.</div>
+                <div class="empty-photos">This survey does not currently have any images.</div>
             }
             else
             {
                 <div class="photo-editor-grid">
-                    @foreach (var photo in _report.Photos.OrderBy(item => item.DisplayOrder).ThenBy(item => item.PhotoId))
+                    @foreach (var photo in OrderedPhotos)
                     {
                         <article class="photo-editor-card">
-                            <a href="@photo.Url" target="_blank" rel="noopener noreferrer">
-                                <img src="@photo.Url" alt="@PhotoHeading(photo)" loading="lazy" />
-                            </a>
+                            <div class="photo-image-shell">
+                                <a href="@photo.Url" target="_blank" rel="noopener noreferrer">
+                                    <img src="@photo.Url" alt="@PhotoHeading(photo)" loading="lazy" />
+                                </a>
+                                <span class="photo-position">Image @(PhotoPosition(photo) + 1) of @OrderedPhotos.Count</span>
+                            </div>
                             <div class="photo-editor-body">
-                                <strong>@PhotoHeading(photo)</strong>
-                                <small>@photo.FileName</small>
+                                <div class="photo-card-heading">
+                                    <div>
+                                        <strong>@PhotoHeading(photo)</strong>
+                                        <small>@photo.FileName</small>
+                                    </div>
+                                    <div class="photo-order-actions" aria-label="Change image order">
+                                        <DxButton Text="←"
+                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                  Enabled="@(!_saving && CanMoveEarlier(photo))"
+                                                  Click="@(() => MovePhotoAsync(photo, -1))" />
+                                        <DxButton Text="→"
+                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                  Enabled="@(!_saving && CanMoveLater(photo))"
+                                                  Click="@(() => MovePhotoAsync(photo, 1))" />
+                                    </div>
+                                </div>
                                 <label class="photo-field">
                                     <span>Comments</span>
-                                    <textarea @bind="photo.Comments" rows="3"></textarea>
-                                </label>
-                                <label class="photo-field">
-                                    <span>Display order</span>
-                                    <InputNumber @bind-Value="photo.DisplayOrder" min="1" />
+                                    <DxMemo @bind-Text="photo.Comments" Rows="3" NullText="No comments" CssClass="w-100" />
                                 </label>
                                 <div class="photo-card-actions">
-                                    <DxButton Text="Save details" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_saving)" Click="@(() => SavePhotoAsync(photo))" />
-                                    <DxButton Text="Remove" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_saving)" Click="@(() => RemovePhotoAsync(photo))" />
+                                    <DxButton Text="Save comments" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_saving)" Click="@(() => SavePhotoAsync(photo))" />
+                                    <DxButton Text="Remove" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Text" Enabled="@(!_saving)" Click="@(() => RemovePhotoAsync(photo))" />
                                 </div>
                             </div>
                         </article>
@@ -123,20 +148,37 @@
 </div>
 
 @code {
-    private const long MaxPhotoBytes = 20 * 1024 * 1024;
+    private const int MaxPhotoBytes = 20 * 1024 * 1024;
+    private static readonly List<string> AllowedFileExtensions = [".jpg", ".jpeg"];
 
     [Parameter] public int SurveyId { get; set; }
 
     private MultiCropOnlineReportDto? _report;
-    private IBrowserFile? _selectedFile;
+    private DxUpload? _upload;
     private int _newBlockId;
     private int _newPlantNo = 1;
-    private int _newDisplayOrder = 1;
     private string? _newComments;
     private bool _loading = true;
     private bool _saving;
     private bool _saved;
     private string? _message;
+
+    private IReadOnlyList<MultiCropReportPhotoDto> OrderedPhotos => _report?.Photos
+        .OrderBy(photo => photo.DisplayOrder)
+        .ThenBy(photo => photo.PhotoId)
+        .ToList() ?? [];
+
+    private string UploadUrl
+    {
+        get
+        {
+            var comments = Uri.EscapeDataString(_newComments?.Trim() ?? string.Empty);
+            var displayOrder = OrderedPhotos.Count + 1;
+            return Navigation.ToAbsoluteUri(
+                    $"/uploads/surveys/multicrop/{SurveyId}/photos?blockId={_newBlockId}&plantNo={Math.Max(1, _newPlantNo)}&displayOrder={displayOrder}&comments={comments}")
+                .ToString();
+        }
+    }
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -151,105 +193,66 @@
         else
         {
             _newBlockId = _report.Blocks.OrderBy(block => block.BlockOrder).FirstOrDefault()?.BlockId ?? 0;
-            _newDisplayOrder = Math.Max(1, _report.Photos.Select(photo => photo.DisplayOrder).DefaultIfEmpty(0).Max() + 1);
         }
         _loading = false;
     }
 
-    private void SelectFile(InputFileChangeEventArgs args)
+    private async Task OnFileUploadedAsync(FileUploadEventArgs args)
     {
-        var file = args.File;
-        var extension = Path.GetExtension(file.Name);
-        if (!extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) &&
-            !extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase))
-        {
-            _selectedFile = null;
-            SetError("Select a JPEG (.jpg or .jpeg) image.");
-            return;
-        }
-        if (file.Size > MaxPhotoBytes)
-        {
-            _selectedFile = null;
-            SetError("The image is larger than the 20 MB upload limit.");
-            return;
-        }
-
-        _selectedFile = file;
         ClearMessage();
-    }
-
-    private async Task UploadAsync()
-    {
-        if (_report == null || _selectedFile == null) return;
-        if (_newBlockId <= 0)
-        {
-            SetError("Select the block associated with the photo.");
-            return;
-        }
-
-        _saving = true;
-        ClearMessage();
-        var fileNameNoExt = $"mcs{DateTime.Now:yyyyMMddHHmmss}";
-        var storedFileName = $"{SurveyId}.{fileNameNoExt}.jpg";
-
-        await using var stream = _selectedFile.OpenReadStream(MaxPhotoBytes);
-        var uploadName = $"{Path.GetFileNameWithoutExtension(_selectedFile.Name)}.jpg";
-        if (!await TgsApi.UploadMultiCropSurveyPhoto(stream, uploadName, "image/jpeg", SurveyId, fileNameNoExt))
-        {
-            SetError(TgsApi.ErrorMessage ?? "The photo file could not be uploaded.");
-            _saving = false;
-            return;
-        }
-
-        var created = await TgsApi.CreateMultiCropSurveyPhoto(new SurveyPhoto
-        {
-            SurveyId = SurveyId,
-            BlockId = _newBlockId,
-            PlantNo = Math.Max(1, _newPlantNo),
-            FileName = storedFileName,
-            Comments = _newComments?.Trim(),
-            DisplayOrder = Math.Max(1, _newDisplayOrder)
-        });
-        if (created == null)
-        {
-            SetError(TgsApi.ErrorMessage ?? "The photo record could not be added to the survey.");
-            _saving = false;
-            return;
-        }
-
-        _selectedFile = null;
+        _upload?.RemoveFile(args.FileInfo);
         _newComments = null;
         _newPlantNo = 1;
         await RefreshPhotosAsync();
         _saved = true;
-        _message = "Photo added to the survey and report.";
-        _saving = false;
+        _message = "Image added to the survey and report.";
     }
+
+    private void OnFileUploadError(FileUploadErrorEventArgs args) =>
+        SetError($"Upload of '{args.FileInfo.Name}' failed. Check that it is a JPEG smaller than 20 MB and try again.");
 
     private async Task SavePhotoAsync(MultiCropReportPhotoDto photo)
     {
         _saving = true;
         ClearMessage();
-        var updated = await TgsApi.UpdateMultiCropSurveyPhoto(new SurveyPhoto
+        if (!await UpdatePhotoAsync(photo))
         {
-            PhotoId = photo.PhotoId,
-            SurveyId = SurveyId,
-            BlockId = photo.BlockId ?? 0,
-            PlantNo = photo.PlantNo ?? 1,
-            FileName = photo.FileName,
-            Comments = photo.Comments?.Trim(),
-            DisplayOrder = Math.Max(1, photo.DisplayOrder)
-        });
-        if (updated == null)
-        {
-            SetError(TgsApi.ErrorMessage ?? "The photo details could not be saved.");
+            SetError(TgsApi.ErrorMessage ?? "The image comments could not be saved.");
         }
         else
         {
             await RefreshPhotosAsync();
             _saved = true;
-            _message = "Photo details saved.";
+            _message = "Image comments saved.";
         }
+        _saving = false;
+    }
+
+    private async Task MovePhotoAsync(MultiCropReportPhotoDto photo, int direction)
+    {
+        var ordered = OrderedPhotos.ToList();
+        var currentIndex = ordered.FindIndex(item => item.PhotoId == photo.PhotoId);
+        var targetIndex = currentIndex + direction;
+        if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ordered.Count) return;
+
+        (ordered[currentIndex], ordered[targetIndex]) = (ordered[targetIndex], ordered[currentIndex]);
+        for (var index = 0; index < ordered.Count; index++) ordered[index].DisplayOrder = index + 1;
+
+        _saving = true;
+        ClearMessage();
+        foreach (var orderedPhoto in ordered)
+        {
+            if (await UpdatePhotoAsync(orderedPhoto)) continue;
+
+            SetError(TgsApi.ErrorMessage ?? "The image order could not be saved.");
+            await RefreshPhotosAsync();
+            _saving = false;
+            return;
+        }
+
+        _report!.Photos = ordered;
+        _saved = true;
+        _message = "Image order updated.";
         _saving = false;
     }
 
@@ -262,13 +265,13 @@
         ClearMessage();
         if (!await TgsApi.DeleteMultiCropSurveyPhoto(photo.PhotoId))
         {
-            SetError(TgsApi.ErrorMessage ?? "The photo could not be removed.");
+            SetError(TgsApi.ErrorMessage ?? "The image could not be removed.");
         }
         else
         {
             await RefreshPhotosAsync();
             _saved = true;
-            _message = "Photo removed from the survey. The original image file remains archived on the server.";
+            _message = "Image removed from the survey. The original image file remains archived on the server.";
         }
         _saving = false;
     }
@@ -277,9 +280,25 @@
     {
         var refreshed = await TgsApi.GetMultiCropOnlineReport(SurveyId);
         if (refreshed != null) _report = refreshed;
-        if (_report != null)
-            _newDisplayOrder = Math.Max(1, _report.Photos.Select(photo => photo.DisplayOrder).DefaultIfEmpty(0).Max() + 1);
     }
+
+    private async Task<bool> UpdatePhotoAsync(MultiCropReportPhotoDto photo) =>
+        await TgsApi.UpdateMultiCropSurveyPhoto(new SurveyPhoto
+        {
+            PhotoId = photo.PhotoId,
+            SurveyId = SurveyId,
+            BlockId = photo.BlockId ?? 0,
+            PlantNo = photo.PlantNo ?? 1,
+            FileName = photo.FileName,
+            Comments = photo.Comments?.Trim(),
+            DisplayOrder = Math.Max(1, photo.DisplayOrder)
+        }) != null;
+
+    private int PhotoPosition(MultiCropReportPhotoDto photo) =>
+        OrderedPhotos.ToList().FindIndex(item => item.PhotoId == photo.PhotoId);
+
+    private bool CanMoveEarlier(MultiCropReportPhotoDto photo) => PhotoPosition(photo) > 0;
+    private bool CanMoveLater(MultiCropReportPhotoDto photo) => PhotoPosition(photo) < OrderedPhotos.Count - 1;
 
     private void BackToReport() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/report");
 
@@ -295,14 +314,10 @@
         _message = null;
     }
 
-    private static string FormatFileSize(long bytes) => bytes >= 1024 * 1024
-        ? $"{bytes / 1024d / 1024d:0.0} MB"
-        : $"{bytes / 1024d:0} KB";
-
     private static string PhotoHeading(MultiCropReportPhotoDto photo)
     {
         if (!string.IsNullOrWhiteSpace(photo.BlockName) && photo.PlantNo.HasValue)
             return $"{photo.BlockName}, plant {photo.PlantNo}";
-        return photo.BlockName ?? "Survey photo";
+        return photo.BlockName ?? "Survey image";
     }
 }

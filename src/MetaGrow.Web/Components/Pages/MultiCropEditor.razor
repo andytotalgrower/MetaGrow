@@ -1,0 +1,534 @@
+@page "/surveys/multicrop/{SurveyId:int}/edit"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using MetaGrow.Web.Services
+@using Metagen.Shared.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject ITgsApiService TgsApi
+@inject AccountApiClient AccountApi
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Edit multi-crop survey @SurveyId | MetaGrow</PageTitle>
+
+<div class="survey-editor-page">
+    @if (_loading)
+    {
+        <div class="editor-loading"><DxWaitIndicator Visible="true" /><span>Loading survey editor...</span></div>
+    }
+    else if (_editor is null)
+    {
+        <div class="editor-message error">@_message</div>
+        <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
+    }
+    else
+    {
+        <div class="editor-toolbar" role="toolbar" aria-label="Survey actions">
+            <div class="toolbar-left">
+                <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
+                <DxButton Text="View report" RenderStyle="ButtonRenderStyle.Secondary" Click="ViewReport" />
+                <DxButton Text="Block groups" RenderStyle="ButtonRenderStyle.Secondary" Click="EditBlockGroups" />
+                <DxButton Text="Survey images" RenderStyle="ButtonRenderStyle.Secondary" Click="EditImages" />
+            </div>
+            <DxButton Text="Save changes" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="SaveAsync" />
+        </div>
+
+        <header class="editor-hero">
+            <div>
+                <span class="editor-kicker">Multi-crop survey @SurveyId</span>
+                <h1>@_editor.Survey.PropertyName</h1>
+                <p>@_editor.Survey.ApplicationName · @_editor.Survey.CropTypeName · @_editor.Survey.SurveyDate.ToString("dd MMMM yyyy")</p>
+            </div>
+            <span class="status-pill @StatusClass(_editor.Survey.StatusId)">@_editor.StatusName</span>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="editor-message @(_success ? "success" : "error")" role="alert">@_message</div>
+        }
+
+        <section class="workflow-card" aria-labelledby="workflow-heading">
+            <div class="section-heading workflow-heading-row">
+                <div>
+                    <span class="editor-kicker">Workflow</span>
+                    <h2 id="workflow-heading">Move the survey through review</h2>
+                </div>
+                <span class="workflow-help">Changes are saved before a status is moved.</span>
+            </div>
+
+            <ol class="workflow-steps">
+                @foreach (var step in WorkflowSteps)
+                {
+                    <li class="@WorkflowStepClass(step.StatusId)">
+                        <span class="step-marker">@step.Number</span>
+                        <span class="step-label">@step.Label</span>
+                    </li>
+                }
+            </ol>
+
+            @if (_editor.Survey.StatusId == MultiCropSurveyStatus.AwaitingQa)
+            {
+                <div class="qa-panel">
+                    <div class="qa-copy">
+                        <strong>Independent QA required</strong>
+                        @if (_actingAgronomist is null)
+                        {
+                            <span>None of your confirmed account email addresses matches an active TGS agronomist record. Add the relevant address under Account before completing QA.</span>
+                        }
+                        else if (_actingAgronomist.StaffId == _editor.Survey.AgronomistId)
+                        {
+                            <span>@_actingAgronomist.StaffName is the survey agronomist, so another agronomist must complete QA.</span>
+                        }
+                        else
+                        {
+                            <span>You will be recorded as the QA agronomist: @_actingAgronomist.StaffName.</span>
+                        }
+                    </div>
+                    <div class="qa-hours field">
+                        <label for="qa-hours">QA hours</label>
+                        <DxSpinEdit Id="qa-hours" @bind-Value="_qaHours" Increment="0.25" MinValue="0" DisplayFormat="0.00" />
+                    </div>
+                </div>
+            }
+            else if (_editor.Survey.QaAgronomistId > 0)
+            {
+                <div class="qa-summary">
+                    <span><strong>QA agronomist</strong> @_editor.Survey.QaAgronomistName</span>
+                    <span><strong>QA hours</strong> @_editor.Survey.QaHours.ToString("0.00")</span>
+                </div>
+            }
+
+            <div class="workflow-actions">
+                <div>
+                    @if (BackwardAction is not null)
+                    {
+                        <DxButton Text="@BackwardAction.Label" RenderStyle="ButtonRenderStyle.Secondary"
+                                  Enabled="@(!_busy)" Click="@(() => TransitionAsync(BackwardAction.Action))" />
+                    }
+                </div>
+                <div>
+                    @if (ForwardAction is not null)
+                    {
+                        <DxButton Text="@ForwardAction.Label" RenderStyle="ButtonRenderStyle.Primary"
+                                  Enabled="@(!_busy && CanUseForwardAction)" Click="@(() => TransitionAsync(ForwardAction.Action))" />
+                    }
+                </div>
+            </div>
+        </section>
+
+        <div class="editor-grid">
+            <section class="editor-card" aria-labelledby="details-heading">
+                <div class="section-heading">
+                    <span class="editor-kicker">Survey setup</span>
+                    <h2 id="details-heading">Details and time</h2>
+                </div>
+                <div class="field-grid">
+                    <div class="field">
+                        <label for="survey-date">Survey date</label>
+                        <DxDateEdit Id="survey-date" @bind-Date="_editor.Survey.SurveyDate" DisplayFormat="dd/MM/yyyy" />
+                    </div>
+                    <div class="field agronomist-field">
+                        <label for="survey-agronomist">Agronomist</label>
+                        <DxComboBox Id="survey-agronomist" Data="@_editor.Agronomists" @bind-Value="_editor.Survey.AgronomistId"
+                                    TextFieldName="@nameof(Staff.StaffName)" ValueFieldName="@nameof(Staff.StaffId)"
+                                    AllowUserInput="false" />
+                    </div>
+                    <div class="field">
+                        <label for="survey-hours">Survey hours</label>
+                        <DxSpinEdit Id="survey-hours" @bind-Value="_editor.Survey.SurveyHours" Increment="0.25" MinValue="0" DisplayFormat="0.00" />
+                    </div>
+                    <div class="field">
+                        <label for="report-hours">Report preparation hours</label>
+                        <DxSpinEdit Id="report-hours" @bind-Value="_editor.Survey.ReportHours" Increment="0.25" MinValue="0" DisplayFormat="0.00" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-card" aria-labelledby="billing-heading">
+                <div class="section-heading">
+                    <span class="editor-kicker">Billing</span>
+                    <h2 id="billing-heading">Purchase order and notes</h2>
+                </div>
+                <div class="field">
+                    <label for="survey-po">Survey P.O. number</label>
+                    <DxTextBox Id="survey-po" @bind-Text="_editor.Survey.ClientPurchaseOrderRef" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    <small>Use billing comments for any additional purchase order references.</small>
+                </div>
+                <div class="field">
+                    <label for="billing-comments">Billing comments</label>
+                    <DxMemo Id="billing-comments" @bind-Text="_editor.Survey.BillingComments" Rows="4" NullText="Billing notes or additional P.O. numbers" />
+                </div>
+            </section>
+
+            <section class="editor-card full-width" aria-labelledby="blocks-heading">
+                <div class="section-heading split-heading">
+                    <div>
+                        <span class="editor-kicker">Survey coverage</span>
+                        <h2 id="blocks-heading">Active blocks</h2>
+                    </div>
+                    <span>@_editor.ActiveBlockIds.Count selected</span>
+                </div>
+                @if (_editor.Blocks.Count == 0)
+                {
+                    <div class="empty-inline">No blocks are available for this property and crop.</div>
+                }
+                else
+                {
+                    <div class="block-selector">
+                        @foreach (var block in _editor.Blocks)
+                        {
+                            var selected = _editor.ActiveBlockIds.Contains(block.BlockId);
+                            <label class="block-choice @(selected ? "selected" : string.Empty) @(!block.IsActive ? "inactive" : string.Empty)">
+                                <input type="checkbox" checked="@selected" @onchange="@(args => SetBlockSelected(block.BlockId, args.Value is true))" />
+                                <span>
+                                    <strong>@block.BlockName</strong>
+                                    <small>@block.NoPlants.ToString("N0") plants@(!block.IsActive ? " · inactive block" : string.Empty)</small>
+                                </span>
+                            </label>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="editor-card full-width" aria-labelledby="recommendations-heading">
+                <div class="section-heading split-heading">
+                    <div>
+                        <span class="editor-kicker">Work instructions</span>
+                        <h2 id="recommendations-heading">Actions and spray recommendations</h2>
+                    </div>
+                    <DxButton Text="Add action or spray" RenderStyle="ButtonRenderStyle.Primary"
+                              Click="AddRecommendation" />
+                </div>
+                @if (_editor.Recommendations.Count == 0)
+                {
+                    <div class="empty-inline">No actions or spray recommendations have been added.</div>
+                }
+                else
+                {
+                    <div class="recommendation-list">
+                        @foreach (var recommendation in _editor.Recommendations)
+                        {
+                            <article class="recommendation-card">
+                                <div class="recommendation-header">
+                                    <div>
+                                        <span class="recommendation-type">@recommendation.ActionGroupName</span>
+                                        <strong>@recommendation.ActionDate.ToString("dd MMM yyyy")</strong>
+                                    </div>
+                                    <DxButton Text="Edit" RenderStyle="ButtonRenderStyle.Secondary"
+                                              Click="@(() => EditRecommendation(recommendation.SurveyActionId))" />
+                                </div>
+                                <div class="recommendation-blocks">
+                                    <span>Blocks</span>
+                                    <strong>@string.Join(", ", recommendation.Blocks.Select(block => block.BlockName))</strong>
+                                </div>
+                                <ul class="recommendation-items">
+                                    @foreach (var item in recommendation.Items)
+                                    {
+                                        <li>@RecommendationItemText(item)</li>
+                                    }
+                                </ul>
+                                @if (!string.IsNullOrWhiteSpace(recommendation.Notes))
+                                {
+                                    <p class="recommendation-notes">@recommendation.Notes</p>
+                                }
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="editor-card full-width" aria-labelledby="findings-heading">
+                <div class="section-heading">
+                    <span class="editor-kicker">Report content</span>
+                    <h2 id="findings-heading">Key findings</h2>
+                </div>
+                <div class="two-column-memos">
+                    <div class="field">
+                        <label for="key-findings-1">Key findings 1</label>
+                        <DxMemo Id="key-findings-1" @bind-Text="_editor.Survey.KeyFindings1" Rows="5" NullText="Primary findings and priorities" />
+                    </div>
+                    <div class="field">
+                        <label for="key-findings-2">Key findings 2</label>
+                        <DxMemo Id="key-findings-2" @bind-Text="_editor.Survey.KeyFindings2" Rows="5" NullText="Additional findings" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-card full-width" aria-labelledby="observations-heading">
+                <div class="section-heading">
+                    <span class="editor-kicker">Report content</span>
+                    <h2 id="observations-heading">Agronomist observations</h2>
+                </div>
+                <div class="observation-grid">
+                    <div class="field">
+                        <label for="plant-health">Plant health</label>
+                        <DxMemo Id="plant-health" @bind-Text="_editor.Survey.PlantHealthComments" Rows="5" />
+                    </div>
+                    <div class="field">
+                        <label for="beneficial-pests">Beneficial and pest populations</label>
+                        <DxMemo Id="beneficial-pests" @bind-Text="_editor.Survey.BeneficialPestComments" Rows="5" />
+                    </div>
+                    <div class="field">
+                        <label for="disease">Disease</label>
+                        <DxMemo Id="disease" @bind-Text="_editor.Survey.DiseaseComments" Rows="5" />
+                    </div>
+                    <div class="field">
+                        <label for="soil-moisture">Soil moisture management</label>
+                        <DxMemo Id="soil-moisture" @bind-Text="_editor.Survey.SoilMoistureComments" Rows="5" />
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <footer class="audit-strip">
+            <span><strong>Created</strong> @_editor.Survey.CreationDate.ToString("dd MMM yyyy HH:mm") by @_editor.Survey.CreatedBy</span>
+            <span><strong>Last changed</strong> @_editor.Survey.ModificationDate.ToString("dd MMM yyyy HH:mm") by @_editor.Survey.ModifiedBy</span>
+        </footer>
+    }
+</div>
+
+@code {
+    [Parameter] public int SurveyId { get; set; }
+
+    private MultiCropSurveyEditorDto? _editor;
+    private Staff? _actingAgronomist;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _success;
+    private double _qaHours;
+    private string? _currentEmail;
+    private string? _message;
+
+    private sealed record WorkflowStep(int Number, int StatusId, string Label);
+    private sealed record WorkflowOption(MultiCropSurveyWorkflowAction Action, string Label);
+
+    private static readonly WorkflowStep[] WorkflowSteps =
+    [
+        new(1, MultiCropSurveyStatus.NotStarted, "Not started"),
+        new(2, MultiCropSurveyStatus.InProgress, "In progress"),
+        new(3, MultiCropSurveyStatus.AwaitingQa, "Awaiting QA"),
+        new(4, MultiCropSurveyStatus.ReadyToSend, "Ready to send"),
+        new(5, MultiCropSurveyStatus.Complete, "Complete")
+    ];
+
+    private WorkflowOption? BackwardAction => _editor?.Survey.StatusId switch
+    {
+        MultiCropSurveyStatus.InProgress => new(MultiCropSurveyWorkflowAction.ReturnToNotStarted, "Return to not started"),
+        MultiCropSurveyStatus.AwaitingQa => new(MultiCropSurveyWorkflowAction.ReturnToEditing, "Return to editing"),
+        MultiCropSurveyStatus.ReadyToSend => new(MultiCropSurveyWorkflowAction.ReturnToQa, "Return to QA"),
+        MultiCropSurveyStatus.Complete => new(MultiCropSurveyWorkflowAction.ReopenForSending, "Reopen for sending"),
+        _ => null
+    };
+
+    private WorkflowOption? ForwardAction => _editor?.Survey.StatusId switch
+    {
+        MultiCropSurveyStatus.NotStarted => new(MultiCropSurveyWorkflowAction.StartEditing, "Start editing"),
+        MultiCropSurveyStatus.InProgress => new(MultiCropSurveyWorkflowAction.SubmitForQa, "Submit for QA"),
+        MultiCropSurveyStatus.AwaitingQa => new(MultiCropSurveyWorkflowAction.CompleteQa, "Complete QA"),
+        MultiCropSurveyStatus.ReadyToSend => new(MultiCropSurveyWorkflowAction.MarkSent, "Mark sent to client"),
+        _ => null
+    };
+
+    private bool CanUseForwardAction =>
+        ForwardAction?.Action != MultiCropSurveyWorkflowAction.CompleteQa ||
+        (_actingAgronomist is not null && _actingAgronomist.StaffId != _editor?.Survey.AgronomistId);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _message = null;
+        _editor = await TgsApi.GetMultiCropSurveyEditor(SurveyId);
+        if (_editor is null)
+        {
+            _message = TgsApi.ErrorMessage ?? "The survey editor could not be loaded.";
+        }
+        else
+        {
+            _qaHours = _editor.Survey.QaHours;
+            await ResolveActingAgronomistAsync();
+        }
+        _loading = false;
+    }
+
+    private async Task ResolveActingAgronomistAsync()
+    {
+        if (_editor is null) return;
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _currentEmail = authenticationState.User.FindFirstValue(ClaimTypes.Email)
+            ?? authenticationState.User.Identity?.Name
+            ?? "MetaGrow";
+
+        var emails = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { _currentEmail };
+        var (additionalEmails, _) = await AccountApi.GetEmailsAsync();
+        foreach (var address in additionalEmails?.Where(item => item.IsConfirmed) ?? [])
+            emails.Add(address.Email);
+
+        _actingAgronomist = _editor.Agronomists.FirstOrDefault(staff =>
+            !string.IsNullOrWhiteSpace(staff.Email) && emails.Contains(staff.Email));
+    }
+
+    private async Task SaveAsync() => await SaveAsync(showSuccess: true);
+
+    private async Task<bool> SaveAsync(bool showSuccess)
+    {
+        if (_editor is null || !ValidateEditor()) return false;
+        _busy = true;
+        _message = null;
+        _success = false;
+        try
+        {
+            var survey = _editor.Survey;
+            var request = new MultiCropSurveyEditorUpdateRequest
+            {
+                SurveyDate = survey.SurveyDate,
+                AgronomistId = survey.AgronomistId,
+                SurveyHours = survey.SurveyHours,
+                ReportHours = survey.ReportHours,
+                BillingComments = survey.BillingComments,
+                SurveyPurchaseOrderNumber = survey.ClientPurchaseOrderRef,
+                PlantHealthComments = survey.PlantHealthComments,
+                BeneficialPestComments = survey.BeneficialPestComments,
+                DiseaseComments = survey.DiseaseComments,
+                SoilMoistureComments = survey.SoilMoistureComments,
+                KeyFindings1 = survey.KeyFindings1,
+                KeyFindings2 = survey.KeyFindings2,
+                ActiveBlockIds = [.. _editor.ActiveBlockIds],
+                ExpectedModificationDate = survey.ModificationDate,
+                ModifiedBy = _currentEmail ?? "MetaGrow"
+            };
+
+            var updated = await TgsApi.UpdateMultiCropSurveyEditor(SurveyId, request);
+            if (updated is null)
+            {
+                SetError(TgsApi.ErrorMessage ?? "The survey could not be saved.");
+                return false;
+            }
+
+            _editor = updated;
+            _qaHours = updated.Survey.QaHours;
+            if (showSuccess)
+            {
+                _success = true;
+                _message = "Survey changes saved.";
+            }
+            return true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task TransitionAsync(MultiCropSurveyWorkflowAction action)
+    {
+        if (_editor is null || !await SaveAsync(showSuccess: false)) return;
+        if (action == MultiCropSurveyWorkflowAction.CompleteQa && !CanUseForwardAction)
+        {
+            SetError("Another agronomist must complete QA for this survey.");
+            return;
+        }
+
+        _busy = true;
+        _message = null;
+        _success = false;
+        try
+        {
+            var updated = await TgsApi.TransitionMultiCropSurvey(SurveyId, new MultiCropSurveyTransitionRequest
+            {
+                Action = action,
+                ActingAgronomistId = _actingAgronomist?.StaffId ?? 0,
+                QaHours = _qaHours,
+                ExpectedModificationDate = _editor.Survey.ModificationDate,
+                ModifiedBy = _currentEmail ?? "MetaGrow"
+            });
+            if (updated is null)
+            {
+                SetError(TgsApi.ErrorMessage ?? "The survey status could not be changed.");
+                return;
+            }
+
+            _editor = updated;
+            _qaHours = updated.Survey.QaHours;
+            _success = true;
+            _message = $"Survey moved to {updated.StatusName.ToLowerInvariant()}.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private bool ValidateEditor()
+    {
+        if (_editor is null) return false;
+        if (_editor.Survey.SurveyDate == default)
+        {
+            SetError("Enter a survey date.");
+            return false;
+        }
+        if (_editor.Survey.AgronomistId <= 0)
+        {
+            SetError("Select an agronomist.");
+            return false;
+        }
+        if (!IsQuarterHour(_editor.Survey.SurveyHours) || !IsQuarterHour(_editor.Survey.ReportHours))
+        {
+            SetError("Survey and report hours must be entered in quarter-hour increments.");
+            return false;
+        }
+        if ((_editor.Survey.ClientPurchaseOrderRef?.Trim().Length ?? 0) > 50)
+        {
+            SetError("The Survey P.O. number cannot exceed 50 characters.");
+            return false;
+        }
+        return true;
+    }
+
+    private void SetBlockSelected(int blockId, bool selected)
+    {
+        if (_editor is null) return;
+        if (selected && !_editor.ActiveBlockIds.Contains(blockId)) _editor.ActiveBlockIds.Add(blockId);
+        if (!selected) _editor.ActiveBlockIds.Remove(blockId);
+        _message = null;
+    }
+
+    private void SetError(string message)
+    {
+        _success = false;
+        _message = message;
+    }
+
+    private string WorkflowStepClass(int statusId)
+    {
+        if (_editor is null) return string.Empty;
+        var currentIndex = Array.FindIndex(WorkflowSteps, step => step.StatusId == _editor.Survey.StatusId);
+        var stepIndex = Array.FindIndex(WorkflowSteps, step => step.StatusId == statusId);
+        return stepIndex == currentIndex ? "current" : stepIndex < currentIndex ? "complete" : string.Empty;
+    }
+
+    private static string StatusClass(int statusId) => statusId switch
+    {
+        MultiCropSurveyStatus.AwaitingQa => "awaiting-qa",
+        MultiCropSurveyStatus.ReadyToSend => "ready",
+        MultiCropSurveyStatus.Complete => "complete",
+        _ => "in-progress"
+    };
+
+    private static bool IsQuarterHour(double value) =>
+        value >= 0 && Math.Abs((value * 4) - Math.Round(value * 4)) < 0.0001;
+
+    private void BackToSurveys() => Navigation.NavigateTo("/surveys/multicrop");
+    private void ViewReport() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/report");
+    private void EditBlockGroups() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/block-groups");
+    private void EditImages() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/photos");
+    private void AddRecommendation() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/recommendations/0");
+    private void EditRecommendation(int surveyActionId) =>
+        Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/recommendations/{surveyActionId}");
+
+    private static string RecommendationItemText(MultiCropSurveyRecommendationItemDto item) =>
+        item.SprayProductRefId > 0
+            ? $"{item.ProductName} {item.ApplicationRate:0.###} {item.ApplicationUnit}".Trim()
+            : item.ActionName ?? "Action";
+}

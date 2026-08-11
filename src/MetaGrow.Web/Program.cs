@@ -100,6 +100,7 @@ app.MapGet("/downloads/surveys/multicrop/{surveyId:int}/pbd", async (int surveyI
         ? Results.Problem(tgsApi.ErrorMessage ?? "The PBD workbook could not be generated.")
         : Results.File(file.Content, file.ContentType, file.FileName);
 }).RequireAuthorization();
+app.MapMultiCropPhotoEndpoints();
 app.MapStaticAssets();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode().AllowAnonymous();
 app.MapAccountEndpoints();

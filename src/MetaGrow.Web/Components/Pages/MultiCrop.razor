@@ -131,10 +131,11 @@
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyHours)" Caption="Survey hours" Width="110px" DisplayFormat="N2" Visible="false" />
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ReportHours)" Caption="Report hours" Width="110px" DisplayFormat="N2" Visible="false" />
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ModifiedBy)" Caption="Modified by" MinWidth="150" Visible="false" />
-                        <DxGridDataColumn Caption="Reports" Width="135px" AllowSort="false">
+                        <DxGridDataColumn Caption="Actions" Width="185px" AllowSort="false">
                             <CellDisplayTemplate Context="cell">
                                 @{ var survey = (MultiCropSurveySummaryDto)cell.DataItem; }
                                 <div class="report-links">
+                                    <a href="@EditSurveyUrl(survey)">Edit</a>
                                     <a href="@OnlineReportUrl(survey)">Online</a>
                                     <a href="@PrintReportUrl(survey)">Print</a>
                                 </div>
@@ -163,7 +164,8 @@
                             <div><dt>Photos</dt><dd>@survey.PhotoCount</dd></div>
                         </dl>
                         <div class="survey-card-actions">
-                            <a class="btn btn-primary" href="@OnlineReportUrl(survey)">Online report</a>
+                            <a class="btn btn-primary" href="@EditSurveyUrl(survey)">Edit survey</a>
+                            <a class="btn btn-outline-secondary" href="@OnlineReportUrl(survey)">Online report</a>
                             <a class="btn btn-outline-secondary" href="@PrintReportUrl(survey)">Print report</a>
                         </div>
                     </article>
@@ -320,6 +322,7 @@
     }
 
     private void ShowColumnChooser() => _grid?.ShowColumnChooser();
+    private static string EditSurveyUrl(MultiCropSurveySummaryDto survey) => $"/surveys/multicrop/{survey.SurveyId}/edit";
     private static string OnlineReportUrl(MultiCropSurveySummaryDto survey) => $"/surveys/multicrop/{survey.SurveyId}/report";
     private static string PrintReportUrl(MultiCropSurveySummaryDto survey) => $"/surveys/multicrop/{survey.SurveyId}/report?print=true";
 }

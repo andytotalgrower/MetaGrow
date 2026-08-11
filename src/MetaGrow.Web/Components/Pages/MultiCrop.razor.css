@@ -77,7 +77,7 @@
 ::deep .multicrop-grid a,
 .report-links a { color: var(--mg-link, #0d8ecb); }
 
-.report-links { display: flex; gap: 0.75rem; }
+.report-links { display: flex; gap: 0.65rem; }
 
 .status-badge {
     background: var(--mg-blue-0, #e5f4fb);
@@ -132,7 +132,7 @@
 .survey-card dl > div { display: grid; grid-template-columns: 5.5rem 1fr; padding: 0.2rem 0; }
 .survey-card dt { color: var(--dxds-color-content-neutral-subdued-rest); font-weight: 500; }
 .survey-card dd { margin: 0; }
-.survey-card-actions { display: flex; gap: 0.5rem; }
+.survey-card-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .survey-card-actions .btn { flex: 1; }
 
 @media (max-width: 62rem) {

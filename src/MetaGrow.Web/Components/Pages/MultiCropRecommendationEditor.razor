@@ -1,0 +1,565 @@
+@page "/surveys/multicrop/{SurveyId:int}/recommendations/{RecommendationId:int}"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using MetaGrow.Web.Services
+@using Metagen.Shared.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject ITgsApiService TgsApi
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>@(RecommendationId > 0 ? "Edit" : "Add") action or spray | MetaGrow</PageTitle>
+
+<div class="recommendation-editor-page">
+    @if (_loading)
+    {
+        <div class="editor-loading"><DxWaitIndicator Visible="true" /><span>Loading recommendation editor...</span></div>
+    }
+    else if (_surveyEditor is null || _recommendation is null)
+    {
+        <div class="editor-message error">@_message</div>
+        <DxButton Text="Back to survey" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurvey" />
+    }
+    else
+    {
+        <div class="editor-toolbar" role="toolbar" aria-label="Recommendation actions">
+            <DxButton Text="Back to survey" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurvey" />
+            <div class="toolbar-right">
+                @if (_recommendation.SurveyActionId > 0)
+                {
+                    <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger" Enabled="@(!_busy)" Click="DeleteAsync" />
+                }
+                <DxButton Text="Save recommendation" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="SaveAsync" />
+            </div>
+        </div>
+
+        <header class="editor-hero">
+            <div>
+                <span class="editor-kicker">Multi-crop survey @SurveyId</span>
+                <h1>@(RecommendationId > 0 ? "Edit" : "Add") action or spray recommendation</h1>
+                <p>@_surveyEditor.Survey.PropertyName · @_surveyEditor.Survey.SurveyDate.ToString("dd MMMM yyyy")</p>
+            </div>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="editor-message @(_success ? "success" : "error")" role="alert">@_message</div>
+        }
+
+        <div class="editor-grid">
+            <section class="editor-card" aria-labelledby="general-heading">
+                <div class="section-heading">
+                    <span class="editor-kicker">Recommendation setup</span>
+                    <h2 id="general-heading">Type and date</h2>
+                </div>
+                <div class="field-grid">
+                    <div class="field full-width">
+                        <label for="action-type">Action type</label>
+                        <DxComboBox Id="action-type" Data="@_actionGroups" Value="@_recommendation.ActionGroupId"
+                                    ValueChanged="@((int value) => ActionGroupChanged(value))"
+                                    TextFieldName="@nameof(ActionGroup.GroupName)" ValueFieldName="@nameof(ActionGroup.GroupId)"
+                                    AllowUserInput="false" />
+                    </div>
+                    <div class="field">
+                        <label for="action-date">Date</label>
+                        <DxDateEdit Id="action-date" @bind-Date="_recommendation.ActionDate" DisplayFormat="dd/MM/yyyy" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-card" aria-labelledby="notes-heading">
+                <div class="section-heading">
+                    <span class="editor-kicker">Extra information</span>
+                    <h2 id="notes-heading">Notes</h2>
+                </div>
+                <div class="field notes-field">
+                    <label for="recommendation-notes">Instructions or comments</label>
+                    <DxMemo Id="recommendation-notes" @bind-Text="_recommendation.Notes" Rows="6"
+                            NullText="Optional details for the farm team" />
+                </div>
+            </section>
+
+            <section class="editor-card full-width" aria-labelledby="blocks-heading">
+                <div class="section-heading split-heading">
+                    <div>
+                        <span class="editor-kicker">Applies to</span>
+                        <h2 id="blocks-heading">Blocks</h2>
+                    </div>
+                    <div class="selection-actions">
+                        <span>@_selectedBlockIds.Count selected</span>
+                        <button type="button" @onclick="SelectAllBlocks">Select all</button>
+                        <button type="button" @onclick="ClearBlocks">Clear</button>
+                    </div>
+                </div>
+                <div class="block-selector">
+                    @foreach (var block in AvailableBlocks)
+                    {
+                        var selected = _selectedBlockIds.Contains(block.BlockId);
+                        <label class="block-choice @(selected ? "selected" : string.Empty)">
+                            <input type="checkbox" checked="@selected"
+                                   @onchange="@(args => SetBlockSelected(block.BlockId, args.Value is true))" />
+                            <span><strong>@block.BlockName</strong><small>@block.NoPlants.ToString("N0") plants</small></span>
+                        </label>
+                    }
+                </div>
+            </section>
+
+            @if (IsSprayRecommendation)
+            {
+                <section class="editor-card full-width" aria-labelledby="sprays-heading">
+                    <div class="section-heading split-heading">
+                        <div>
+                            <span class="editor-kicker">Products and rates</span>
+                            <h2 id="sprays-heading">Spray recommendations</h2>
+                        </div>
+                        <span>@SprayItems.Count product@(SprayItems.Count == 1 ? string.Empty : "s")</span>
+                    </div>
+
+                    @if (SprayItems.Count > 0)
+                    {
+                        <div class="spray-table-wrap">
+                            <table class="spray-table">
+                                <thead><tr><th>Product</th><th>Rate</th><th>Unit</th><th></th></tr></thead>
+                                <tbody>
+                                    @foreach (var item in SprayItems)
+                                    {
+                                        <tr>
+                                            <td>@item.ProductName</td>
+                                            <td>@item.ApplicationRate.ToString("0.###")</td>
+                                            <td>@item.ApplicationUnit</td>
+                                            <td><button type="button" class="remove-link" @onclick="@(() => RemoveSpray(item))">Remove</button></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    <div class="add-spray-panel">
+                        <h3>Add a spray product</h3>
+                        <div class="spray-field-grid">
+                            <div class="field">
+                                <label for="spray-group">Product group</label>
+                                <DxComboBox Id="spray-group" Data="@AvailableSprayGroups" Value="@_selectedSprayGroupId"
+                                            ValueChanged="@((int value) => SprayGroupChanged(value))"
+                                            TextFieldName="@nameof(SprayGroup.GroupName)" ValueFieldName="@nameof(SprayGroup.GroupId)"
+                                            AllowUserInput="false" />
+                            </div>
+                            <div class="field product-field">
+                                <label for="spray-product">Product</label>
+                                <DxComboBox Id="spray-product" Data="@AvailableSprayProducts" Value="@_selectedSprayProductId"
+                                            ValueChanged="@((int value) => SprayProductChanged(value))"
+                                            TextFieldName="@nameof(SprayProduct.ProductName)" ValueFieldName="@nameof(SprayProduct.SprayProductRefId)"
+                                            AllowUserInput="false" />
+                                @if (!string.IsNullOrWhiteSpace(SelectedSprayProduct?.ActiveIngredient))
+                                {
+                                    <small>@SelectedSprayProduct.ActiveIngredient</small>
+                                }
+                            </div>
+                            <div class="field">
+                                <label for="spray-rate">Rate</label>
+                                <DxSpinEdit Id="spray-rate" @bind-Value="_sprayRate" MinValue="0" Increment="0.1" DisplayFormat="0.###" />
+                            </div>
+                            <div class="field">
+                                <label for="spray-unit">Unit</label>
+                                <DxTextBox Id="spray-unit" @bind-Text="_sprayUnit" />
+                            </div>
+                        </div>
+                        <DxButton Text="Add product" RenderStyle="ButtonRenderStyle.Secondary" Click="AddSpray" />
+                    </div>
+                </section>
+            }
+            else
+            {
+                <section class="editor-card full-width" aria-labelledby="actions-heading">
+                    <div class="section-heading split-heading">
+                        <div>
+                            <span class="editor-kicker">Work required</span>
+                            <h2 id="actions-heading">Actions</h2>
+                        </div>
+                        <span>@ActionItems.Count selected</span>
+                    </div>
+                    @if (AvailableActions.Count == 0)
+                    {
+                        <div class="empty-inline">No actions are configured for this type and crop.</div>
+                    }
+                    else
+                    {
+                        <div class="action-selector">
+                            @foreach (var action in AvailableActions)
+                            {
+                                var selected = ActionItems.Any(item => item.ActionId == action.CropActionId);
+                                <label class="action-choice @(selected ? "selected" : string.Empty)">
+                                    <input type="checkbox" checked="@selected"
+                                           @onchange="@(args => SetActionSelected(action, args.Value is true))" />
+                                    <span>@action.ActionName</span>
+                                </label>
+                            }
+                        </div>
+                    }
+                </section>
+            }
+        </div>
+
+        <div class="bottom-actions">
+            <DxButton Text="Back to survey" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurvey" />
+            <DxButton Text="Save recommendation" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="SaveAsync" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int SurveyId { get; set; }
+    [Parameter] public int RecommendationId { get; set; }
+
+    private MultiCropSurveyEditorDto? _surveyEditor;
+    private MultiCropSurveyRecommendationDto? _recommendation;
+    private List<ActionGroup> _actionGroups = [];
+    private List<ActionGroupMap> _actionGroupMaps = [];
+    private List<CropAction> _cropActions = [];
+    private List<SprayGroup> _sprayGroups = [];
+    private List<SprayGroupProduct> _sprayGroupProducts = [];
+    private List<SprayProduct> _sprayProducts = [];
+    private List<SprayProductApplicationRate> _sprayRates = [];
+    private readonly HashSet<int> _selectedBlockIds = [];
+    private bool _loading = true;
+    private bool _busy;
+    private bool _success;
+    private string? _message;
+    private string _currentEmail = "MetaGrow";
+    private int _selectedSprayGroupId;
+    private int _selectedSprayProductId;
+    private double _sprayRate;
+    private string? _sprayUnit;
+
+    private List<MultiCropSurveyEditorBlockDto> AvailableBlocks => _surveyEditor?.Blocks
+        .OrderBy(block => block.BlockOrder)
+        .ThenBy(block => block.BlockName)
+        .ToList() ?? [];
+
+    private bool IsSprayRecommendation => _actionGroups
+        .FirstOrDefault(group => group.GroupId == _recommendation?.ActionGroupId)?.GroupName?
+        .Contains("spray", StringComparison.OrdinalIgnoreCase) == true;
+
+    private List<MultiCropSurveyRecommendationItemDto> ActionItems => _recommendation?.Items
+        .Where(item => item.ActionId > 0)
+        .ToList() ?? [];
+
+    private List<MultiCropSurveyRecommendationItemDto> SprayItems => _recommendation?.Items
+        .Where(item => item.SprayProductRefId > 0)
+        .ToList() ?? [];
+
+    private List<CropAction> AvailableActions
+    {
+        get
+        {
+            if (_surveyEditor is null || _recommendation is null) return [];
+            var cropTypeId = _cropActions.Any(action => action.CropTypeId == _surveyEditor.Survey.CropTypeId)
+                ? _surveyEditor.Survey.CropTypeId
+                : 0;
+            var mappedIds = _actionGroupMaps
+                .Where(map => map.GroupId == _recommendation.ActionGroupId)
+                .Select(map => map.ActionId)
+                .ToHashSet();
+            return _cropActions
+                .Where(action => action.CropTypeId == cropTypeId && mappedIds.Contains(action.CropActionId))
+                .OrderBy(action => action.SortOrder)
+                .ThenBy(action => action.ActionName)
+                .ToList();
+        }
+    }
+
+    private List<SprayGroup> AvailableSprayGroups => _surveyEditor is null
+        ? []
+        : _sprayGroups
+            .Where(group => group.ApplicationId == _surveyEditor.Survey.ApplicationId)
+            .OrderBy(group => group.GroupName)
+            .ToList();
+
+    private List<SprayProduct> AvailableSprayProducts
+    {
+        get
+        {
+            var productIds = _sprayGroupProducts
+                .Where(item => item.GroupId == _selectedSprayGroupId)
+                .Select(item => item.ProductId)
+                .ToHashSet();
+            return _sprayProducts
+                .Where(product => productIds.Contains(product.SprayProductRefId))
+                .OrderBy(product => product.ProductName)
+                .ToList();
+        }
+    }
+
+    private SprayProduct? SelectedSprayProduct => _sprayProducts
+        .FirstOrDefault(product => product.SprayProductRefId == _selectedSprayProductId);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _message = null;
+
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _currentEmail = authenticationState.User.FindFirstValue(ClaimTypes.Email)
+            ?? authenticationState.User.Identity?.Name
+            ?? "MetaGrow";
+
+        _surveyEditor = await TgsApi.GetMultiCropSurveyEditor(SurveyId);
+        if (_surveyEditor is null)
+        {
+            _message = TgsApi.ErrorMessage ?? "The survey could not be loaded.";
+            _loading = false;
+            return;
+        }
+
+        _actionGroups = await TgsApi.GetActionGroups() ?? [];
+        _actionGroupMaps = await TgsApi.GetActionGroupMaps() ?? [];
+        _cropActions = await TgsApi.GetCropActions() ?? [];
+        _sprayGroups = await TgsApi.GetSprayGroups() ?? [];
+        _sprayGroupProducts = await TgsApi.GetSprayGroupProducts() ?? [];
+        _sprayProducts = await TgsApi.GetSprayProducts() ?? [];
+        _sprayRates = await TgsApi.GetSprayProductApplicationRates() ?? [];
+
+        if (_actionGroups.Count == 0)
+        {
+            _message = TgsApi.ErrorMessage ?? "Action types could not be loaded.";
+            _loading = false;
+            return;
+        }
+
+        if (RecommendationId > 0)
+        {
+            _recommendation = await TgsApi.GetMultiCropSurveyRecommendation(SurveyId, RecommendationId);
+            if (_recommendation is null)
+            {
+                _message = TgsApi.ErrorMessage ?? "The recommendation could not be loaded.";
+                _loading = false;
+                return;
+            }
+        }
+        else
+        {
+            _recommendation = new MultiCropSurveyRecommendationDto
+            {
+                SurveyId = SurveyId,
+                ActionDate = _surveyEditor.Survey.SurveyDate,
+                ActionGroupId = _actionGroups[0].GroupId
+            };
+        }
+
+        _selectedBlockIds.Clear();
+        foreach (var block in _recommendation.Blocks)
+            _selectedBlockIds.Add(block.BlockId);
+
+        InitialiseSprayPicker();
+        _loading = false;
+    }
+
+    private void ActionGroupChanged(int actionGroupId)
+    {
+        if (_recommendation is null || _recommendation.ActionGroupId == actionGroupId) return;
+        _recommendation.ActionGroupId = actionGroupId;
+        _recommendation.Items.Clear();
+        _message = null;
+        InitialiseSprayPicker();
+    }
+
+    private void InitialiseSprayPicker()
+    {
+        _selectedSprayGroupId = AvailableSprayGroups.FirstOrDefault()?.GroupId ?? 0;
+        _selectedSprayProductId = AvailableSprayProducts.FirstOrDefault()?.SprayProductRefId ?? 0;
+        ApplySelectedProductDefaults();
+    }
+
+    private void SprayGroupChanged(int groupId)
+    {
+        _selectedSprayGroupId = groupId;
+        _selectedSprayProductId = AvailableSprayProducts.FirstOrDefault()?.SprayProductRefId ?? 0;
+        ApplySelectedProductDefaults();
+    }
+
+    private void SprayProductChanged(int productId)
+    {
+        _selectedSprayProductId = productId;
+        ApplySelectedProductDefaults();
+    }
+
+    private void ApplySelectedProductDefaults()
+    {
+        var product = SelectedSprayProduct;
+        var rate = _surveyEditor is null ? null : _sprayRates.FirstOrDefault(item =>
+            item.ProductId == _selectedSprayProductId && item.CropTypeId == _surveyEditor.Survey.CropTypeId);
+        _sprayRate = rate?.Rate ?? product?.DefaultApplicationRate ?? 0;
+        _sprayUnit = rate?.Unit ?? product?.ApplicationUnit;
+    }
+
+    private void AddSpray()
+    {
+        if (_recommendation is null) return;
+        var product = SelectedSprayProduct;
+        if (product is null)
+        {
+            SetError("Select a spray product.");
+            return;
+        }
+        if (_sprayRate < 0 || string.IsNullOrWhiteSpace(_sprayUnit))
+        {
+            SetError("Enter a numeric rate and an application unit.");
+            return;
+        }
+        if (_recommendation.Items.Any(item => item.SprayProductRefId == product.SprayProductRefId))
+        {
+            SetError("That spray product has already been added.");
+            return;
+        }
+
+        _recommendation.Items.Add(new MultiCropSurveyRecommendationItemDto
+        {
+            SequenceNo = _recommendation.Items.Count + 1,
+            SprayProductRefId = product.SprayProductRefId,
+            ProductName = product.ProductName,
+            ApplicationRate = _sprayRate,
+            ApplicationUnit = _sprayUnit?.Trim()
+        });
+        _message = null;
+    }
+
+    private void RemoveSpray(MultiCropSurveyRecommendationItemDto item)
+    {
+        _recommendation?.Items.Remove(item);
+        _message = null;
+    }
+
+    private void SetActionSelected(CropAction action, bool selected)
+    {
+        if (_recommendation is null) return;
+        var existing = _recommendation.Items.FirstOrDefault(item => item.ActionId == action.CropActionId);
+        if (selected && existing is null)
+        {
+            _recommendation.Items.Add(new MultiCropSurveyRecommendationItemDto
+            {
+                SequenceNo = _recommendation.Items.Count + 1,
+                ActionId = action.CropActionId,
+                ActionName = action.ActionName
+            });
+        }
+        else if (!selected && existing is not null)
+        {
+            _recommendation.Items.Remove(existing);
+        }
+        _message = null;
+    }
+
+    private void SetBlockSelected(int blockId, bool selected)
+    {
+        if (selected) _selectedBlockIds.Add(blockId);
+        else _selectedBlockIds.Remove(blockId);
+        _message = null;
+    }
+
+    private void SelectAllBlocks()
+    {
+        foreach (var block in AvailableBlocks) _selectedBlockIds.Add(block.BlockId);
+        _message = null;
+    }
+
+    private void ClearBlocks()
+    {
+        _selectedBlockIds.Clear();
+        _message = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_recommendation is null || !Validate()) return;
+        _busy = true;
+        _message = null;
+        _success = false;
+        try
+        {
+            var request = new MultiCropSurveyRecommendationUpdateRequest
+            {
+                ActionDate = _recommendation.ActionDate,
+                ActionGroupId = _recommendation.ActionGroupId,
+                Notes = _recommendation.Notes,
+                BlockIds = [.. _selectedBlockIds],
+                Items = [.. _recommendation.Items],
+                ExpectedModificationDate = _recommendation.ModificationDate,
+                ModifiedBy = _currentEmail
+            };
+            var saved = await TgsApi.SaveMultiCropSurveyRecommendation(
+                SurveyId,
+                _recommendation.SurveyActionId,
+                request);
+            if (saved is null)
+            {
+                SetError(TgsApi.ErrorMessage ?? "The recommendation could not be saved.");
+                return;
+            }
+
+            Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/edit");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_recommendation is null || _recommendation.SurveyActionId <= 0) return;
+        if (!await JS.InvokeAsync<bool>("confirm", "Delete this action or spray recommendation?")) return;
+
+        _busy = true;
+        try
+        {
+            if (!await TgsApi.DeleteMultiCropSurveyRecommendation(SurveyId, _recommendation.SurveyActionId))
+            {
+                SetError(TgsApi.ErrorMessage ?? "The recommendation could not be deleted.");
+                return;
+            }
+            Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/edit");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private bool Validate()
+    {
+        if (_recommendation is null) return false;
+        if (_recommendation.ActionDate == default)
+        {
+            SetError("Enter a recommendation date.");
+            return false;
+        }
+        if (_recommendation.ActionGroupId <= 0)
+        {
+            SetError("Select an action type.");
+            return false;
+        }
+        if (_selectedBlockIds.Count == 0)
+        {
+            SetError("Select at least one block.");
+            return false;
+        }
+        if (_recommendation.Items.Count == 0)
+        {
+            SetError(IsSprayRecommendation ? "Add at least one spray product." : "Select at least one action.");
+            return false;
+        }
+        return true;
+    }
+
+    private void SetError(string message)
+    {
+        _success = false;
+        _message = message;
+    }
+
+    private void BackToSurvey() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/edit");
+}
