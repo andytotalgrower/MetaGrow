@@ -79,6 +79,7 @@ builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<ITgsApiService, TgsApiService>(client =>
 {
+    client.Timeout = TimeSpan.FromMinutes(10);
     var developmentBaseUrl = builder.Configuration["TgsApi:DevelopmentBaseUrl"];
     if (builder.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(developmentBaseUrl))
         client.BaseAddress = new Uri(developmentBaseUrl);

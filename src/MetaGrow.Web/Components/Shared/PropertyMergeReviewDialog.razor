@@ -5,7 +5,7 @@
 @inject PropertyMergeApiClient Merges
 
 <DxPopup @bind-Visible="_visible" ShowFooter="true" HeaderText="Review property merge"
-         AllowDrag="true" ShowCloseButton="true" CloseOnEscape="true"
+         AllowDrag="true" ShowCloseButton="@(!_working)" CloseOnEscape="@(!_working)"
          Width="1100px">
     <BodyContentTemplate>
         <div class="merge-review">
@@ -85,7 +85,7 @@
                                                             ValueChanged="@((PropertyMergeFieldValue value) => ChangeFieldChoice(field, value))"
                                                             TextFieldName="@nameof(FieldChoiceOption.Label)"
                                                             ValueFieldName="@nameof(FieldChoiceOption.Value)"
-                                                            AllowUserInput="false" SizeMode="SizeMode.Small"
+                                                            AllowUserInput="false" Enabled="@(!_working && !ReviewingSavedRequest)" SizeMode="SizeMode.Small"
                                                             CssClass="merge-combo" />
                                             </td>
                                         </tr>
@@ -126,7 +126,7 @@
                                                             ValueChanged="@((PropertyMergeBlockAction value) => ChangeActionAsync(block, value))"
                                                             TextFieldName="@nameof(BlockActionOption.Label)"
                                                             ValueFieldName="@nameof(BlockActionOption.Value)"
-                                                            AllowUserInput="false" Enabled="@(!_refreshing)"
+                                                            AllowUserInput="false" Enabled="@(!_refreshing && !_working && !ReviewingSavedRequest)"
                                                             SizeMode="SizeMode.Small" CssClass="merge-combo" />
                                             </td>
                                             <td>
@@ -137,7 +137,7 @@
                                                                 ValueChanged="@((int value) => ChangeTargetAsync(block, value))"
                                                                 TextFieldName="@nameof(TargetBlockOption.Label)"
                                                                 ValueFieldName="@nameof(TargetBlockOption.BlockId)"
-                                                                AllowUserInput="false" Enabled="@(!_refreshing)"
+                                                                AllowUserInput="false" Enabled="@(!_refreshing && !_working && !ReviewingSavedRequest)"
                                                                 SizeMode="SizeMode.Small" CssClass="merge-combo" />
                                                 }
                                                 else
@@ -171,10 +171,24 @@
                     }
                 </section>
 
+                @if (_preview.Blocks.Any(block => block.Action == PropertyMergeBlockAction.Merge))
+                {
+                    <div class="merge-message warning">
+                        Source blocks marked <strong>Merge</strong> will have their approved data reassigned to the selected target block and will then be deleted. Excluded historical rows retain their old IDs, which remain traceable through the permanent merge mapping.
+                    </div>
+                }
+
                 @if (_isReviewer)
                 {
                     <div class="merge-message info">
-                        The live preview is available now. Approve-and-merge will be enabled after the reviewed atomic TGS stored procedure is installed; it will repeat these checks immediately before committing.
+                        @if (ReviewingSavedRequest)
+                        {
+                            <span>The submitted direction and block decisions are locked for review; current farm-field differences have been refreshed. The stored procedure will repeat every safety check immediately before committing.</span>
+                        }
+                        else
+                        {
+                            <span>You can adjust this direct merge plan before execution. The stored procedure will repeat every safety check immediately before committing.</span>
+                        }
                     </div>
                 }
                 else
@@ -188,7 +202,14 @@
     </BodyContentTemplate>
     <FooterContentTemplate>
         <div class="merge-footer">
-            <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Click="Close" />
+            <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Click="Close" Enabled="@(!_working)" />
+            @if (_working)
+            {
+                <div class="merge-action-progress" role="status" aria-live="polite">
+                    <DxWaitIndicator Visible="true" />
+                    <span>@WorkingMessage</span>
+                </div>
+            }
             @if (_preview is not null && !_isReviewer)
             {
                 <DxButton Text="Request merge approval" RenderStyle="ButtonRenderStyle.Primary"
@@ -196,7 +217,10 @@
             }
             else if (_preview is not null && _isReviewer)
             {
-                <DxButton Text="Approve and merge" RenderStyle="ButtonRenderStyle.Primary" Enabled="false" />
+                <DxButton Text="@(ReviewingSavedRequest ? "Approve and merge" : "Merge properties")"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(_preview.CanRequestMerge && !_working && !_refreshing)"
+                          Click="ExecuteMergeAsync" />
             }
         </div>
     </FooterContentTemplate>
@@ -205,6 +229,7 @@
 @code {
     [Parameter] public bool IsReviewer { get; set; }
     [Parameter] public EventCallback MergeRequested { get; set; }
+    [Parameter] public EventCallback MergeCompleted { get; set; }
 
     private PropertyMergePreview? _preview;
     private string? _error;
@@ -212,7 +237,14 @@
     private bool _loading;
     private bool _refreshing;
     private bool _working;
+    private string WorkingMessage => !_isReviewer
+        ? "Sending merge request..."
+        : ReviewingSavedRequest
+            ? "Approving and merging properties..."
+            : "Merging properties...";
     private bool _isReviewer;
+    private Guid? _approvalRequestId;
+    private bool ReviewingSavedRequest => _approvalRequestId.HasValue;
     private static readonly BlockActionOption[] BlockActionOptions =
     [
         new(PropertyMergeBlockAction.Move, "Move as a separate block"),
@@ -226,21 +258,27 @@
 
     protected override void OnParametersSet() => _isReviewer = IsReviewer;
 
-    public Task OpenAsync(int sourcePropertyId, int targetPropertyId) =>
-        OpenAsync(new PropertyMergePreviewRequest
+    public Task OpenAsync(int sourcePropertyId, int targetPropertyId)
+    {
+        _approvalRequestId = null;
+        return OpenAsync(new PropertyMergePreviewRequest
         {
             SourcePropertyId = sourcePropertyId,
             TargetPropertyId = targetPropertyId
         });
+    }
 
-    public Task OpenAsync(ApiModels.MetaGrow.MetaGrowPropertyMergeRequestDto request) =>
-        OpenAsync(new PropertyMergePreviewRequest
+    public Task OpenAsync(ApiModels.MetaGrow.MetaGrowPropertyMergeRequestDto request)
+    {
+        _approvalRequestId = request.Id;
+        return OpenAsync(new PropertyMergePreviewRequest
         {
             SourcePropertyId = request.SourcePropertyId,
             TargetPropertyId = request.TargetPropertyId,
             BlockDecisions = request.BlockDecisions.Select(Clone).ToList(),
             FieldChoices = request.FieldChoices.Select(Clone).ToList()
         });
+    }
 
     private async Task OpenAsync(PropertyMergePreviewRequest request)
     {
@@ -315,16 +353,51 @@
         if (_preview is null || !_preview.CanRequestMerge || _working) return;
         _working = true;
         _error = null;
-        var (request, error) = await Merges.RequestAsync(CurrentPlan());
-        _working = false;
-        if (request is null)
+        await InvokeAsync(StateHasChanged);
+        try
         {
-            _error = error ?? "The merge approval request could not be sent.";
-            return;
-        }
+            var (request, error) = await Merges.RequestAsync(CurrentPlan());
+            if (request is null)
+            {
+                _error = error ?? "The merge approval request could not be sent.";
+                return;
+            }
 
-        _visible = false;
-        await MergeRequested.InvokeAsync();
+            _visible = false;
+            await MergeRequested.InvokeAsync();
+        }
+        finally
+        {
+            _working = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ExecuteMergeAsync()
+    {
+        if (_preview is null || !_preview.CanRequestMerge || _working || !_isReviewer) return;
+        _working = true;
+        _error = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var (completed, error) = ReviewingSavedRequest
+                ? await Merges.ApproveAsync(_approvalRequestId!.Value)
+                : await Merges.ExecuteAsync(CurrentPlan());
+            if (completed is null)
+            {
+                _error = error ?? "The properties could not be merged.";
+                return;
+            }
+
+            _visible = false;
+            await MergeCompleted.InvokeAsync();
+        }
+        finally
+        {
+            _working = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private PropertyMergePreviewRequest CurrentPlan() => new()
@@ -368,7 +441,13 @@
     };
 
     private void Close() => _visible = false;
-    private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "Not set" : value;
+    private static string Display(string? value) => value switch
+    {
+        null => "Not set (NULL)",
+        "" => "Empty value",
+        _ when string.IsNullOrWhiteSpace(value) => "Whitespace only",
+        _ => value
+    };
     private static string BlockType(string value) => value.Equals(PropertyMergeBlockTypes.MultiCrop, StringComparison.OrdinalIgnoreCase) ? "Multi-crop" : "Banana";
     private sealed record BlockActionOption(PropertyMergeBlockAction Value, string Label);
     private sealed record FieldChoiceOption(PropertyMergeFieldValue Value, string Label);

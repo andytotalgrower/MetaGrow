@@ -53,10 +53,13 @@ public sealed class RoleContractTests
         AssertRoles<PropertyMergesController>(nameof(PropertyMergesController.Create), [MetaGrowRoles.Agronomist]);
     }
 
-    [Fact]
-    public void Only_managers_and_administrators_can_reject_property_merges()
+    [Theory]
+    [InlineData(nameof(PropertyMergesController.ExecuteImmediately))]
+    [InlineData(nameof(PropertyMergesController.Approve))]
+    [InlineData(nameof(PropertyMergesController.Reject))]
+    public void Only_managers_and_administrators_can_execute_or_reject_property_merges(string methodName)
     {
-        AssertRoles<PropertyMergesController>(nameof(PropertyMergesController.Reject),
+        AssertRoles<PropertyMergesController>(methodName,
             [MetaGrowRoles.Admin, MetaGrowRoles.AgricultureManager]);
     }
 

@@ -28,6 +28,20 @@ public sealed class PropertyMergeApiClient(
             $"property-merges/{id}/reject",
             new MetaGrowPropertyMergeReviewRequest { Note = note });
 
+    public Task<(MetaGrowPropertyMergeRequestDto?, string?)> ApproveAsync(Guid id, string? note = null) =>
+        SendAuthenticated<MetaGrowPropertyMergeRequestDto>(
+            HttpMethod.Post,
+            $"property-merges/{id}/approve",
+            new MetaGrowPropertyMergeReviewRequest { Note = note });
+
+    public Task<(MetaGrowPropertyMergeRequestDto?, string?)> ExecuteAsync(
+        PropertyMergePreviewRequest plan,
+        string? note = null) =>
+        SendAuthenticated<MetaGrowPropertyMergeRequestDto>(
+            HttpMethod.Post,
+            "property-merges/execute",
+            new MetaGrowPropertyMergeExecuteRequest { Plan = plan, Note = note });
+
     private async Task<(T?, string?)> SendAuthenticated<T>(HttpMethod method, string path, object? body = null)
     {
         var principal = (await authenticationState.GetAuthenticationStateAsync()).User;

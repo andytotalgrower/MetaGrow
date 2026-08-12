@@ -55,6 +55,7 @@
 .merge-state.unavailable { background: #fee2e2; color: #991b1b; }
 .merge-state.pending-approval { background: #dbeafe; color: #1e40af; }
 .dependency-assessment ::deep .dxbl-btn { margin-top: .15rem; }
+.deletion-progress { align-items: center; color: var(--dxds-color-content-neutral-subdued-rest); display: inline-flex; font-size: .72rem; gap: .45rem; min-height: 1.8rem; }
 .approval-card { padding: 1rem; }
 .approval-heading { align-items: center; display: flex; gap: 1rem; justify-content: space-between; }
 .approval-heading h2 { font-size: 1.15rem; margin: .12rem 0 0; }

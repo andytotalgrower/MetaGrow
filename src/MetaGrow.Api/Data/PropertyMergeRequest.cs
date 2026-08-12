@@ -25,4 +25,6 @@ public sealed class PropertyMergeRequest
     public DateTime? ReviewedUtc { get; set; }
     public string? ReviewNote { get; set; }
     public string? LastError { get; set; }
+    public long? PropertyMergeId { get; set; }
+    public DateTime? CompletedUtc { get; set; }
 }

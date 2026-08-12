@@ -36,7 +36,11 @@ var apiBaseUrl = builder.Configuration["Api:BaseUrl"]
     ?? throw new InvalidOperationException("Api:BaseUrl is not configured.");
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<ClientIpForwardingHandler>();
-builder.Services.AddHttpClient(AuthApiClient.HttpClientName, client => client.BaseAddress = new Uri(apiBaseUrl))
+builder.Services.AddHttpClient(AuthApiClient.HttpClientName, client =>
+    {
+        client.BaseAddress = new Uri(apiBaseUrl);
+        client.Timeout = TimeSpan.FromMinutes(10);
+    })
     .AddHttpMessageHandler<ClientIpForwardingHandler>();
 builder.Services.AddSingleton<ServerTokenStore>();
 builder.Services.AddScoped<AuthApiClient>();

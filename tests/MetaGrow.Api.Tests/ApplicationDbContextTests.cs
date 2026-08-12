@@ -117,6 +117,8 @@ public sealed class ApplicationDbContextTests
         {
             historical.PropertyMergeRequests.Add(MergeRequest(MetaGrowPropertyMergeStatus.Rejected));
             await historical.SaveChangesAsync();
+            historical.PropertyMergeRequests.Add(MergeRequest(MetaGrowPropertyMergeStatus.Failed));
+            await historical.SaveChangesAsync();
         }
     }
 

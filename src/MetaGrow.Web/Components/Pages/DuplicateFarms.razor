@@ -122,11 +122,18 @@
                             @if (_isReviewer)
                             {
                                 <div class="approval-actions">
-                                    <DxButton Text="Reject" RenderStyle="ButtonRenderStyle.Secondary"
-                                              RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
-                                              Enabled="@(_busyPropertyId is null)" Click="@(() => RejectAsync(request))" />
-                                    <DxButton Text="Approve and delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
-                                              Enabled="@(_busyPropertyId is null)" Click="@(() => ApproveAsync(request))" />
+                                    @if (_deletingPropertyId == request.PropertyId)
+                                    {
+                                        @DeletionProgress()
+                                    }
+                                    else
+                                    {
+                                        <DxButton Text="Reject" RenderStyle="ButtonRenderStyle.Secondary"
+                                                  RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                  Enabled="@(_busyPropertyId is null)" Click="@(() => RejectAsync(request))" />
+                                        <DxButton Text="Approve and delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
+                                                  Enabled="@(_busyPropertyId is null)" Click="@(() => ApproveAsync(request))" />
+                                    }
                                 </div>
                             }
                             else
@@ -219,7 +226,8 @@
 </div>
 
 <ConfirmDialog @ref="_confirm" />
-<PropertyMergeReviewDialog @ref="_mergeDialog" IsReviewer="_isReviewer" MergeRequested="MergeRequestedAsync" />
+<PropertyMergeReviewDialog @ref="_mergeDialog" IsReviewer="_isReviewer"
+                           MergeRequested="MergeRequestedAsync" MergeCompleted="MergeCompletedAsync" />
 
 @code {
     private static readonly string[] ConfidenceOptions = ["All", "Very high", "Likely", "Possible"];
@@ -236,6 +244,8 @@
     private string? _error;
     private string? _message;
     private int? _busyPropertyId;
+    private int? _deletingPropertyId;
+    private string _deletionProgressText = "Deleting property...";
     private bool _includeInactive = true;
     private bool _loading = true;
     private bool _isReviewer;
@@ -387,11 +397,18 @@
             }
             else
             {
-                <DxButton Text="@(_isReviewer ? "Delete property" : "Request deletion")"
-                          RenderStyle="@(_isReviewer ? ButtonRenderStyle.Danger : ButtonRenderStyle.Secondary)"
-                          RenderStyleMode="@(_isReviewer ? ButtonRenderStyleMode.Contained : ButtonRenderStyleMode.Outline)"
-                          SizeMode="SizeMode.Small" Enabled="@(_busyPropertyId is null)"
-                          Click="@(() => ConfirmPropertyDeletionAsync(farm))" />
+                @if (_deletingPropertyId == farm.PropertyId)
+                {
+                    @DeletionProgress()
+                }
+                else
+                {
+                    <DxButton Text="@(_isReviewer ? "Delete property" : "Request deletion")"
+                              RenderStyle="@(_isReviewer ? ButtonRenderStyle.Danger : ButtonRenderStyle.Secondary)"
+                              RenderStyleMode="@(_isReviewer ? ButtonRenderStyleMode.Contained : ButtonRenderStyleMode.Outline)"
+                              SizeMode="SizeMode.Small" Enabled="@(_busyPropertyId is null)"
+                              Click="@(() => ConfirmPropertyDeletionAsync(farm))" />
+                }
             }
         }
         else
@@ -403,6 +420,11 @@
 
     private MetaGrowPropertyDeletionDto? PendingRequest(int propertyId) =>
         _deletionRequests.FirstOrDefault(request => request.PropertyId == propertyId);
+
+    private RenderFragment DeletionProgress() => @<span class="deletion-progress" role="status" aria-live="polite">
+        <DxWaitIndicator Visible="true" />
+        <span>@_deletionProgressText</span>
+    </span>;
 
     private MetaGrowPropertyMergeRequestDto? PendingMerge(int sourcePropertyId) =>
         _mergeRequests.FirstOrDefault(request => request.SourcePropertyId == sourcePropertyId);
@@ -450,6 +472,12 @@
     {
         await RefreshMergeRequestsAsync();
         ShowMessage("The merge plan is awaiting manager or administrator approval.", false);
+    }
+
+    private async Task MergeCompletedAsync()
+    {
+        await LoadAsync();
+        ShowMessage("The property merge completed successfully. Source block data was reassigned and duplicate source blocks were removed.", false);
     }
 
     private async Task RejectMergeAsync(MetaGrowPropertyMergeRequestDto request)
@@ -501,7 +529,10 @@
         if (!confirmed) return;
 
         _busyPropertyId = farm.PropertyId;
+        _deletingPropertyId = farm.PropertyId;
+        _deletionProgressText = _isReviewer ? "Deleting property..." : "Sending deletion request...";
         _message = null;
+        await InvokeAsync(StateHasChanged);
         try
         {
             if (_isReviewer)
@@ -531,6 +562,7 @@
         }
         finally
         {
+            _deletingPropertyId = null;
             _busyPropertyId = null;
         }
     }
@@ -545,7 +577,10 @@
                 true)) return;
 
         _busyPropertyId = request.PropertyId;
+        _deletingPropertyId = request.PropertyId;
+        _deletionProgressText = "Approving and deleting property...";
         _message = null;
+        await InvokeAsync(StateHasChanged);
         try
         {
             var (completed, error) = await Deletions.ApproveAsync(request.Id);
@@ -561,6 +596,7 @@
         }
         finally
         {
+            _deletingPropertyId = null;
             _busyPropertyId = null;
         }
     }

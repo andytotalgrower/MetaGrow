@@ -2,7 +2,8 @@
 .merge-loading { align-items: center; display: flex; gap: .7rem; justify-content: center; min-height: 14rem; }
 .merge-loading > div { display: flex; flex-direction: column; gap: .15rem; }
 .merge-loading span { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .72rem; }
-.merge-footer { display: flex; gap: .65rem; }
+.merge-footer { align-items: center; display: flex; gap: .65rem; }
+.merge-action-progress { align-items: center; color: var(--dxds-color-content-neutral-subdued-rest); display: flex; font-size: .76rem; gap: .5rem; margin-left: auto; }
 .merge-direction-banner { align-items: center; background: var(--dxds-color-surface-neutral-subdued-rest, #f7f9fb); border: 1px solid var(--dxds-color-border-neutral-subdued-rest); border-radius: .6rem; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); padding: .9rem 1rem; }
 .merge-direction-banner > div { display: flex; flex-direction: column; gap: .12rem; min-width: 0; }
 .merge-direction-banner > div:last-child { text-align: right; }
