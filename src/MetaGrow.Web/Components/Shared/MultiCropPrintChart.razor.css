@@ -15,6 +15,17 @@
         width: 273mm;
     }
 
+    .print-chart-compact {
+        max-width: 100%;
+        width: 100%;
+    }
+
+    .print-chart-compact ::deep svg {
+        height: auto;
+        max-width: 100%;
+        width: 100%;
+    }
+
     .print-chart ::deep .grid-line { stroke: #d2d2d2; stroke-width: 1; }
     .print-chart ::deep .axis-line { stroke: #555; stroke-width: 1.4; }
     .print-chart ::deep .axis-tick { stroke: #555; stroke-width: 1; }

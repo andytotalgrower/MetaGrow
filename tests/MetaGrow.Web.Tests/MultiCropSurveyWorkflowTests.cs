@@ -30,14 +30,20 @@ public sealed class MultiCropSurveyWorkflowTests
     }
 
     [Theory]
-    [InlineData(14, 14, false)]
-    [InlineData(14, 0, false)]
-    [InlineData(14, 22, true)]
-    public void CanCompleteQa_RequiresAnotherKnownAgronomist(
+    [InlineData(14, 14, false, false)]
+    [InlineData(14, 0, false, false)]
+    [InlineData(14, 22, false, true)]
+    [InlineData(14, 14, true, true)]
+    [InlineData(14, 0, true, false)]
+    public void CanCompleteQa_RequiresAnotherKnownAgronomistUnlessCreatorIsAdmin(
         int surveyAgronomistId,
         int actingAgronomistId,
+        bool actingAdminCreatedSurvey,
         bool expected)
     {
-        Assert.Equal(expected, MultiCropSurveyWorkflow.CanCompleteQa(surveyAgronomistId, actingAgronomistId));
+        Assert.Equal(expected, MultiCropSurveyWorkflow.CanCompleteQa(
+            surveyAgronomistId,
+            actingAgronomistId,
+            actingAdminCreatedSurvey));
     }
 }

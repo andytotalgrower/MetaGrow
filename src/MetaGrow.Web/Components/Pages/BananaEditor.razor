@@ -1,4 +1,4 @@
-@page "/surveys/multicrop/{SurveyId:int}/edit"
+@page "/surveys/banana/{SurveyId:int}/edit"
 @using ApiModels
 @using ApiModels.MetaGrow
 @using MetaGrow.Web.Services
@@ -12,7 +12,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 
-<PageTitle>Edit multi-crop survey @SurveyId | MetaGrow</PageTitle>
+<PageTitle>Edit banana survey @SurveyId | MetaGrow</PageTitle>
 
 <div class="survey-editor-page">
     @if (_loading)
@@ -30,19 +30,23 @@
             <div class="toolbar-left">
                 <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
                 <DxButton Text="View report" RenderStyle="ButtonRenderStyle.Secondary" Click="ViewReport" />
-                <DxButton Text="Block groups" RenderStyle="ButtonRenderStyle.Secondary" Click="EditBlockGroups" />
-                <DxButton Text="Survey images" RenderStyle="ButtonRenderStyle.Secondary" Click="EditImages" />
             </div>
             <DxButton Text="Save changes" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="SaveAsync" />
         </div>
 
         <header class="editor-hero">
             <div>
-                <span class="editor-kicker">Multi-crop survey @SurveyId</span>
+                <span class="editor-kicker">Banana survey @SurveyId</span>
                 <h1>@_editor.Survey.PropertyName</h1>
-                <p>@_editor.Survey.ApplicationName · @_editor.Survey.CropTypeName · @_editor.Survey.SurveyDate.ToString("dd MMMM yyyy")</p>
+                <p>@_editor.Survey.SurveyDate.ToString("dd MMMM yyyy") · @_editor.Survey.AgronomistName · @_editor.LeafCount leaf records</p>
             </div>
-            <span class="status-pill @StatusClass(_editor.Survey.StatusId)">@_editor.StatusName</span>
+            <div class="hero-status">
+                <span class="status-pill @StatusClass(_editor.Survey.StatusId)">@_editor.StatusName</span>
+                @if (_editor.PhotoCount > 0)
+                {
+                    <span class="photo-count">@_editor.PhotoCount photo@(_editor.PhotoCount == 1 ? string.Empty : "s")</span>
+                }
+            </div>
         </header>
 
         @if (!string.IsNullOrWhiteSpace(_message))
@@ -50,11 +54,11 @@
             <div class="editor-message @(_success ? "success" : "error")" role="alert">@_message</div>
         }
 
-        <section class="workflow-card" aria-labelledby="workflow-heading">
+        <section class="workflow-card" aria-labelledby="banana-workflow-heading">
             <div class="section-heading workflow-heading-row">
                 <div>
                     <span class="editor-kicker">Workflow</span>
-                    <h2 id="workflow-heading">Move the survey through review</h2>
+                    <h2 id="banana-workflow-heading">Move the survey through review</h2>
                 </div>
                 <span class="workflow-help">Changes are saved before a status is moved.</span>
             </div>
@@ -95,9 +99,9 @@
                             <span>You will be recorded as the QA agronomist: @_actingAgronomist.StaffName.</span>
                         }
                     </div>
-                    <div class="qa-hours field">
-                        <label for="qa-hours">QA hours</label>
-                        <DxSpinEdit Id="qa-hours" @bind-Value="_qaHours" Increment="0.25" MinValue="0" DisplayFormat="0.00" />
+                    <div class="field qa-hours">
+                        <label for="banana-qa-hours">QA hours</label>
+                        <DxSpinEdit Id="banana-qa-hours" @bind-Value="_qaHours" Increment="0.25" MinValue="0" DisplayFormat="0.00" />
                     </div>
                 </div>
             }
@@ -128,87 +132,90 @@
         </section>
 
         <div class="editor-grid">
-            <section class="editor-card" aria-labelledby="details-heading">
+            <section class="editor-card" aria-labelledby="banana-details-heading">
                 <div class="section-heading">
                     <span class="editor-kicker">Survey setup</span>
-                    <h2 id="details-heading">Details and time</h2>
+                    <h2 id="banana-details-heading">Details and time</h2>
                 </div>
                 <div class="field-grid">
                     <div class="field">
-                        <label for="survey-date">Survey date</label>
-                        <DxDateEdit Id="survey-date" @bind-Date="_editor.Survey.SurveyDate" DisplayFormat="dd/MM/yyyy" />
+                        <label for="banana-survey-date">Survey date</label>
+                        <DxDateEdit Id="banana-survey-date" @bind-Date="_editor.Survey.SurveyDate" DisplayFormat="dd/MM/yyyy" />
                     </div>
                     <div class="field agronomist-field">
-                        <label for="survey-agronomist">Agronomist</label>
-                        <DxComboBox Id="survey-agronomist" Data="@_editor.Agronomists" @bind-Value="_editor.Survey.AgronomistId"
-                                    TextFieldName="@nameof(Staff.StaffName)" ValueFieldName="@nameof(Staff.StaffId)"
-                                    AllowUserInput="false" />
+                        <label for="banana-agronomist">Agronomist</label>
+                        <DxComboBox Id="banana-agronomist" Data="@_editor.Agronomists" @bind-Value="_editor.Survey.AgronomistId"
+                                    TextFieldName="@nameof(Staff.StaffName)" ValueFieldName="@nameof(Staff.StaffId)" AllowUserInput="false" />
                     </div>
                     <div class="field">
-                        <label for="survey-hours">Survey hours</label>
-                        <DxSpinEdit Id="survey-hours" @bind-Value="_editor.Survey.SurveyHours" Increment="0.25" MinValue="0" DisplayFormat="0.00" />
+                        <label for="banana-survey-hours">Survey hours</label>
+                        <DxSpinEdit Id="banana-survey-hours" @bind-Value="_editor.Survey.SurveyHours" Increment="0.25" MinValue="0" DisplayFormat="0.00" />
                     </div>
                     <div class="field">
-                        <label for="report-hours">Report preparation hours</label>
-                        <DxSpinEdit Id="report-hours" @bind-Value="_editor.Survey.ReportHours" Increment="0.25" MinValue="0" DisplayFormat="0.00" />
+                        <label for="banana-report-hours">Report preparation hours</label>
+                        <DxSpinEdit Id="banana-report-hours" @bind-Value="_editor.Survey.ReportHours" Increment="0.25" MinValue="0" DisplayFormat="0.00" />
                     </div>
                 </div>
             </section>
 
-            <section class="editor-card" aria-labelledby="billing-heading">
+            <section class="editor-card" aria-labelledby="banana-billing-heading">
                 <div class="section-heading">
                     <span class="editor-kicker">Billing</span>
-                    <h2 id="billing-heading">Purchase order and notes</h2>
+                    <h2 id="banana-billing-heading">Purchase order and notes</h2>
                 </div>
                 <div class="field">
-                    <label for="survey-po">Survey P.O. number</label>
-                    <DxTextBox Id="survey-po" @bind-Text="_editor.Survey.ClientPurchaseOrderRef" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    <label for="banana-po">Survey P.O. number</label>
+                    <DxTextBox Id="banana-po" @bind-Text="_editor.Survey.ClientPurchaseOrderRef" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
                     <small>Use billing comments for any additional purchase order references.</small>
                 </div>
                 <div class="field">
-                    <label for="billing-comments">Billing comments</label>
-                    <DxMemo Id="billing-comments" @bind-Text="_editor.Survey.BillingComments" Rows="4" NullText="Billing notes or additional P.O. numbers" />
+                    <label for="banana-billing-comments">Billing comments</label>
+                    <DxMemo Id="banana-billing-comments" @bind-Text="_editor.Survey.BillingComments" Rows="4" NullText="Billing notes or additional P.O. numbers" />
                 </div>
             </section>
 
-            <section class="editor-card full-width" aria-labelledby="blocks-heading">
-                <div class="section-heading split-heading">
-                    <div>
-                        <span class="editor-kicker">Survey coverage</span>
-                        <h2 id="blocks-heading">Active blocks</h2>
-                    </div>
-                    <span>@_editor.ActiveBlockIds.Count selected</span>
+            <section class="editor-card full-width" aria-labelledby="banana-findings-heading">
+                <div class="section-heading">
+                    <span class="editor-kicker">Report content</span>
+                    <h2 id="banana-findings-heading">Key findings</h2>
+                    <p>Record up to six short, important points for the grower.</p>
                 </div>
-                @if (_editor.Blocks.Count == 0)
-                {
-                    <div class="empty-inline">No blocks are available for this property and crop.</div>
-                }
-                else
-                {
-                    <div class="block-selector">
-                        @foreach (var block in _editor.Blocks)
-                        {
-                            var selected = _editor.ActiveBlockIds.Contains(block.BlockId);
-                            <label class="block-choice @(selected ? "selected" : string.Empty) @(!block.IsActive ? "inactive" : string.Empty)">
-                                <input type="checkbox" checked="@selected" @onchange="@(args => SetBlockSelected(block.BlockId, args.Value is true))" />
-                                <span>
-                                    <strong>@block.BlockName</strong>
-                                    <small>@block.NoPlants.ToString("N0") plants@(!block.IsActive ? " · inactive block" : string.Empty)</small>
-                                </span>
-                            </label>
-                        }
-                    </div>
-                }
+                <div class="finding-grid">
+                    @for (var index = 0; index < _keyFindings.Count; index++)
+                    {
+                        var findingIndex = index;
+                        <div class="field">
+                            <label for="banana-finding-@findingIndex">Finding @(findingIndex + 1)</label>
+                            <DxMemo Id="@($"banana-finding-{findingIndex}")" @bind-Text="_keyFindings[findingIndex]" Rows="4" />
+                        </div>
+                    }
+                </div>
             </section>
 
-            <section class="editor-card full-width" aria-labelledby="recommendations-heading">
+            <section class="editor-card full-width" aria-labelledby="banana-comments-heading">
+                <div class="section-heading">
+                    <span class="editor-kicker">Report content</span>
+                    <h2 id="banana-comments-heading">Detailed agronomist comments</h2>
+                </div>
+                <div class="two-column-memos">
+                    <div class="field">
+                        <label for="banana-comments-1">Comments 1</label>
+                        <DxMemo Id="banana-comments-1" @bind-Text="_editor.Survey.Comments1" Rows="7" NullText="Detailed observations and recommendations" />
+                    </div>
+                    <div class="field">
+                        <label for="banana-comments-2">Comments 2</label>
+                        <DxMemo Id="banana-comments-2" @bind-Text="_editor.Survey.Comments2" Rows="7" NullText="Continue comments if required" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-card full-width" aria-labelledby="banana-actions-heading">
                 <div class="section-heading split-heading">
                     <div>
                         <span class="editor-kicker">Work instructions</span>
-                        <h2 id="recommendations-heading">Actions and spray recommendations</h2>
+                        <h2 id="banana-actions-heading">Actions and spray recommendations</h2>
                     </div>
-                    <DxButton Text="Add action or spray" RenderStyle="ButtonRenderStyle.Primary"
-                              Click="AddRecommendation" />
+                    <span>@_editor.Recommendations.Count recorded</span>
                 </div>
                 @if (_editor.Recommendations.Count == 0)
                 {
@@ -221,12 +228,8 @@
                         {
                             <article class="recommendation-card">
                                 <div class="recommendation-header">
-                                    <div>
-                                        <span class="recommendation-type">@recommendation.ActionGroupName</span>
-                                        <strong>@recommendation.ActionDate.ToString("dd MMM yyyy")</strong>
-                                    </div>
-                                    <DxButton Text="Edit" RenderStyle="ButtonRenderStyle.Secondary"
-                                              Click="@(() => EditRecommendation(recommendation.SurveyActionId))" />
+                                    <span class="recommendation-type">@recommendation.ActionGroupName</span>
+                                    <strong>@recommendation.ActionDate.ToString("dd MMM yyyy")</strong>
                                 </div>
                                 <div class="recommendation-blocks">
                                     <span>Blocks</span>
@@ -248,46 +251,35 @@
                 }
             </section>
 
-            <section class="editor-card full-width" aria-labelledby="findings-heading">
-                <div class="section-heading">
-                    <span class="editor-kicker">Report content</span>
-                    <h2 id="findings-heading">Key findings</h2>
+            <section class="editor-card full-width" aria-labelledby="banana-plant-blocks-heading">
+                <div class="section-heading split-heading">
+                    <div>
+                        <span class="editor-kicker">Finger counts</span>
+                        <h2 id="banana-plant-blocks-heading">Exclude plant blocks</h2>
+                        <p>Select plant blocks that should be excluded from finger counts.</p>
+                    </div>
+                    <span>@_editor.FingerCountExcludedBlockIds.Count excluded</span>
                 </div>
-                <div class="two-column-memos">
-                    <div class="field">
-                        <label for="key-findings-1">Key findings 1</label>
-                        <DxMemo Id="key-findings-1" @bind-Text="_editor.Survey.KeyFindings1" Rows="5" NullText="Primary findings and priorities" />
+                @if (_editor.Blocks.Count == 0)
+                {
+                    <div class="empty-inline">No blocks are available for this property.</div>
+                }
+                else
+                {
+                    <div class="block-selector">
+                        @foreach (var block in _editor.Blocks)
+                        {
+                            var selected = _editor.FingerCountExcludedBlockIds.Contains(block.BlockId);
+                            <label class="block-choice @(selected ? "selected" : string.Empty) @(!block.IsActive ? "inactive" : string.Empty)">
+                                <input type="checkbox" checked="@selected" @onchange="@(args => SetBlockExcluded(block.BlockId, args.Value is true))" />
+                                <span>
+                                    <strong>@block.BlockName</strong>
+                                    <small>@block.NoPlants.ToString("N0") plants@(!block.IsActive ? " · inactive block" : string.Empty)</small>
+                                </span>
+                            </label>
+                        }
                     </div>
-                    <div class="field">
-                        <label for="key-findings-2">Key findings 2</label>
-                        <DxMemo Id="key-findings-2" @bind-Text="_editor.Survey.KeyFindings2" Rows="5" NullText="Additional findings" />
-                    </div>
-                </div>
-            </section>
-
-            <section class="editor-card full-width" aria-labelledby="observations-heading">
-                <div class="section-heading">
-                    <span class="editor-kicker">Report content</span>
-                    <h2 id="observations-heading">Agronomist observations</h2>
-                </div>
-                <div class="observation-grid">
-                    <div class="field">
-                        <label for="plant-health">Plant health</label>
-                        <DxMemo Id="plant-health" @bind-Text="_editor.Survey.PlantHealthComments" Rows="5" />
-                    </div>
-                    <div class="field">
-                        <label for="beneficial-pests">Beneficial and pest populations</label>
-                        <DxMemo Id="beneficial-pests" @bind-Text="_editor.Survey.BeneficialPestComments" Rows="5" />
-                    </div>
-                    <div class="field">
-                        <label for="disease">Disease</label>
-                        <DxMemo Id="disease" @bind-Text="_editor.Survey.DiseaseComments" Rows="5" />
-                    </div>
-                    <div class="field">
-                        <label for="soil-moisture">Soil moisture management</label>
-                        <DxMemo Id="soil-moisture" @bind-Text="_editor.Survey.SoilMoistureComments" Rows="5" />
-                    </div>
-                </div>
+                }
             </section>
         </div>
 
@@ -301,8 +293,9 @@
 @code {
     [Parameter] public int SurveyId { get; set; }
 
-    private MultiCropSurveyEditorDto? _editor;
+    private BananaSurveyEditorDto? _editor;
     private Staff? _actingAgronomist;
+    private readonly List<string?> _keyFindings = [null, null, null, null, null, null];
     private bool _loading = true;
     private bool _busy;
     private bool _success;
@@ -351,17 +344,29 @@
     {
         _loading = true;
         _message = null;
-        _editor = await TgsApi.GetMultiCropSurveyEditor(SurveyId);
+        _editor = await TgsApi.GetBananaSurveyEditor(SurveyId);
         if (_editor is null)
         {
             _message = TgsApi.ErrorMessage ?? "The survey editor could not be loaded.";
         }
         else
         {
+            LoadKeyFindings();
             _qaHours = _editor.Survey.QaHours;
             await ResolveActingAgronomistAsync();
         }
         _loading = false;
+    }
+
+    private void LoadKeyFindings()
+    {
+        for (var index = 0; index < _keyFindings.Count; index++) _keyFindings[index] = null;
+        if (_editor is null) return;
+        foreach (var finding in _editor.Survey.KeyFindings.OrderBy(item => item.SequenceNo).Take(6))
+        {
+            var index = finding.SequenceNo is >= 1 and <= 6 ? finding.SequenceNo - 1 : -1;
+            if (index >= 0) _keyFindings[index] = finding.KeyFinding;
+        }
     }
 
     private async Task ResolveActingAgronomistAsync()
@@ -378,8 +383,7 @@
         foreach (var address in additionalEmails?.Where(item => item.IsConfirmed) ?? [])
             emails.Add(address.Email);
 
-        _isSurveyCreator = !string.IsNullOrWhiteSpace(_editor.Survey.CreatedBy) &&
-            emails.Contains(_editor.Survey.CreatedBy);
+        _isSurveyCreator = !string.IsNullOrWhiteSpace(_editor.Survey.CreatedBy) && emails.Contains(_editor.Survey.CreatedBy);
         _actingAgronomist = _editor.Agronomists.FirstOrDefault(staff =>
             !string.IsNullOrWhiteSpace(staff.Email) && emails.Contains(staff.Email));
     }
@@ -395,26 +399,23 @@
         try
         {
             var survey = _editor.Survey;
-            var request = new MultiCropSurveyEditorUpdateRequest
-            {
-                SurveyDate = survey.SurveyDate,
-                AgronomistId = survey.AgronomistId,
-                SurveyHours = survey.SurveyHours,
-                ReportHours = survey.ReportHours,
-                BillingComments = survey.BillingComments,
-                SurveyPurchaseOrderNumber = survey.ClientPurchaseOrderRef,
-                PlantHealthComments = survey.PlantHealthComments,
-                BeneficialPestComments = survey.BeneficialPestComments,
-                DiseaseComments = survey.DiseaseComments,
-                SoilMoistureComments = survey.SoilMoistureComments,
-                KeyFindings1 = survey.KeyFindings1,
-                KeyFindings2 = survey.KeyFindings2,
-                ActiveBlockIds = [.. _editor.ActiveBlockIds],
-                ExpectedModificationDate = survey.ModificationDate,
-                ModifiedBy = _currentEmail ?? "MetaGrow"
-            };
-
-            var updated = await TgsApi.UpdateMultiCropSurveyEditor(SurveyId, request);
+            var updated = await TgsApi.UpdateBananaSurveyEditor(
+                SurveyId,
+                new BananaSurveyEditorUpdateRequest
+                {
+                    SurveyDate = survey.SurveyDate,
+                    AgronomistId = survey.AgronomistId,
+                    SurveyHours = survey.SurveyHours,
+                    ReportHours = survey.ReportHours,
+                    BillingComments = survey.BillingComments,
+                    SurveyPurchaseOrderNumber = survey.ClientPurchaseOrderRef,
+                    Comments1 = survey.Comments1,
+                    Comments2 = survey.Comments2,
+                    KeyFindings = _keyFindings.Select(value => value ?? string.Empty).ToList(),
+                    FingerCountExcludedBlockIds = [.. _editor.FingerCountExcludedBlockIds],
+                    ExpectedModificationDate = survey.ModificationDate,
+                    ModifiedBy = _currentEmail ?? "MetaGrow"
+                });
             if (updated is null)
             {
                 SetError(TgsApi.ErrorMessage ?? "The survey could not be saved.");
@@ -422,6 +423,7 @@
             }
 
             _editor = updated;
+            LoadKeyFindings();
             _qaHours = updated.Survey.QaHours;
             if (showSuccess)
             {
@@ -462,9 +464,9 @@
         _success = false;
         try
         {
-            var updated = await TgsApi.TransitionMultiCropSurvey(
+            var updated = await TgsApi.TransitionBananaSurvey(
                 SurveyId,
-                new MultiCropSurveyTransitionRequest
+                new BananaSurveyTransitionRequest
                 {
                     Action = action,
                     ActingAgronomistId = _actingAgronomist?.StaffId ??
@@ -481,6 +483,7 @@
             }
 
             _editor = updated;
+            LoadKeyFindings();
             _qaHours = updated.Survey.QaHours;
             _success = true;
             _message = $"Survey moved to {updated.StatusName.ToLowerInvariant()}.";
@@ -517,11 +520,12 @@
         return true;
     }
 
-    private void SetBlockSelected(int blockId, bool selected)
+    private void SetBlockExcluded(int blockId, bool selected)
     {
         if (_editor is null) return;
-        if (selected && !_editor.ActiveBlockIds.Contains(blockId)) _editor.ActiveBlockIds.Add(blockId);
-        if (!selected) _editor.ActiveBlockIds.Remove(blockId);
+        if (selected && !_editor.FingerCountExcludedBlockIds.Contains(blockId))
+            _editor.FingerCountExcludedBlockIds.Add(blockId);
+        if (!selected) _editor.FingerCountExcludedBlockIds.Remove(blockId);
         _message = null;
     }
 
@@ -550,15 +554,10 @@
     private static bool IsQuarterHour(double value) =>
         value >= 0 && Math.Abs((value * 4) - Math.Round(value * 4)) < 0.0001;
 
-    private void BackToSurveys() => Navigation.NavigateTo("/surveys/multicrop");
-    private void ViewReport() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/report");
-    private void EditBlockGroups() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/block-groups");
-    private void EditImages() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/photos");
-    private void AddRecommendation() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/recommendations/0");
-    private void EditRecommendation(int surveyActionId) =>
-        Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/recommendations/{surveyActionId}");
+    private void BackToSurveys() => Navigation.NavigateTo("/surveys/banana");
+    private void ViewReport() => Navigation.NavigateTo($"/surveys/banana/{SurveyId}/report");
 
-    private static string RecommendationItemText(MultiCropSurveyRecommendationItemDto item) =>
+    private static string RecommendationItemText(BananaSurveyRecommendationItemDto item) =>
         item.SprayProductRefId > 0
             ? $"{item.ProductName} {item.ApplicationRate:0.###} {item.ApplicationUnit}".Trim()
             : item.ActionName ?? "Action";

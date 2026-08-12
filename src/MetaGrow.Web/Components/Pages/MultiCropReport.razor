@@ -183,7 +183,11 @@
                 @if (section.IsHistorical)
                 {
                     var points = HistoricalChartPoints(section);
-                    <DxChart Data="@points" Width="100%" CssClass="report-chart interactive-chart">
+                    <DxChart Data="@points"
+                             Width="100%"
+                             CssClass="report-chart interactive-chart"
+                             Palette="@UtilsService.ChartPalette"
+                             PaletteExtensionMode="ChartPaletteExtensionMode.Blend">
                         <DxChartArgumentAxis>
                             <DxChartAxisLabel Format="ChartElementFormat.ShortDate" />
                         </DxChartArgumentAxis>
@@ -209,7 +213,11 @@
                 else
                 {
                     var points = CurrentChartPoints(section);
-                    <DxChart Data="@points" Width="100%" CssClass="report-chart interactive-chart">
+                    <DxChart Data="@points"
+                             Width="100%"
+                             CssClass="report-chart interactive-chart"
+                             Palette="@UtilsService.ChartPalette"
+                             PaletteExtensionMode="ChartPaletteExtensionMode.Blend">
                         <DxChartArgumentAxis Type="ChartAxisType.Discrete" DiscreteDivisionMode="ChartDiscreteAxisDivisionMode.CrossLabels">
                             <DxChartAxisMinorTick Visible="false" />
                         </DxChartArgumentAxis>
@@ -405,7 +413,7 @@
         }
 
         <footer class="report-footer">
-            <span>MetaGrow · @SelectedBrand.Label</span>
+            <span>MetaGrow Crop Intelligence</span>
             <span>Survey @_report.SurveyId</span>
         </footer>
     }

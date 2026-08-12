@@ -1,4 +1,762 @@
 @page "/farms"
 @attribute [Authorize(Roles = ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager)]
+@using ApiModels
+@using Metagen.Shared.Services
+@inject ITgsApiService TgsApi
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IJSRuntime JS
+
 <PageTitle>Farm setup | MetaGrow</PageTitle>
-<ModuleLanding Title="Farm setup" Description="Properties, growers and blocks will be managed here." />
+
+<div class="farm-setup-page">
+    <header class="farm-hero">
+        <div>
+            <span class="eyebrow">Farm administration</span>
+            <h1>Farm setup</h1>
+            <p>Find a property, maintain its details, then manage its banana and multi-crop blocks in one place.</p>
+        </div>
+        <DxButton Text="New property" RenderStyle="ButtonRenderStyle.Primary" Click="NewProperty" Enabled="@(!_busy)" />
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="page-message @(_messageIsError ? "error" : "success")" role="status">@_message</div>
+    }
+
+    @if (_loading)
+    {
+        <div class="loading-state"><DxWaitIndicator Visible="true" /><span>Loading farm setup...</span></div>
+    }
+    else
+    {
+        <div class="farm-workspace">
+            <aside class="property-browser" aria-labelledby="property-browser-heading">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">Properties</span>
+                        <h2 id="property-browser-heading">Find a farm</h2>
+                    </div>
+                    <span class="count-badge">@MatchingPropertyCount</span>
+                </div>
+
+                <div class="filter-field">
+                    <label for="property-name-filter">Property name</label>
+                    <DxTextBox Id="property-name-filter" @bind-Text="_propertyFilter" @bind-Text:after="SavePropertyFilterAsync"
+                               BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250"
+                               NullText="Type any part of a name"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </div>
+                <div class="filter-check">
+                    <DxCheckBox @bind-Checked="_showInactiveProperties">Show inactive properties</DxCheckBox>
+                </div>
+
+                <div class="property-results">
+                    @if (VisibleProperties.Count == 0)
+                    {
+                        <div class="empty-compact">No properties match that name.</div>
+                    }
+                    else
+                    {
+                        @foreach (var farm in VisibleProperties)
+                        {
+                            <button type="button" class="property-result @(farm.PropertyId == _property?.PropertyId ? "selected" : null)"
+                                    @onclick="@(() => SelectPropertyAsync(farm.PropertyId))">
+                                <span class="property-result-name">@farm.PropertyName</span>
+                                <span class="property-result-meta">
+                                    <span class="status-dot @(farm.IsActive ? "active" : "inactive")"></span>
+                                    @(farm.IsActive ? "Active" : "Inactive")
+                                </span>
+                            </button>
+                        }
+                    }
+                </div>
+
+                @if (MatchingPropertyCount > VisibleProperties.Count)
+                {
+                    <p class="result-limit">Showing the first @VisibleProperties.Count matches. Add more of the name to narrow the list.</p>
+                }
+            </aside>
+
+            <main class="farm-detail">
+                @if (_loadingProperty)
+                {
+                    <div class="loading-state"><DxWaitIndicator Visible="true" /><span>Loading property and blocks...</span></div>
+                }
+                else if (_property is null)
+                {
+                    <section class="welcome-state">
+                        <div class="welcome-icon" aria-hidden="true">⌕</div>
+                        <h2>Choose a property to begin</h2>
+                        <p>Search by any part of the property name. Both banana and multi-crop blocks will appear in the same workspace.</p>
+                    </section>
+                }
+                else
+                {
+                    <div class="detail-toolbar">
+                        <div>
+                            <span class="eyebrow">@(_isNewProperty ? "New property" : $"Property {_property.PropertyId}")</span>
+                            <h2>@(string.IsNullOrWhiteSpace(_property.PropertyName) ? "Untitled property" : _property.PropertyName)</h2>
+                        </div>
+                        <DxButton Text="Save property" RenderStyle="ButtonRenderStyle.Primary" Click="SavePropertyAsync" Enabled="@(!_busy)" />
+                    </div>
+
+                    <section class="detail-card" aria-labelledby="property-details-heading">
+                        <div class="section-heading">
+                            <span class="eyebrow">Property record</span>
+                            <h3 id="property-details-heading">Details</h3>
+                        </div>
+
+                        <div class="form-grid property-general">
+                            <div class="field wide">
+                                <label for="property-name">Property name *</label>
+                                <DxTextBox Id="property-name" @bind-Text="_property.PropertyName" />
+                            </div>
+                            <div class="field check-field">
+                                <DxCheckBox @bind-Checked="_property.IsActive">Active property</DxCheckBox>
+                            </div>
+                            <div class="field">
+                                <label for="property-billing-code">Billing account code (MYOB)</label>
+                                <DxTextBox Id="property-billing-code" @bind-Text="_property.BillingAccountCode" />
+                            </div>
+                            <div class="field">
+                                <label for="property-billing-entity">Billing entity</label>
+                                <DxComboBox Id="property-billing-entity" Data="@_billingEntities" @bind-Value="_property.BillingEntityId"
+                                            TextFieldName="@nameof(ListItemInt.Name)" ValueFieldName="@nameof(ListItemInt.Id)"
+                                            SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                            </div>
+                        </div>
+
+                        <div class="subsection-heading"><h4>Contact and address</h4></div>
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="property-address-1">Address 1</label>
+                                <DxTextBox Id="property-address-1" @bind-Text="_property.Address1" />
+                            </div>
+                            <div class="field">
+                                <label for="property-address-2">Address 2</label>
+                                <DxTextBox Id="property-address-2" @bind-Text="_property.Address2" />
+                            </div>
+                            <div class="field">
+                                <label for="property-suburb">Suburb</label>
+                                <DxTextBox Id="property-suburb" @bind-Text="_property.Suburb" />
+                            </div>
+                            <div class="field compact-field">
+                                <label for="property-state">State</label>
+                                <DxComboBox Id="property-state" Data="@States" @bind-Value="_property.State" AllowUserInput="false" />
+                            </div>
+                            <div class="field compact-field">
+                                <label for="property-postcode">Postcode</label>
+                                <DxTextBox Id="property-postcode" @bind-Text="_property.PostCode" />
+                            </div>
+                            <div class="field">
+                                <label for="property-email">Email</label>
+                                <DxTextBox Id="property-email" @bind-Text="_property.Email" />
+                            </div>
+                            <div class="field">
+                                <label for="property-phone">Phone</label>
+                                <DxTextBox Id="property-phone" @bind-Text="_property.Phone" />
+                            </div>
+                            <div class="field">
+                                <label for="property-mobile">Mobile</label>
+                                <DxTextBox Id="property-mobile" @bind-Text="_property.MobilePhone" />
+                            </div>
+                            <div class="field">
+                                <label for="property-fax">Fax</label>
+                                <DxTextBox Id="property-fax" @bind-Text="_property.Fax" />
+                            </div>
+                        </div>
+
+                        <div class="subsection-heading"><h4>Location and reporting</h4></div>
+                        <div class="form-grid">
+                            @* Retained for possible future use; hidden by .legacy-property-field. *@
+                            <div class="field legacy-property-field">
+                                <label for="property-district">District</label>
+                                <DxComboBox Id="property-district" Data="@_districts" @bind-Value="_property.DistrictId"
+                                            TextFieldName="@nameof(ListItemInt.Name)" ValueFieldName="@nameof(ListItemInt.Id)"
+                                            SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                            </div>
+                            <div class="field legacy-property-field">
+                                <label for="property-region">Region</label>
+                                <DxComboBox Id="property-region" Data="@_regions" @bind-Value="_property.RegionId"
+                                            TextFieldName="@nameof(ListItemInt.Name)" ValueFieldName="@nameof(ListItemInt.Id)"
+                                            SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                            </div>
+                            <div class="field compact-field">
+                                <label for="property-map-zoom">Map zoom level</label>
+                                <DxSpinEdit Id="property-map-zoom" @bind-Value="_property.MapZoomLevel" MinValue="1" MaxValue="20" />
+                            </div>
+                            <div class="field compact-field legacy-property-field">
+                                <label for="property-tipm-fee">Tablelands IPM visit fee</label>
+                                <DxSpinEdit Id="property-tipm-fee" @bind-Value="_property.TipmFee" MinValue="0" Increment="1" DisplayFormat="c2" />
+                            </div>
+                            <div class="field wide check-field legacy-property-field">
+                                <DxCheckBox @bind-Checked="_property.IncludeSprayRecTable">Include spray recommendation table in survey reports</DxCheckBox>
+                            </div>
+                            <div class="field wide">
+                                <label for="property-comments">Comments</label>
+                                <DxMemo Id="property-comments" @bind-Text="_property.Comments" Rows="3" />
+                            </div>
+                        </div>
+                    </section>
+
+                    @if (!_isNewProperty)
+                    {
+                        <section class="detail-card blocks-card" aria-labelledby="blocks-heading">
+                            <div class="blocks-heading-row">
+                                <div class="section-heading">
+                                    <span class="eyebrow">Growing areas</span>
+                                    <h3 id="blocks-heading">Blocks</h3>
+                                    <p>Banana and multi-crop blocks remain separate records but are maintained for this farm here.</p>
+                                </div>
+                                <DxButton Text="@($"New {(_activeBlockType == BananaBlockType ? "banana" : "multi-crop")} block")"
+                                          RenderStyle="ButtonRenderStyle.Primary" Click="NewBlock" Enabled="@(!_busy)" />
+                            </div>
+
+                            <div class="block-tabs" role="tablist" aria-label="Block type">
+                                <button type="button" role="tab" aria-selected="@(_activeBlockType == MultiCropBlockType)"
+                                        class="@(_activeBlockType == MultiCropBlockType ? "active" : null)" @onclick="@(() => ChangeBlockType(MultiCropBlockType))">
+                                    Multi-crop <span>@_multiCropBlocks.Count</span>
+                                </button>
+                                <button type="button" role="tab" aria-selected="@(_activeBlockType == BananaBlockType)"
+                                        class="@(_activeBlockType == BananaBlockType ? "active" : null)" @onclick="@(() => ChangeBlockType(BananaBlockType))">
+                                    Banana <span>@_bananaBlocks.Count</span>
+                                </button>
+                            </div>
+
+                            @if (ActiveBlockList.Count > 0)
+                            {
+                                <div class="block-filter-row">
+                                    <div class="filter-field">
+                                        <label for="block-name-filter">Block name</label>
+                                        <DxTextBox Id="block-name-filter" @bind-Text="_blockFilter"
+                                                   BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250"
+                                                   NullText="Type any part of a block name"
+                                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                                    </div>
+                                    <div class="filter-check"><DxCheckBox @bind-Checked="_showInactiveBlocks">Show inactive blocks</DxCheckBox></div>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(_blockFilter))
+                                {
+                                    <p class="reorder-note">Clear the name filter to change the report order.</p>
+                                }
+                            }
+
+                            @if (FilteredBlocks.Count == 0)
+                            {
+                                <div class="empty-blocks">
+                                    <strong>No @(_activeBlockType == BananaBlockType ? "banana" : "multi-crop") blocks found.</strong>
+                                    <span>@(string.IsNullOrWhiteSpace(_blockFilter) ? "Create the first block for this farm." : "Clear or change the name filter.")</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="block-table-wrap">
+                                    <table class="block-table">
+                                        <thead>
+                                            <tr>
+                                                <th class="order-column">Order</th>
+                                                <th>Block name</th>
+                                                @if (_activeBlockType == MultiCropBlockType)
+                                                {
+                                                    <th>Crop</th>
+                                                    <th>Short code</th>
+                                                }
+                                                else
+                                                {
+                                                    <th>Enviroscan plant</th>
+                                                }
+                                                <th>Plants</th>
+                                                <th>Size (ha)</th>
+                                                <th>Status</th>
+                                                <th class="edit-column"><span class="visually-hidden">Edit</span></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var block in FilteredBlocks)
+                                            {
+                                                <tr class="@(block.BlockId == _blockEditor?.BlockId && !_isNewBlock ? "editing" : null)">
+                                                    <td>
+                                                        <div class="order-controls">
+                                                            <DxButton Text="↑" RenderStyle="ButtonRenderStyle.Secondary" SizeMode="SizeMode.Small"
+                                                                      Enabled="@CanMoveBlock(block, -1)" Click="@(() => MoveBlockAsync(block, -1))" />
+                                                            <DxButton Text="↓" RenderStyle="ButtonRenderStyle.Secondary" SizeMode="SizeMode.Small"
+                                                                      Enabled="@CanMoveBlock(block, 1)" Click="@(() => MoveBlockAsync(block, 1))" />
+                                                        </div>
+                                                    </td>
+                                                    <td><strong>@block.BlockName</strong></td>
+                                                    @if (_activeBlockType == MultiCropBlockType)
+                                                    {
+                                                        <td>@CropName(block.CropTypeId)</td>
+                                                        <td>@ValueOrDash(block.ShortCode)</td>
+                                                    }
+                                                    else
+                                                    {
+                                                        <td>@(block.EnviroscanPlantNo > 0 ? block.EnviroscanPlantNo.ToString() : "—")</td>
+                                                    }
+                                                    <td>@block.NoPlants.ToString("N0")</td>
+                                                    <td>@block.Size.ToString("N2")</td>
+                                                    <td><span class="record-status @(block.IsActive ? "active" : "inactive")">@(block.IsActive ? "Active" : "Inactive")</span></td>
+                                                    <td><DxButton Text="Edit" RenderStyle="ButtonRenderStyle.Secondary" SizeMode="SizeMode.Small" Click="@(() => EditBlock(block))" /></td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+
+                            @if (_blockEditor is not null)
+                            {
+                                <div class="block-editor" id="block-editor">
+                                    <div class="block-editor-heading">
+                                        <div>
+                                            <span class="eyebrow">@(_isNewBlock ? "New block" : "Edit block")</span>
+                                            <h4>@(_activeBlockType == BananaBlockType ? "Banana block" : "Multi-crop block")</h4>
+                                        </div>
+                                        <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseBlockEditor" />
+                                    </div>
+
+                                    <div class="form-grid block-form">
+                                        <div class="field wide">
+                                            <label for="block-name">Block name *</label>
+                                            <DxTextBox Id="block-name" @bind-Text="_blockEditor.BlockName" />
+                                        </div>
+                                        <div class="field check-field"><DxCheckBox @bind-Checked="_blockEditor.IsActive">Active block</DxCheckBox></div>
+                                        @if (_activeBlockType == MultiCropBlockType)
+                                        {
+                                            <div class="field">
+                                                <label for="block-crop">Crop *</label>
+                                                <DxComboBox Id="block-crop" Data="@_crops" @bind-Value="_blockEditor.CropTypeId"
+                                                            TextFieldName="@nameof(CropType.CropTypeName)" ValueFieldName="@nameof(CropType.CropTypeId)"
+                                                            SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" />
+                                            </div>
+                                            <div class="field compact-field">
+                                                <label for="block-short-code">Short code</label>
+                                                <DxTextBox Id="block-short-code" @bind-Text="_blockEditor.ShortCode" />
+                                                <small>Maximum 5 characters.</small>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="field compact-field">
+                                                <label for="block-enviroscan">Enviroscan plant number</label>
+                                                <DxSpinEdit Id="block-enviroscan" @bind-Value="_blockEditor.EnviroscanPlantNo" MinValue="0" />
+                                            </div>
+                                        }
+                                        <div class="field compact-field">
+                                            <label for="block-plants">Number of plants</label>
+                                            <DxSpinEdit Id="block-plants" @bind-Value="_blockEditor.NoPlants" MinValue="0" />
+                                        </div>
+                                        <div class="field compact-field">
+                                            <label for="block-size">Size (ha)</label>
+                                            <DxSpinEdit Id="block-size" @bind-Value="_blockEditor.Size" MinValue="0" Increment="0.1" DisplayFormat="0.00" />
+                                        </div>
+                                    </div>
+                                    <div class="block-editor-actions">
+                                        <span>Report order: @_blockEditor.BlockOrder</span>
+                                        <DxButton Text="Save block" RenderStyle="ButtonRenderStyle.Primary" Click="SaveBlockAsync" Enabled="@(!_busy)" />
+                                    </div>
+                                </div>
+                            }
+                        </section>
+                    }
+                }
+            </main>
+        </div>
+    }
+</div>
+
+@code {
+    private const string BananaBlockType = "banana";
+    private const string MultiCropBlockType = "mcs";
+    private const string PropertyFilterCookieName = "metagrow.farms.property-filter";
+    private const int PropertyResultLimit = 100;
+    private static readonly string[] States = ["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"];
+
+    private List<ApiModels.Property> _properties = [];
+    private List<ListItemInt> _billingEntities = [];
+    private List<ListItemInt> _districts = [];
+    private List<ListItemInt> _regions = [];
+    private List<CropType> _crops = [];
+    private List<Block> _bananaBlocks = [];
+    private List<Block> _multiCropBlocks = [];
+    private ApiModels.Property? _property;
+    private Block? _blockEditor;
+    private string? _propertyFilter;
+    private string? _blockFilter;
+    private string? _message;
+    private string _activeBlockType = MultiCropBlockType;
+    private string _modifiedBy = "MetaGrow";
+    private bool _loading = true;
+    private bool _loadingProperty;
+    private bool _busy;
+    private bool _messageIsError;
+    private bool _showInactiveProperties;
+    private bool _showInactiveBlocks;
+    private bool _isNewProperty;
+    private bool _isNewBlock;
+
+    private IReadOnlyList<ApiModels.Property> MatchingProperties => _properties
+        .Where(item => _showInactiveProperties || item.IsActive || item.PropertyId == _property?.PropertyId)
+        .Where(item => string.IsNullOrWhiteSpace(_propertyFilter) ||
+                       (item.PropertyName?.Contains(_propertyFilter.Trim(), StringComparison.OrdinalIgnoreCase) ?? false))
+        .OrderBy(item => item.PropertyName)
+        .ToList();
+
+    private IReadOnlyList<ApiModels.Property> VisibleProperties => MatchingProperties.Take(PropertyResultLimit).ToList();
+    private int MatchingPropertyCount => MatchingProperties.Count;
+
+    private List<Block> ActiveBlockList => _activeBlockType == BananaBlockType ? _bananaBlocks : _multiCropBlocks;
+
+    private IReadOnlyList<Block> OrderedBlocks => ActiveBlockList
+        .OrderBy(item => item.BlockOrder)
+        .ThenBy(item => item.BlockName)
+        .ToList();
+
+    private IReadOnlyList<Block> FilteredBlocks => OrderedBlocks
+        .Where(item => _showInactiveBlocks || item.IsActive || (!_isNewBlock && item.BlockId == _blockEditor?.BlockId))
+        .Where(item => string.IsNullOrWhiteSpace(_blockFilter) ||
+                       (item.BlockName?.Contains(_blockFilter.Trim(), StringComparison.OrdinalIgnoreCase) ?? false))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            _modifiedBy = authState.User.Identity?.Name ?? "MetaGrow";
+
+            var propertiesTask = TgsApi.GetProperties();
+            var billingTask = TgsApi.GetBillingEntityList();
+            var districtTask = TgsApi.GetDistrictList();
+            var regionTask = TgsApi.GetRegionList();
+            var cropsTask = TgsApi.GetCrops();
+            await Task.WhenAll(propertiesTask, billingTask, districtTask, regionTask, cropsTask);
+
+            _properties = (await propertiesTask ?? []).OrderBy(item => item.PropertyName).ToList();
+            _billingEntities = (await billingTask ?? []).OrderBy(item => item.Name).ToList();
+            _districts = (await districtTask ?? []).OrderBy(item => item.Name).ToList();
+            _regions = (await regionTask ?? []).OrderBy(item => item.Name).ToList();
+            _crops = (await cropsTask ?? []).Where(item => !string.IsNullOrWhiteSpace(item.CropTypeName))
+                .OrderBy(item => item.CropTypeName).ToList();
+
+            if (_properties.Count == 0 && !string.IsNullOrWhiteSpace(TgsApi.ErrorMessage))
+                SetMessage("Farm setup could not be loaded. " + TgsApi.ErrorMessage, true);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            _propertyFilter = await JS.InvokeAsync<string?>(
+                "metaGrowFilterPreferences.get",
+                PropertyFilterCookieName);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (JSException)
+        {
+            // Filtering still works when browser storage is unavailable.
+        }
+    }
+
+    private async Task SavePropertyFilterAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "metaGrowFilterPreferences.set",
+                PropertyFilterCookieName,
+                _propertyFilter ?? string.Empty);
+        }
+        catch (JSException)
+        {
+            // Filtering still works when browser storage is unavailable.
+        }
+    }
+
+    private async Task SelectPropertyAsync(int propertyId)
+    {
+        if (_loadingProperty || (_property?.PropertyId == propertyId && !_isNewProperty)) return;
+
+        ClearMessage();
+        _loadingProperty = true;
+        _blockEditor = null;
+        try
+        {
+            var propertyTask = TgsApi.GetPropertyForMaintenance(propertyId);
+            var bananaTask = TgsApi.GetBananaBlocksForProperty(propertyId);
+            var multiCropTask = TgsApi.GetMultiCropBlocksForProperty(propertyId);
+            await Task.WhenAll(propertyTask, bananaTask, multiCropTask);
+
+            _property = await propertyTask;
+            _bananaBlocks = await bananaTask ?? [];
+            _multiCropBlocks = await multiCropTask ?? [];
+            _isNewProperty = false;
+            _isNewBlock = false;
+
+            if (_property is null)
+                SetMessage("The property could not be loaded. " + TgsApi.ErrorMessage, true);
+        }
+        finally
+        {
+            _loadingProperty = false;
+        }
+    }
+
+    private void NewProperty()
+    {
+        ClearMessage();
+        _property = new ApiModels.Property
+        {
+            IsActive = true,
+            State = "QLD",
+            MapZoomLevel = 12,
+            ThirdPartyId = 1,
+        };
+        _bananaBlocks = [];
+        _multiCropBlocks = [];
+        _blockEditor = null;
+        _isNewProperty = true;
+        _isNewBlock = false;
+    }
+
+    private async Task SavePropertyAsync()
+    {
+        if (_property is null || _busy) return;
+        if (string.IsNullOrWhiteSpace(_property.PropertyName))
+        {
+            SetMessage("Enter a property name before saving.", true);
+            return;
+        }
+
+        _busy = true;
+        ClearMessage();
+        try
+        {
+            _property.PropertyName = _property.PropertyName.Trim();
+            var result = _isNewProperty
+                ? await TgsApi.CreatePropertyForMaintenance(_property)
+                : await TgsApi.UpdatePropertyForMaintenance(_property);
+
+            if (result is null)
+            {
+                SetMessage("The property could not be saved. " + TgsApi.ErrorMessage, true);
+                return;
+            }
+
+            _property = result;
+            _isNewProperty = false;
+            var refreshed = await TgsApi.GetProperties();
+            if (refreshed is not null) _properties = refreshed.OrderBy(item => item.PropertyName).ToList();
+            SetMessage("Property details saved.", false);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void ChangeBlockType(string blockType)
+    {
+        _activeBlockType = blockType;
+        _blockFilter = null;
+        _blockEditor = null;
+        _isNewBlock = false;
+        ClearMessage();
+    }
+
+    private void NewBlock()
+    {
+        if (_property is null) return;
+        ClearMessage();
+        _blockEditor = new Block
+        {
+            PropertyId = _property.PropertyId,
+            BlockType = _activeBlockType,
+            IsActive = true,
+            NoPlants = _activeBlockType == MultiCropBlockType ? 2 : 1,
+            BlockOrder = OrderedBlocks.Count == 0 ? 1 : OrderedBlocks.Max(item => item.BlockOrder) + 1,
+            ModifiedBy = _modifiedBy,
+        };
+        _isNewBlock = true;
+    }
+
+    private void EditBlock(Block block)
+    {
+        ClearMessage();
+        _blockEditor = CloneBlock(block);
+        _blockEditor.ModifiedBy = _modifiedBy;
+        _isNewBlock = false;
+    }
+
+    private void CloseBlockEditor()
+    {
+        _blockEditor = null;
+        _isNewBlock = false;
+    }
+
+    private async Task SaveBlockAsync()
+    {
+        if (_blockEditor is null || _property is null || _busy) return;
+        if (string.IsNullOrWhiteSpace(_blockEditor.BlockName))
+        {
+            SetMessage("Enter a block name before saving.", true);
+            return;
+        }
+        if (_activeBlockType == MultiCropBlockType && _blockEditor.CropTypeId <= 0)
+        {
+            SetMessage("Choose a crop for the multi-crop block.", true);
+            return;
+        }
+        if ((_blockEditor.ShortCode?.Length ?? 0) > 5)
+        {
+            SetMessage("The block short code can contain no more than 5 characters.", true);
+            return;
+        }
+
+        _busy = true;
+        ClearMessage();
+        try
+        {
+            _blockEditor.BlockName = _blockEditor.BlockName.Trim();
+            _blockEditor.ShortCode = _blockEditor.ShortCode?.Trim();
+            _blockEditor.PropertyId = _property.PropertyId;
+            _blockEditor.ModifiedBy = _modifiedBy;
+
+            Block? result;
+            if (_activeBlockType == BananaBlockType)
+                result = _isNewBlock ? await TgsApi.CreateBananaBlock(_blockEditor) : await TgsApi.UpdateBananaBlock(_blockEditor);
+            else
+                result = _isNewBlock ? await TgsApi.CreateMultiCropBlock(_blockEditor) : await TgsApi.UpdateMultiCropBlock(_blockEditor);
+
+            if (result is null)
+            {
+                SetMessage("The block could not be saved. " + TgsApi.ErrorMessage, true);
+                return;
+            }
+
+            var savedId = result.BlockId;
+            await ReloadActiveBlocksAsync();
+            _blockEditor = ActiveBlockList.Where(item => item.BlockId == savedId).Select(CloneBlock).FirstOrDefault() ?? result;
+            _isNewBlock = false;
+            SetMessage("Block details saved.", false);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private bool CanMoveBlock(Block block, int direction)
+    {
+        if (_busy || !string.IsNullOrWhiteSpace(_blockFilter)) return false;
+        var visibleBlocks = FilteredBlocks;
+        var index = visibleBlocks.ToList().FindIndex(item => item.BlockId == block.BlockId);
+        return index >= 0 && index + direction >= 0 && index + direction < visibleBlocks.Count;
+    }
+
+    private async Task MoveBlockAsync(Block block, int direction)
+    {
+        if (!CanMoveBlock(block, direction) || _busy || _property is null) return;
+
+        var visibleBlocks = FilteredBlocks.ToList();
+        var visibleIndex = visibleBlocks.FindIndex(item => item.BlockId == block.BlockId);
+        var neighbourId = visibleBlocks[visibleIndex + direction].BlockId;
+
+        var desiredOrder = OrderedBlocks.Select(CloneBlock).ToList();
+        var movingIndex = desiredOrder.FindIndex(item => item.BlockId == block.BlockId);
+        var movingBlock = desiredOrder[movingIndex];
+        desiredOrder.RemoveAt(movingIndex);
+
+        var neighbourIndex = desiredOrder.FindIndex(item => item.BlockId == neighbourId);
+        desiredOrder.Insert(direction < 0 ? neighbourIndex : neighbourIndex + 1, movingBlock);
+
+        for (var index = 0; index < desiredOrder.Count; index++)
+        {
+            desiredOrder[index].BlockOrder = index + 1;
+            desiredOrder[index].ModifiedBy = _modifiedBy;
+        }
+
+        _busy = true;
+        ClearMessage();
+        try
+        {
+            var editorBlockId = _blockEditor?.BlockId;
+            var success = await TgsApi.ReorderBlocks(new BlockReorderRequest
+            {
+                PropertyId = _property.PropertyId,
+                BlockType = _activeBlockType,
+                ModifiedBy = _modifiedBy,
+                Blocks = desiredOrder,
+            });
+
+            if (!success)
+            {
+                SetMessage("The block order could not be changed. " + TgsApi.ErrorMessage, true);
+                return;
+            }
+
+            await ReloadActiveBlocksAsync();
+            if (editorBlockId.HasValue)
+                _blockEditor = ActiveBlockList.Where(item => item.BlockId == editorBlockId.Value).Select(CloneBlock).FirstOrDefault();
+            SetMessage("Block order updated.", false);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReloadActiveBlocksAsync()
+    {
+        if (_property is null) return;
+        if (_activeBlockType == BananaBlockType)
+            _bananaBlocks = await TgsApi.GetBananaBlocksForProperty(_property.PropertyId) ?? [];
+        else
+            _multiCropBlocks = await TgsApi.GetMultiCropBlocksForProperty(_property.PropertyId) ?? [];
+    }
+
+    private static Block CloneBlock(Block source) => new()
+    {
+        BlockId = source.BlockId,
+        PropertyId = source.PropertyId,
+        BlockName = source.BlockName,
+        BlockOrder = source.BlockOrder,
+        NoPlants = source.NoPlants,
+        CropTypeId = source.CropTypeId,
+        ParentCropTypeId = source.ParentCropTypeId,
+        IsPrimary = source.IsPrimary,
+        BlockType = source.BlockType,
+        Size = source.Size,
+        IsActive = source.IsActive,
+        NaPaddockId = source.NaPaddockId,
+        EnviroscanPlantNo = source.EnviroscanPlantNo,
+        ShortCode = source.ShortCode,
+        ModifiedBy = source.ModifiedBy,
+    };
+
+    private string CropName(int cropTypeId) => _crops.FirstOrDefault(item => item.CropTypeId == cropTypeId)?.CropTypeName ?? "—";
+    private static string ValueOrDash(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private void ClearMessage()
+    {
+        _message = null;
+        _messageIsError = false;
+    }
+
+    private void SetMessage(string message, bool isError)
+    {
+        _message = message;
+        _messageIsError = isError;
+    }
+}

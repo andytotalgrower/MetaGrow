@@ -2,8 +2,9 @@
 @using System.Net
 @using System.Text
 @using ApiModels
+@using Metagen.Shared.Services
 
-<div class="print-chart" aria-label="Printable chart for @Section.Title">
+<div class="print-chart @(Compact ? "print-chart-compact" : string.Empty)" aria-label="Printable chart for @Section.Title">
     @if (ChartSeries.Count > 0)
     {
         @((MarkupString)BuildSvg())
@@ -16,12 +17,17 @@
 
 @code {
     [Parameter, EditorRequired] public MultiCropReportSectionDto Section { get; set; } = default!;
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public bool Rotated { get; set; }
+    [Parameter] public double? FixedAxisMaximum { get; set; }
 
-    private const double PlotLeft = 70;
-    private const double PlotRight = 980;
-    private const double PlotTop = 65;
-    private const double PlotBottom = 385;
     private const int TickCount = 5;
+
+    private double PlotLeft => Rotated ? 250 : 70;
+    private double PlotRight => 980;
+    private double PlotTop => 65;
+    private double PlotBottom => Compact ? 780 : 385;
+    private double ViewBoxHeight => Compact ? 900 : 560;
 
     private sealed record Category(string Code, string Label);
     private sealed record BarGeometry(double X, double Y, double Width, double Height);
@@ -71,12 +77,14 @@
         }
     }
 
-    private double AxisMaximum => NiceAxisMaximum(ChartSeries
-        .SelectMany(series => series.Points)
-        .Where(point => point.Value.HasValue)
-        .Select(point => point.Value!.Value)
-        .DefaultIfEmpty(0)
-        .Max());
+    private double AxisMaximum => FixedAxisMaximum is > 0
+        ? FixedAxisMaximum.Value
+        : NiceAxisMaximum(ChartSeries
+            .SelectMany(series => series.Points)
+            .Where(point => point.Value.HasValue)
+            .Select(point => point.Value!.Value)
+            .DefaultIfEmpty(0)
+            .Max());
 
     private IEnumerable<double> YTicks => Enumerable.Range(0, TickCount + 1)
         .Select(index => AxisMaximum * index / TickCount);
@@ -104,6 +112,18 @@
         return new BarGeometry(x, y, Math.Max(1, barWidth - 1), Math.Max(0, PlotBottom - y));
     }
 
+    private double ValueX(double value) => PlotLeft + ((value / AxisMaximum) * (PlotRight - PlotLeft));
+
+    private BarGeometry RotatedBar(int categoryIndex, int seriesIndex, double value)
+    {
+        var groupHeight = (PlotBottom - PlotTop) / Math.Max(1, Categories.Count);
+        var availableHeight = groupHeight * 0.72;
+        var barHeight = Math.Max(2, Math.Min(16, availableHeight / Math.Max(1, ChartSeries.Count)));
+        var barsHeight = barHeight * ChartSeries.Count;
+        var y = PlotTop + (categoryIndex * groupHeight) + ((groupHeight - barsHeight) / 2) + (seriesIndex * barHeight);
+        return new BarGeometry(PlotLeft, y, Math.Max(0, ValueX(value) - PlotLeft), Math.Max(1, barHeight - 1));
+    }
+
     private static double? CurrentValue(MultiCropReportSeriesDto series, string metricCode) =>
         series.Points.FirstOrDefault(point =>
             string.Equals(point.MetricCode, metricCode, StringComparison.OrdinalIgnoreCase))?.Value;
@@ -120,7 +140,8 @@
     private string BuildSvg()
     {
         var svg = new StringBuilder();
-        svg.Append("<svg viewBox=\"0 0 1000 560\" role=\"img\" aria-label=\"")
+        svg.Append("<svg viewBox=\"0 0 1000 ").Append(SvgNumber(ViewBoxHeight))
+            .Append("\" role=\"img\" aria-label=\"")
             .Append(Encode($"{Section.Title} chart"))
             .Append("\"><title>")
             .Append(Encode(Section.Title))
@@ -128,24 +149,36 @@
 
         AppendLegend(svg);
 
-        foreach (var tick in YTicks)
+        if (Rotated && !Section.IsHistorical)
         {
-            var y = ValueY(tick);
-            svg.Append("<line class=\"grid-line\" x1=\"70\" x2=\"980\" y1=\"")
-                .Append(SvgNumber(y)).Append("\" y2=\"").Append(SvgNumber(y)).Append("\"/>");
-            AppendText(svg, "axis-label y-label", 58, y + 5, FormatValue(tick), "end");
-        }
-
-        svg.Append("<line class=\"axis-line\" x1=\"70\" x2=\"70\" y1=\"25\" y2=\"385\"/>")
-            .Append("<line class=\"axis-line\" x1=\"70\" x2=\"980\" y1=\"385\" y2=\"385\"/>");
-
-        if (Section.IsHistorical)
-        {
-            AppendHistoricalChart(svg);
+            AppendRotatedCurrentChart(svg);
         }
         else
         {
-            AppendCurrentChart(svg);
+            foreach (var tick in YTicks)
+            {
+                var y = ValueY(tick);
+                svg.Append("<line class=\"grid-line\" x1=\"").Append(SvgNumber(PlotLeft))
+                    .Append("\" x2=\"").Append(SvgNumber(PlotRight)).Append("\" y1=\"")
+                    .Append(SvgNumber(y)).Append("\" y2=\"").Append(SvgNumber(y)).Append("\"/>");
+                AppendText(svg, "axis-label y-label", PlotLeft - 12, y + 5, FormatValue(tick), "end");
+            }
+
+            svg.Append("<line class=\"axis-line\" x1=\"").Append(SvgNumber(PlotLeft))
+                .Append("\" x2=\"").Append(SvgNumber(PlotLeft)).Append("\" y1=\"25\" y2=\"")
+                .Append(SvgNumber(PlotBottom)).Append("\"/>")
+                .Append("<line class=\"axis-line\" x1=\"").Append(SvgNumber(PlotLeft))
+                .Append("\" x2=\"").Append(SvgNumber(PlotRight)).Append("\" y1=\"")
+                .Append(SvgNumber(PlotBottom)).Append("\" y2=\"").Append(SvgNumber(PlotBottom)).Append("\"/>");
+
+            if (Section.IsHistorical)
+            {
+                AppendHistoricalChart(svg);
+            }
+            else
+            {
+                AppendCurrentChart(svg);
+            }
         }
 
         return svg.Append("</svg>").ToString();
@@ -179,8 +212,9 @@
         {
             var x = DateX(date);
             svg.Append("<line class=\"axis-tick\" x1=\"").Append(SvgNumber(x))
-                .Append("\" x2=\"").Append(SvgNumber(x)).Append("\" y1=\"385\" y2=\"393\"/>");
-            AppendText(svg, "axis-label", x, 414, date.ToString("dd MMM yy"), "middle");
+                .Append("\" x2=\"").Append(SvgNumber(x)).Append("\" y1=\"").Append(SvgNumber(PlotBottom))
+                .Append("\" y2=\"").Append(SvgNumber(PlotBottom + 8)).Append("\"/>");
+            AppendText(svg, "axis-label", x, PlotBottom + 29, date.ToString("dd MMM yy"), "middle");
         }
     }
 
@@ -225,8 +259,51 @@
             }
 
             var labelX = CategoryX(categoryIndex);
-            AppendText(svg, "axis-label category-label", labelX, 410, ShortLabel(category.Label), "end",
-                $"rotate(-60 {SvgNumber(labelX)} 410)");
+            var labelY = PlotBottom + 25;
+            AppendText(svg, "axis-label category-label", labelX, labelY, ShortLabel(category.Label), "end",
+                $"rotate(-60 {SvgNumber(labelX)} {SvgNumber(labelY)})");
+        }
+    }
+
+    private void AppendRotatedCurrentChart(StringBuilder svg)
+    {
+        foreach (var tick in YTicks)
+        {
+            var x = ValueX(tick);
+            svg.Append("<line class=\"grid-line\" x1=\"").Append(SvgNumber(x))
+                .Append("\" x2=\"").Append(SvgNumber(x)).Append("\" y1=\"").Append(SvgNumber(PlotTop))
+                .Append("\" y2=\"").Append(SvgNumber(PlotBottom)).Append("\"/>");
+            AppendText(svg, "axis-label", x, PlotBottom + 29, FormatValue(tick), "middle");
+        }
+
+        svg.Append("<line class=\"axis-line\" x1=\"").Append(SvgNumber(PlotLeft))
+            .Append("\" x2=\"").Append(SvgNumber(PlotLeft)).Append("\" y1=\"").Append(SvgNumber(PlotTop))
+            .Append("\" y2=\"").Append(SvgNumber(PlotBottom)).Append("\"/>")
+            .Append("<line class=\"axis-line\" x1=\"").Append(SvgNumber(PlotLeft))
+            .Append("\" x2=\"").Append(SvgNumber(PlotRight)).Append("\" y1=\"").Append(SvgNumber(PlotBottom))
+            .Append("\" y2=\"").Append(SvgNumber(PlotBottom)).Append("\"/>");
+
+        for (var categoryIndex = 0; categoryIndex < Categories.Count; categoryIndex++)
+        {
+            var category = Categories[categoryIndex];
+            var groupHeight = (PlotBottom - PlotTop) / Math.Max(1, Categories.Count);
+            var labelY = PlotTop + ((categoryIndex + 0.5) * groupHeight) + 4;
+            AppendText(svg, "axis-label category-label", PlotLeft - 12, labelY, ShortLabel(category.Label, 31), "end");
+
+            for (var seriesIndex = 0; seriesIndex < ChartSeries.Count; seriesIndex++)
+            {
+                var value = CurrentValue(ChartSeries[seriesIndex], category.Code);
+                if (!value.HasValue) continue;
+
+                var bar = RotatedBar(categoryIndex, seriesIndex, value.Value);
+                svg.Append("<rect class=\"chart-bar\" x=\"").Append(SvgNumber(bar.X))
+                    .Append("\" y=\"").Append(SvgNumber(bar.Y))
+                    .Append("\" width=\"").Append(SvgNumber(bar.Width))
+                    .Append("\" height=\"").Append(SvgNumber(bar.Height))
+                    .Append("\" fill=\"").Append(SeriesColour(seriesIndex)).Append("\"><title>")
+                    .Append(Encode($"{ChartSeries[seriesIndex].Name} - {category.Label}: {value.Value:0.##}"))
+                    .Append("</title></rect>");
+            }
         }
     }
 
@@ -250,12 +327,12 @@
 
     private static string FormatValue(double value) => value.ToString(value >= 10 ? "0" : "0.##");
     private static string SvgNumber(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
-    private static string ShortLabel(string value) => value.Length <= 22 ? value : $"{value[..19]}...";
+    private static string ShortLabel(string value, int maximumLength = 22) =>
+        value.Length <= maximumLength ? value : $"{value[..(maximumLength - 3)]}...";
     private static string Encode(string value) => WebUtility.HtmlEncode(value);
 
     private static string SeriesColour(int index)
     {
-        string[] colours = ["#007cba", "#00654e", "#7a4cc2", "#df7b00", "#cf3651", "#4a4f54", "#00a1a3", "#7b8f20"];
-        return colours[index % colours.Length];
+        return UtilsService.ChartPalette[index % UtilsService.ChartPalette.Length];
     }
 }

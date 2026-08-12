@@ -1,0 +1,597 @@
+@page "/surveys/banana/{SurveyId:int}/report"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@using MetaGrow.Web.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject ITgsApiService TgsApi
+@inject NavigationManager Navigation
+@inject IJSRuntime JavaScript
+
+<PageTitle>Banana survey @SurveyId | MetaGrow</PageTitle>
+
+<div class="banana-report @(Print ? "print-layout" : string.Empty) @(_includePhotosForPrint ? "include-print-photos" : string.Empty)">
+    @if (_loading)
+    {
+        <div class="report-loading" role="status">
+            <div class="spinner-border" aria-hidden="true"></div>
+            <span>Building banana survey report...</span>
+        </div>
+    }
+    else if (_report is null)
+    {
+        <div class="title">
+            <h1 class="title-header-text">Banana survey @SurveyId</h1>
+            <div class="title-content-text">Online report</div>
+        </div>
+        <div class="alert alert-danger" role="alert">
+            <strong>The report could not be loaded.</strong>
+            @if (!string.IsNullOrWhiteSpace(_errorMessage))
+            {
+                <span> @_errorMessage</span>
+            }
+        </div>
+        <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
+    }
+    else
+    {
+        <div class="report-toolbar no-print" role="toolbar" aria-label="Banana report tools">
+            <div class="report-toolbar-navigation">
+                <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
+                <DxButton Text="Edit survey" RenderStyle="ButtonRenderStyle.Secondary" Click="EditSurvey" />
+            </div>
+            <div class="report-toolbar-controls">
+                <div class="report-brand-option">
+                    <label for="banana-report-brand">Report brand</label>
+                    <DxComboBox Id="banana-report-brand"
+                                Data="@ReportBranding.Options"
+                                @bind-Value="_reportBrandKey"
+                                TextFieldName="Label"
+                                ValueFieldName="Key"
+                                AllowUserInput="false" />
+                </div>
+                @if (_report.Photos.Count > 0)
+                {
+                    <div class="print-photo-option" title="Photos are excluded from printed reports unless selected">
+                        <DxCheckBox @bind-Checked="_includePhotosForPrint">Include photos in printout</DxCheckBox>
+                    </div>
+                }
+                <DxButton Text="Print / save PDF" RenderStyle="ButtonRenderStyle.Primary" Click="PrintReportAsync" />
+            </div>
+        </div>
+
+        <header class="report-header">
+            <div class="report-title-block">
+                <img class="report-cover-logo" src="@SelectedBrand.LogoPath" alt="@SelectedBrand.AltText" />
+                <span class="report-eyebrow">Banana survey</span>
+                <h1>@_report.PropertyName</h1>
+                <p>Crop health and productivity report</p>
+            </div>
+        </header>
+
+        <section class="report-meta" aria-label="Survey details">
+            <div><span>Survey date</span><strong>@_report.SurveyDate.ToString("dd MMMM yyyy")</strong></div>
+            <div><span>Agronomist</span><strong>@_report.AgronomistName</strong></div>
+            <div><span>Status</span><strong>@_report.StatusName</strong></div>
+            <div><span>Survey ID</span><strong>@_report.SurveyId</strong></div>
+            <div><span>Leaf records</span><strong>@_report.LeafCount</strong></div>
+        </section>
+
+        @if (_report.KeyFindings.Count > 0)
+        {
+            <section class="report-panel key-findings" aria-labelledby="banana-key-findings-title">
+                <div class="section-heading">
+                    <span class="section-kicker">At a glance</span>
+                    <h2 id="banana-key-findings-title">Key findings</h2>
+                </div>
+                <ol>
+                    @foreach (var finding in _report.KeyFindings)
+                    {
+                        <li>@finding</li>
+                    }
+                </ol>
+            </section>
+        }
+
+        @if (_report.Comments.Count > 0)
+        {
+            <section class="report-panel observations-section" aria-labelledby="banana-observations-title">
+                <img class="section-brand-logo print-only" src="@SelectedBrand.LogoPath" alt="@SelectedBrand.AltText" />
+                <div class="section-heading">
+                    <span class="section-kicker">Agronomist notes</span>
+                    <h2 id="banana-observations-title">Observations</h2>
+                </div>
+                <div class="comment-grid">
+                    @foreach (var comment in _report.Comments)
+                    {
+                        <article>
+                            @if (!string.Equals(comment.Title, "Agronomist comments", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <h3>@comment.Title</h3>
+                            }
+                            <p>@comment.Text</p>
+                        </article>
+                    }
+                </div>
+            </section>
+        }
+
+        @foreach (var table in _report.Tables)
+        {
+            var tableId = $"banana-table-{table.Code}";
+            <section class="report-panel summary-panel wide-print-section" aria-labelledby="@tableId">
+                <img class="section-brand-logo print-only" src="@SelectedBrand.LogoPath" alt="@SelectedBrand.AltText" />
+                <div class="section-heading">
+                    <span class="section-kicker">Current survey</span>
+                    <h2 id="@tableId">@table.Title</h2>
+                    @if (!string.IsNullOrWhiteSpace(table.Description))
+                    {
+                        <p>@table.Description</p>
+                    }
+                </div>
+                <div class="summary-scroll">
+                    <table class="summary-table @(string.Equals(table.Code, "pest-summary", StringComparison.OrdinalIgnoreCase) ? "pest-summary-table" : string.Empty)">
+                        <thead>
+                            <tr>
+                                <th scope="col">Block</th>
+                                @foreach (var column in table.Columns)
+                                {
+                                    <th scope="col">
+                                        <span class="summary-header-text">
+                                            <span>@column.Label</span>
+                                            @if (!string.IsNullOrWhiteSpace(column.ScaleText))
+                                            {
+                                                <small>@column.ScaleText</small>
+                                            }
+                                        </span>
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in table.Rows)
+                            {
+                                <tr class="@(row.IsFarmAverage ? "farm-average" : string.Empty)">
+                                    <th scope="row">@row.Label</th>
+                                    @foreach (var column in table.Columns)
+                                    {
+                                        <td>@FormatValue(TableValue(row, column.Code))</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+
+        @if (_report.RustThrips is { Rows.Count: > 0, Dates.Count: > 0 })
+        {
+            <section class="report-panel summary-panel wide-print-section" aria-labelledby="rust-thrips-history-title">
+                <img class="section-brand-logo print-only" src="@SelectedBrand.LogoPath" alt="@SelectedBrand.AltText" />
+                <div class="section-heading">
+                    <span class="section-kicker">Survey history</span>
+                    <h2 id="rust-thrips-history-title">Rust thrips history</h2>
+                    <p class="rust-thrips-legend">
+                        <span class="rust-thrips-key rust-thrips-present">P</span> Present on pseudostem
+                        <span class="rust-thrips-key rust-thrips-marks">M</span> Feeding marks
+                    </p>
+                </div>
+                <div class="summary-scroll">
+                    <table class="summary-table rust-thrips-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Block</th>
+                                @foreach (var date in _report.RustThrips.Dates)
+                                {
+                                    <th scope="col">@date.ToString("dd MMM yyyy")</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _report.RustThrips.Rows)
+                            {
+                                <tr>
+                                    <th scope="row">@row.BlockName</th>
+                                    @for (var index = 0; index < _report.RustThrips.Dates.Count; index++)
+                                    {
+                                        <td class="@RustThripsCssClass(row, index)">@RustThripsValue(row, index)</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+
+        <div class="chart-pairs">
+        @foreach (var chartPair in ChartPairs)
+        {
+            <div class="chart-pair">
+            @foreach (var chart in chartPair)
+            {
+                var chartId = $"banana-chart-{chart.Code}";
+                <section class="report-panel chart-panel" aria-labelledby="@chartId">
+                <img class="section-brand-logo print-only" src="@SelectedBrand.LogoPath" alt="@SelectedBrand.AltText" />
+                <div class="section-heading">
+                    <span class="section-kicker">@(chart.IsHistorical ? "Survey history" : "Current survey")</span>
+                    <h2 id="@chartId">@chart.Title</h2>
+                    <p class="no-print">Move over a point or bar for its value. Select a legend item to show or hide that series.</p>
+                    @if (!string.IsNullOrWhiteSpace(chart.ValueScaleText))
+                    {
+                        <p>Values: @chart.ValueScaleText</p>
+                    }
+                </div>
+
+                @if (chart.IsHistorical)
+                {
+                    var points = HistoricalChartPoints(chart);
+                    <DxChart Data="@points"
+                             Width="100%"
+                             CssClass="report-chart interactive-chart"
+                             Palette="@UtilsService.ChartPalette"
+                             PaletteExtensionMode="ChartPaletteExtensionMode.Blend">
+                        <DxChartArgumentAxis>
+                            <DxChartAxisLabel Format="ChartElementFormat.ShortDate" />
+                        </DxChartArgumentAxis>
+                        @foreach (var series in chart.Series)
+                        {
+                            var seriesName = series.Name;
+                            <DxChartLineSeries Name="@seriesName"
+                                               ArgumentField="@((BananaHistoryChartPoint point) => point.Date)"
+                                               ValueField="@((BananaHistoryChartPoint point) => point.Value)"
+                                               Filter="@((BananaHistoryChartPoint point) => point.SeriesName == seriesName)" />
+                        }
+                        <DxChartLegend Position="RelativePosition.Outside" Orientation="Orientation.Horizontal" AllowToggleSeries="true" />
+                        <DxChartTooltip Enabled="true" Position="RelativePosition.Outside">
+                            <div class="chart-tooltip">
+                                <strong>@context.Point.SeriesName</strong>
+                                <span>@context.Point.Argument</span>
+                                <span>@context.Point.Value</span>
+                            </div>
+                        </DxChartTooltip>
+                    </DxChart>
+                }
+                else
+                {
+                    var points = CurrentChartPoints(chart);
+                    <DxChart Data="@points"
+                             Width="100%"
+                             Rotated="true"
+                             CssClass="report-chart interactive-chart"
+                             Palette="@UtilsService.ChartPalette"
+                             PaletteExtensionMode="ChartPaletteExtensionMode.Blend">
+                        <DxChartArgumentAxis Type="ChartAxisType.Discrete" DiscreteDivisionMode="ChartDiscreteAxisDivisionMode.CrossLabels" />
+                        @foreach (var series in chart.Series)
+                        {
+                            var seriesName = series.Name;
+                            <DxChartBarSeries Name="@seriesName"
+                                              ArgumentField="@((BananaCurrentChartPoint point) => point.Category)"
+                                              ValueField="@((BananaCurrentChartPoint point) => point.Value)"
+                                              Filter="@((BananaCurrentChartPoint point) => point.SeriesName == seriesName)" />
+                        }
+                        @if (chart.Code is "mites-beneficials" or "soil-moisture")
+                        {
+                            <DxChartValueAxis>
+                                <DxChartAxisRange StartValue="@(0d)" EndValue="@(5d)" />
+                            </DxChartValueAxis>
+                        }
+                        else if (chart.Code == "leaf-disease")
+                        {
+                            <DxChartValueAxis>
+                                <DxChartAxisRange StartValue="@(0d)" EndValue="@(100d)" />
+                            </DxChartValueAxis>
+                        }
+                        <DxChartLegend Position="RelativePosition.Outside" Orientation="Orientation.Horizontal" AllowToggleSeries="true" />
+                        <DxChartTooltip Enabled="true" Position="RelativePosition.Outside">
+                            <div class="chart-tooltip">
+                                <strong>@context.Point.SeriesName</strong>
+                                <span>@context.Point.Argument</span>
+                                <span>@context.Point.Value</span>
+                            </div>
+                        </DxChartTooltip>
+                    </DxChart>
+                }
+                    <MultiCropPrintChart Section="@AsPrintSection(chart)"
+                                         Compact="true"
+                                         Rotated="@(!chart.IsHistorical)"
+                                         FixedAxisMaximum="@(chart.Code == "soil-moisture" ? 5d : (double?)null)" />
+                </section>
+            }
+            </div>
+        }
+        </div>
+
+        @foreach (var actionGroup in ActionGroups)
+        {
+            var actionGroupId = $"banana-actions-{actionGroup.ActionGroupId}";
+            <section class="report-panel operational-section" aria-labelledby="@actionGroupId">
+                <div class="operational-heading">
+                    <div>
+                        <span class="section-kicker">Work instructions</span>
+                        <h2 id="@actionGroupId">@ActionGroupTitle(actionGroup.Name)</h2>
+                    </div>
+                    <img class="handout-brand-logo" src="@SelectedBrand.LogoPath" alt="@SelectedBrand.AltText" />
+                </div>
+                @ReportContext()
+                <div class="action-table-scroll">
+                    <table class="action-table">
+                        <thead>
+                            <tr><th>Date</th><th>Recommendation</th><th>Blocks</th><th>Notes</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var action in actionGroup.Actions)
+                            {
+                                <tr>
+                                    <td>@ActionDateText(action)</td>
+                                    <td>@action.Recommendation</td>
+                                    <td>@action.Blocks</td>
+                                    <td>@action.Notes</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+
+        @if (_report.Actions.Count > 0 && ChecklistBlocks.Count > 0)
+        {
+            <section class="report-panel operational-section action-checklist-section print-only" aria-labelledby="banana-action-checklist-title">
+                <div class="operational-heading">
+                    <div>
+                        <span class="section-kicker">Work instructions</span>
+                        <h2 id="banana-action-checklist-title">Action checklist</h2>
+                    </div>
+                    <img class="handout-brand-logo" src="@SelectedBrand.LogoPath" alt="@SelectedBrand.AltText" />
+                </div>
+                @ReportContext()
+                <div class="action-checklist-scroll">
+                    <table class="action-checklist-table">
+                        <thead>
+                            <tr>
+                                <th class="checklist-date">Date</th>
+                                <th class="checklist-action">Action</th>
+                                @foreach (var block in ChecklistBlocks)
+                                {
+                                    <th class="checklist-block"><span>@block</span></th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var action in _report.Actions)
+                            {
+                                <tr>
+                                    <td>@ActionDateText(action)</td>
+                                    <td><strong>@ActionGroupTitle(action.ActionGroupName)</strong><span>@action.Recommendation</span></td>
+                                    @foreach (var block in ChecklistBlocks)
+                                    {
+                                        var applies = ActionAppliesToBlock(action, block);
+                                        <td class="@(applies ? "checklist-target" : "checklist-not-applicable")">@(applies ? "☐" : string.Empty)</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="checklist-note">Tick each applicable block when the work has been completed.</p>
+            </section>
+        }
+
+        @if (_report.Photos.Count > 0)
+        {
+            <section class="report-panel photo-section" aria-labelledby="banana-photos-title">
+                <img class="section-brand-logo print-only" src="@SelectedBrand.LogoPath" alt="@SelectedBrand.AltText" />
+                <div class="section-heading">
+                    <span class="section-kicker">Field images</span>
+                    <h2 id="banana-photos-title">Survey photos</h2>
+                    <p>Select an image to open the full-size version from the Total Grower Services image library.</p>
+                </div>
+                <div class="photo-grid">
+                    @foreach (var photo in _report.Photos.OrderBy(photo => photo.DisplayOrder))
+                    {
+                        <figure>
+                            <a class="photo-link" href="@photo.Url" target="_blank" rel="noopener noreferrer">
+                                <img src="@photo.Url" alt="@PhotoHeading(photo)" loading="lazy" />
+                                <span class="photo-open-cue no-print">Open full size</span>
+                            </a>
+                            <figcaption>
+                                <strong>@PhotoHeading(photo)</strong>
+                                @if (!string.IsNullOrWhiteSpace(photo.Comments))
+                                {
+                                    <span>@photo.Comments</span>
+                                }
+                            </figcaption>
+                        </figure>
+                    }
+                </div>
+            </section>
+        }
+
+        <footer class="report-footer">
+            <span>MetaGrow Crop Intelligence</span>
+            <span>Banana survey @_report.SurveyId</span>
+        </footer>
+    }
+</div>
+
+@code {
+    [Parameter] public int SurveyId { get; set; }
+    [SupplyParameterFromQuery(Name = "print")] public bool Print { get; set; }
+
+    private BananaOnlineReportDto? _report;
+    private bool _loading;
+    private bool _printInvoked;
+    private bool _includePhotosForPrint;
+    private string _reportBrandKey = ReportBranding.MetagenKey;
+    private string? _errorMessage;
+
+    private ReportBrandOption SelectedBrand => ReportBranding.Get(_reportBrandKey);
+    private sealed record BananaCurrentChartPoint(string SeriesName, string Category, double Value);
+    private sealed record BananaHistoryChartPoint(string SeriesName, DateTime Date, double Value);
+    private sealed record BananaActionGroup(int ActionGroupId, string Name, IReadOnlyList<BananaReportActionDto> Actions);
+
+    private IReadOnlyList<BananaActionGroup> ActionGroups => _report?.Actions
+        .GroupBy(action => new
+        {
+            action.ActionGroupId,
+            Name = string.IsNullOrWhiteSpace(action.ActionGroupName) ? "Actions" : action.ActionGroupName.Trim()
+        })
+        .Select(group => new BananaActionGroup(group.Key.ActionGroupId, group.Key.Name, group.ToList()))
+        .ToList() ?? [];
+
+    private IEnumerable<BananaReportChartDto[]> ChartPairs =>
+        _report is null ? [] : _report.Charts.Chunk(2);
+
+    private IReadOnlyList<string> ChecklistBlocks
+    {
+        get
+        {
+            var summaryBlocks = _report?.Tables
+                .FirstOrDefault(table => string.Equals(table.Code, "pest-summary", StringComparison.OrdinalIgnoreCase))?
+                .Rows
+                .Where(row => !row.IsFarmAverage && !string.IsNullOrWhiteSpace(row.Label))
+                .Select(row => row.Label.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList() ?? [];
+
+            if (summaryBlocks.Count > 0) return summaryBlocks;
+
+            return _report?.Actions
+                .SelectMany(action => action.Blocks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(block => block)
+                .ToList() ?? [];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _report = null;
+        _errorMessage = null;
+        _printInvoked = false;
+        _includePhotosForPrint = false;
+        _reportBrandKey = ReportBranding.MetagenKey;
+
+        try
+        {
+            _report = await TgsApi.GetBananaOnlineReport(SurveyId);
+            if (_report is null) _errorMessage = TgsApi.ErrorMessage ?? "No report data was found for this survey.";
+        }
+        catch (Exception exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Print && _report is not null && !_printInvoked)
+        {
+            _printInvoked = true;
+            await PrintReportAsync();
+        }
+    }
+
+    private RenderFragment ReportContext() => @<dl class="handout-context">
+        <div><dt>Property</dt><dd>@_report!.PropertyName</dd></div>
+        <div><dt>Survey date</dt><dd>@_report!.SurveyDate.ToString("dd MMMM yyyy")</dd></div>
+        <div><dt>Survey ID</dt><dd>@_report!.SurveyId</dd></div>
+        <div><dt>Agronomist</dt><dd>@_report!.AgronomistName</dd></div>
+    </dl>;
+
+    private void BackToSurveys() => Navigation.NavigateTo("/surveys/banana");
+    private void EditSurvey() => Navigation.NavigateTo($"/surveys/banana/{SurveyId}/edit");
+
+    private async Task PrintReportAsync()
+    {
+        if (_report is null) return;
+        var fileName = BananaReportFileName.Build(_report.PropertyName, _report.PropertyId, _report.SurveyDate);
+        await JavaScript.InvokeVoidAsync("metaGrowReportPrinting.print", fileName, Print ? 1500 : 0);
+    }
+
+    private static double? TableValue(BananaReportTableRowDto row, string code) =>
+        row.Values.FirstOrDefault(value => string.Equals(value.Code, code, StringComparison.OrdinalIgnoreCase))?.Value;
+
+    private static string FormatValue(double? value) => value?.ToString("0.##") ?? "—";
+    private static string RustThripsValue(BananaRustThripsRowDto row, int index) =>
+        index < row.Values.Count && !string.IsNullOrWhiteSpace(row.Values[index]) ? row.Values[index] : "—";
+
+    private static string RustThripsCssClass(BananaRustThripsRowDto row, int index) =>
+        RustThripsValue(row, index).Trim().ToUpperInvariant() switch
+        {
+            "P" => "rust-thrips-status rust-thrips-present",
+            "M" => "rust-thrips-status rust-thrips-marks",
+            _ => string.Empty
+        };
+
+    private static List<BananaCurrentChartPoint> CurrentChartPoints(BananaReportChartDto chart) =>
+        chart.Series.SelectMany(series => series.Points
+            .Where(point => !string.IsNullOrWhiteSpace(point.Category) && point.Value.HasValue)
+            .Select(point => new BananaCurrentChartPoint(series.Name, point.Category!, point.Value!.Value)))
+            .ToList();
+
+    private static List<BananaHistoryChartPoint> HistoricalChartPoints(BananaReportChartDto chart) =>
+        chart.Series.SelectMany(series => series.Points
+            .Where(point => point.Date.HasValue && point.Value.HasValue)
+            .Select(point => new BananaHistoryChartPoint(series.Name, point.Date!.Value, point.Value!.Value)))
+            .ToList();
+
+    private static MultiCropReportSectionDto AsPrintSection(BananaReportChartDto chart)
+    {
+        var categories = chart.Series
+            .SelectMany(series => series.Points)
+            .Where(point => !string.IsNullOrWhiteSpace(point.Category))
+            .Select(point => point.Category!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new MultiCropReportSectionDto
+        {
+            Code = chart.Code,
+            Title = chart.Title,
+            IsHistorical = chart.IsHistorical,
+            Metrics = categories.Select((category, index) => new MultiCropReportMetricDefinitionDto
+            {
+                MetricCode = category,
+                MetricLabel = category,
+                SortOrder = index
+            }).ToList(),
+            Series = chart.Series.Select(series => new MultiCropReportSeriesDto
+            {
+                Name = series.Name,
+                Points = series.Points.Select(point => new MultiCropReportPointDto
+                {
+                    MetricCode = point.Category ?? string.Empty,
+                    MetricLabel = point.Category ?? string.Empty,
+                    Date = point.Date,
+                    Value = point.Value
+                }).ToList()
+            }).ToList()
+        };
+    }
+
+    private static string ActionGroupTitle(string name) =>
+        name.Contains("spray", StringComparison.OrdinalIgnoreCase) ? "Spray recommendations" : name;
+
+    private static string ActionDateText(BananaReportActionDto action) =>
+        action.ActionDate?.ToString("dd/MM/yyyy") ?? "—";
+
+    private static bool ActionAppliesToBlock(BananaReportActionDto action, string block) =>
+        action.Blocks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(value => string.Equals(value, block, StringComparison.OrdinalIgnoreCase));
+
+    private static string PhotoHeading(BananaReportPhotoDto photo)
+    {
+        if (!string.IsNullOrWhiteSpace(photo.BlockName) && photo.PlantNo.HasValue)
+            return $"{photo.BlockName}, plant {photo.PlantNo}";
+        if (!string.IsNullOrWhiteSpace(photo.BlockName)) return photo.BlockName;
+        return photo.PlantNo.HasValue ? $"Plant {photo.PlantNo}" : "Survey photo";
+    }
+}

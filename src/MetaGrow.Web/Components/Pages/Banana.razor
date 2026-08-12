@@ -1,3 +1,301 @@
 @page "/surveys/banana"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using MetaGrow.Shared
+@using Metagen.Shared.Services
+@using System.Text.Json
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject ITgsApiService TgsApi
+@inject IJSRuntime JS
+
 <PageTitle>Banana surveys | MetaGrow</PageTitle>
-<ModuleLanding Title="Banana surveys" Description="A dedicated dashboard for the distinct banana survey structure." />
+
+<div class="banana-page">
+    <div class="title">
+        <div class="title-header-text">Banana surveys</div>
+        <div class="title-content-text">Find an existing banana survey and continue its review.</div>
+    </div>
+
+    <section class="filter-panel" aria-labelledby="banana-search-heading">
+        <div class="filter-heading">
+            <div>
+                <h2 id="banana-search-heading">Find surveys</h2>
+                <p>Choose the survey period, then narrow the results by property or status.</p>
+            </div>
+            <div class="filter-actions">
+                <DxButton Text="Clear" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearFiltersAsync" Enabled="@(!_loading)" />
+                <DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="SearchAsync" Enabled="@(!_loading)" />
+            </div>
+        </div>
+
+        <div class="filter-grid">
+            <div class="filter-field">
+                <label for="banana-start-date">From</label>
+                <DxDateEdit Id="banana-start-date" @bind-Date="_startDate" @bind-Date:after="DateRangeChangedAsync" DisplayFormat="dd/MM/yyyy" />
+            </div>
+            <div class="filter-field">
+                <label for="banana-end-date">To</label>
+                <DxDateEdit Id="banana-end-date" @bind-Date="_endDate" @bind-Date:after="DateRangeChangedAsync" DisplayFormat="dd/MM/yyyy" />
+            </div>
+            <div class="filter-field property-filter">
+                <label for="banana-property">Property</label>
+                <DxTextBox Id="banana-property" @bind-Text="_propertySearch" @bind-Text:after="SaveFiltersAsync"
+                           NullText="Type a property name" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="300"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div class="filter-field">
+                <label for="banana-status">Status</label>
+                <DxComboBox Id="banana-status" Data="@StatusOptions" @bind-Value="_statusId" @bind-Value:after="SaveFiltersAsync"
+                            TextFieldName="@nameof(StatusOption.StatusName)" ValueFieldName="@nameof(StatusOption.StatusId)"
+                            NullText="All statuses" AllowUserInput="false"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+        </div>
+    </section>
+
+    @if (_loading)
+    {
+        <div class="loading-state" role="status">
+            <div class="spinner-border spinner-border-sm" aria-hidden="true"></div>
+            <span>Loading banana surveys...</span>
+        </div>
+    }
+    else if (_errorMessage is not null)
+    {
+        <div class="alert alert-danger" role="alert">
+            <strong>Surveys could not be loaded.</strong> @_errorMessage
+        </div>
+    }
+    else
+    {
+        <div class="result-heading">
+            <div>
+                <h2>Results</h2>
+                <span>@ResultSummary</span>
+            </div>
+            @if (_surveys.Count > 0)
+            {
+                <DxButton Text="Choose columns" RenderStyle="ButtonRenderStyle.Secondary" Click="ShowColumnChooser" CssClass="desktop-only" />
+            }
+        </div>
+
+        @if (_surveys.Count == 0)
+        {
+            <div class="empty-state">
+                <strong>No surveys were found.</strong>
+                <span>Try a wider date range.</span>
+            </div>
+        }
+        else if (FilteredSurveys.Count == 0)
+        {
+            <div class="empty-state">
+                <strong>No surveys match the current filters.</strong>
+                <span>Clear the property or status filter to see more results.</span>
+            </div>
+        }
+        else
+        {
+            <div class="desktop-results">
+                <DxGrid @ref="_grid" Data="@FilteredSurveys" PageSize="20" ShowAllRows="false"
+                        TextWrapEnabled="false" HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn"
+                        CssClass="banana-grid">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.SurveyDate)" Caption="Date" Width="110px" DisplayFormat="dd/MM/yyyy" />
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.PropertyName)" Caption="Property" MinWidth="190" />
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.AgronomistName)" Caption="Agronomist" MinWidth="150" />
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.StatusName)" Caption="Status" Width="150px">
+                            <CellDisplayTemplate Context="cell">
+                                @{ var survey = (BananaSurveySummaryDto)cell.DataItem; }
+                                <span class="status-badge @MultiCropSurveyFilter.StatusBadgeClass(survey.StatusName)">@survey.StatusName</span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.LeafCount)" Caption="Leaf" Width="70px" />
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.IsBwbSurvey)" Caption="BWB" Width="70px">
+                            <CellDisplayTemplate Context="cell">@Flag(((BananaSurveySummaryDto)cell.DataItem).IsBwbSurvey)</CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.IsPhmbSurvey)" Caption="PHMB" Width="75px">
+                            <CellDisplayTemplate Context="cell">@Flag(((BananaSurveySummaryDto)cell.DataItem).IsPhmbSurvey)</CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.IsSoilHealthSurvey)" Caption="Soil Hlth" Width="85px">
+                            <CellDisplayTemplate Context="cell">@Flag(((BananaSurveySummaryDto)cell.DataItem).IsSoilHealthSurvey)</CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.PhotoCount)" Caption="Photos" Width="75px" />
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.LastModified)" Caption="Modified" Width="110px" DisplayFormat="dd/MM/yyyy" Visible="false" />
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.SurveyHours)" Caption="Survey hours" Width="110px" DisplayFormat="N2" Visible="false" />
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.ReportHours)" Caption="Report hours" Width="110px" DisplayFormat="N2" Visible="false" />
+                        <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.ModifiedBy)" Caption="Modified by" MinWidth="150" Visible="false" />
+                        <DxGridDataColumn Caption="Actions" Width="185px" AllowSort="false">
+                            <CellDisplayTemplate Context="cell">
+                                @{ var survey = (BananaSurveySummaryDto)cell.DataItem; }
+                                <div class="report-links">
+                                    <a href="@EditSurveyUrl(survey)">Edit</a>
+                                    <a href="@OnlineReportUrl(survey)">Online</a>
+                                    <a href="@PrintReportUrl(survey)">Print</a>
+                                </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </div>
+
+            <div class="mobile-results">
+                @foreach (var survey in FilteredSurveys)
+                {
+                    <article class="survey-card">
+                        <div class="survey-card-heading">
+                            <div>
+                                <strong>@survey.PropertyName</strong>
+                                <span>@survey.SurveyDate.ToString("dd MMM yyyy")</span>
+                            </div>
+                            <span class="status-badge @MultiCropSurveyFilter.StatusBadgeClass(survey.StatusName)">@survey.StatusName</span>
+                        </div>
+                        <dl>
+                            <div><dt>Agronomist</dt><dd>@survey.AgronomistName</dd></div>
+                            <div><dt>Leaf records</dt><dd>@survey.LeafCount</dd></div>
+                            <div><dt>Survey types</dt><dd>@SurveyTypeSummary(survey)</dd></div>
+                            <div><dt>Photos</dt><dd>@survey.PhotoCount</dd></div>
+                        </dl>
+                        <div class="survey-card-actions">
+                            <a class="btn btn-primary" href="@EditSurveyUrl(survey)">Edit survey</a>
+                            <a class="btn btn-outline-secondary" href="@OnlineReportUrl(survey)">Online report</a>
+                            <a class="btn btn-outline-secondary" href="@PrintReportUrl(survey)">Print report</a>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private IGrid? _grid;
+    private const string FilterCookieName = "metagrow.banana.filters";
+    private readonly DateTime _today = DateTime.Today;
+    private DateTime _startDate;
+    private DateTime _endDate;
+    private string? _propertySearch;
+    private int? _statusId;
+    private bool _loading = true;
+    private string? _errorMessage;
+    private List<BananaSurveySummaryDto> _surveys = [];
+
+    private sealed record StatusOption(int StatusId, string StatusName);
+
+    private IReadOnlyList<StatusOption> StatusOptions => _surveys
+        .GroupBy(survey => new { survey.StatusId, survey.StatusName })
+        .Select(group => new StatusOption(group.Key.StatusId, group.Key.StatusName))
+        .OrderBy(status => status.StatusName)
+        .ToList();
+
+    private IReadOnlyList<BananaSurveySummaryDto> FilteredSurveys =>
+        BananaSurveyFilter.Apply(_surveys, _propertySearch, _statusId);
+
+    private string ResultSummary => FilteredSurveys.Count == _surveys.Count
+        ? $"{_surveys.Count} survey{(_surveys.Count == 1 ? string.Empty : "s")}"
+        : $"{FilteredSurveys.Count} of {_surveys.Count} surveys";
+
+    protected override void OnInitialized() =>
+        ApplyFilters(BananaSurveyFilterPreferences.CreateDefault(_today));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await RestoreFiltersAsync();
+        await LoadSurveysAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadSurveysAsync()
+    {
+        if (_endDate.Date < _startDate.Date)
+        {
+            _errorMessage = "The end date must be on or after the start date.";
+            return;
+        }
+
+        _loading = true;
+        _errorMessage = null;
+        try
+        {
+            var surveys = await TgsApi.GetBananaSurveySummaries(_startDate.Date, _endDate.Date);
+            _surveys = surveys ?? [];
+            _errorMessage = surveys is null
+                ? TgsApi.ErrorMessage ?? "The banana surveys could not be loaded from the TGS API."
+                : null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        await SaveFiltersAsync();
+        await LoadSurveysAsync();
+    }
+
+    private async Task DateRangeChangedAsync()
+    {
+        await SaveFiltersAsync();
+        await LoadSurveysAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        ApplyFilters(BananaSurveyFilterPreferences.CreateDefault(_today));
+        await SaveFiltersAsync();
+        await LoadSurveysAsync();
+    }
+
+    private async Task RestoreFiltersAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("metaGrowFilterPreferences.get", FilterCookieName);
+            if (string.IsNullOrWhiteSpace(json)) return;
+            var filters = JsonSerializer.Deserialize<BananaSurveyFilterPreferences>(json);
+            if (filters?.HasValidDateRange == true) ApplyFilters(filters);
+        }
+        catch (JsonException)
+        {
+            ApplyFilters(BananaSurveyFilterPreferences.CreateDefault(_today));
+        }
+    }
+
+    private async Task SaveFiltersAsync()
+    {
+        var filters = new BananaSurveyFilterPreferences(
+            _startDate.Date,
+            _endDate.Date,
+            _propertySearch,
+            _statusId);
+        await JS.InvokeVoidAsync(
+            "metaGrowFilterPreferences.set",
+            FilterCookieName,
+            JsonSerializer.Serialize(filters));
+    }
+
+    private void ApplyFilters(BananaSurveyFilterPreferences filters)
+    {
+        _startDate = filters.StartDate.Date;
+        _endDate = filters.EndDate.Date;
+        _propertySearch = filters.PropertySearch;
+        _statusId = filters.StatusId;
+    }
+
+    private void ShowColumnChooser() => _grid?.ShowColumnChooser();
+    private static string EditSurveyUrl(BananaSurveySummaryDto survey) => $"/surveys/banana/{survey.SurveyId}/edit";
+    private static string OnlineReportUrl(BananaSurveySummaryDto survey) => $"/surveys/banana/{survey.SurveyId}/report";
+    private static string PrintReportUrl(BananaSurveySummaryDto survey) => $"/surveys/banana/{survey.SurveyId}/report?print=true";
+    private static string Flag(bool value) => value ? "Yes" : "—";
+
+    private static string SurveyTypeSummary(BananaSurveySummaryDto survey)
+    {
+        var types = new List<string>();
+        if (survey.IsBwbSurvey) types.Add("BWB");
+        if (survey.IsPhmbSurvey) types.Add("PHMB");
+        if (survey.IsSoilHealthSurvey) types.Add("Soil health");
+        return types.Count == 0 ? "Standard" : string.Join(", ", types);
+    }
+}

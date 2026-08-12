@@ -10,7 +10,10 @@
 .mg-hero { max-width: 48rem; }
 .mg-eyebrow { color: var(--mg-blue, #007cba); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .mg-hero h1 { font-size: 2rem; margin: 0.4rem 0; }
-.mg-hero p { color: var(--dxds-color-content-neutral-subdued-rest); margin: 0 0 1.25rem; }
+.mg-hero p {
+    color: #c9c9c9;
+    margin: 0 0 1.25rem;
+}
 .mg-keyline { border: 0; border-top: 2px solid var(--mg-red, #d1242b); margin: 0; width: 5rem; }
 h2 { margin-bottom: 0.25rem; }
 .section-intro { color: var(--dxds-color-content-neutral-subdued-rest); margin: 0 0 1rem; }
