@@ -1,4 +1,5 @@
 using MetaGrow.Api.Data;
+using ApiModels.MetaGrow;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -60,4 +61,44 @@ public sealed class ApplicationDbContextTests
 
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
+
+    [Fact]
+    public async Task Only_one_open_property_deletion_request_is_allowed_per_property()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using (var setup = new ApplicationDbContext(options))
+        {
+            await setup.Database.EnsureCreatedAsync();
+            setup.PropertyDeletionRequests.Add(DeletionRequest(MetaGrowPropertyDeletionStatus.Pending));
+            await setup.SaveChangesAsync();
+        }
+
+        await using (var duplicate = new ApplicationDbContext(options))
+        {
+            duplicate.PropertyDeletionRequests.Add(DeletionRequest(MetaGrowPropertyDeletionStatus.Processing));
+            await Assert.ThrowsAsync<DbUpdateException>(() => duplicate.SaveChangesAsync());
+        }
+
+        await using (var historical = new ApplicationDbContext(options))
+        {
+            historical.PropertyDeletionRequests.Add(DeletionRequest(MetaGrowPropertyDeletionStatus.Completed));
+            await historical.SaveChangesAsync();
+        }
+    }
+
+    private static PropertyDeletionRequest DeletionRequest(MetaGrowPropertyDeletionStatus status) => new()
+    {
+        Id = Guid.NewGuid(),
+        PropertyId = 123,
+        PropertyName = "Example farm",
+        Status = status,
+        RequestedByUserId = "user",
+        RequestedByEmail = "user@example.com",
+        RequestedUtc = DateTime.UtcNow
+    };
 }

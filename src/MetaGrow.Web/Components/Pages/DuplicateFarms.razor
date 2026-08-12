@@ -1,0 +1,493 @@
+@page "/farms/duplicates"
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@using ApiModels
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Models
+@using Metagen.Shared.Services
+@using MetaGrow.Web.Services
+@inject ITgsApiService TgsApi
+@inject IStringSimilarityService Similarity
+@inject PropertyDeletionApiClient Deletions
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Potential duplicate farms | MetaGrow</PageTitle>
+
+<div class="duplicate-farms-page">
+    <header class="duplicate-farms-hero">
+        <div>
+            <span class="eyebrow">Farm administration</span>
+            <h1>Potential duplicate farms</h1>
+            <p>Review farm names that may have been misspelled, mistyped or entered twice.</p>
+        </div>
+        <DxButton Text="@(_isReviewer ? "Back to farm setup" : "Back to dashboard")" RenderStyle="ButtonRenderStyle.Secondary"
+                  RenderStyleMode="ButtonRenderStyleMode.Outline" Click="BackToFarmSetup" />
+    </header>
+
+    <section class="review-note" aria-label="How duplicate detection works">
+        <span class="note-icon" aria-hidden="true">i</span>
+        <div>
+            <strong>Review list only</strong>
+            <p>Names are compared after ignoring spacing and punctuation. The safety check reads every table with a PropertyId column; no farms are changed or combined here.</p>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="page-message error" role="alert">@_error</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="page-message @(_messageIsError ? "error" : "success")" role="status">@_message</div>
+    }
+
+    @if (_loading)
+    {
+        <div class="loading-state"><DxWaitIndicator Visible="true" /><span>Checking farm names...</span></div>
+    }
+    else if (string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="summary-strip" aria-label="Duplicate review summary">
+            <div><strong>@_candidates.Count</strong><span>Candidate pairs</span></div>
+            <div><strong>@AffectedFarmCount</strong><span>Farms to review</span></div>
+            <div><strong>@VeryHighCount</strong><span>Very high confidence</span></div>
+            <div><strong>@DeleteEligibleCount</strong><span>Delete eligible</span></div>
+        </div>
+
+        @if (_deletionRequests.Count > 0)
+        {
+            <section class="approval-card" aria-labelledby="deletion-queue-heading">
+                <div class="approval-heading">
+                    <div>
+                        <span class="eyebrow">Deletion approval</span>
+                        <h2 id="deletion-queue-heading">@(_isReviewer ? "Requests awaiting review" : "Your pending requests")</h2>
+                    </div>
+                    <span class="result-count">@_deletionRequests.Count pending</span>
+                </div>
+                <div class="approval-list">
+                    @foreach (var request in _deletionRequests)
+                    {
+                        <article class="approval-row">
+                            <div>
+                                <strong>@request.PropertyName</strong>
+                                <span>Farm @request.PropertyId · requested by @request.RequestedByEmail · @request.RequestedUtc.ToLocalTime().ToString("dd MMM yyyy h:mm tt")</span>
+                                @if (!string.IsNullOrWhiteSpace(request.LastError))
+                                {
+                                    <small class="approval-error">Last attempt: @request.LastError</small>
+                                }
+                            </div>
+                            @if (_isReviewer)
+                            {
+                                <div class="approval-actions">
+                                    <DxButton Text="Reject" RenderStyle="ButtonRenderStyle.Secondary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyPropertyId is null)" Click="@(() => RejectAsync(request))" />
+                                    <DxButton Text="Approve and delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyPropertyId is null)" Click="@(() => ApproveAsync(request))" />
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="merge-state pending-approval">Awaiting approval</span>
+                            }
+                        </article>
+                    }
+                </div>
+            </section>
+        }
+
+        <section class="filter-card" aria-labelledby="duplicate-filter-heading">
+            <div class="filter-heading">
+                <div>
+                    <span class="eyebrow">Review queue</span>
+                    <h2 id="duplicate-filter-heading">Filter candidates</h2>
+                </div>
+                <span class="result-count">@FilteredCandidates.Count @ResultText(FilteredCandidates.Count)</span>
+            </div>
+            <div class="filter-grid">
+                <div class="filter-field name-filter">
+                    <label for="duplicate-name-filter">Farm name</label>
+                    <DxTextBox Id="duplicate-name-filter" @bind-Text="_nameFilter"
+                               BindValueMode="BindValueMode.OnDelayedInput" InputDelay="200"
+                               NullText="Search either farm name"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </div>
+                <div class="filter-field">
+                    <label for="duplicate-confidence-filter">Confidence</label>
+                    <DxComboBox Id="duplicate-confidence-filter" Data="@ConfidenceOptions" @bind-Value="_confidenceFilter"
+                                AllowUserInput="false" />
+                </div>
+                <div class="filter-check">
+                    <DxCheckBox @bind-Checked="_includeInactive">Include inactive farms</DxCheckBox>
+                </div>
+                <DxButton Text="Clear filters" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ClearFilters" />
+            </div>
+        </section>
+
+        @if (_candidates.Count == 0)
+        {
+            <section class="clear-state">
+                <div class="clear-icon" aria-hidden="true">✓</div>
+                <h2>No likely duplicates found</h2>
+                <p>The current farm names do not contain any close matches under these detection rules.</p>
+            </section>
+        }
+        else if (FilteredCandidates.Count == 0)
+        {
+            <section class="empty-state">
+                <h2>No candidates match these filters</h2>
+                <p>Clear the filters or include inactive farms to see more results.</p>
+            </section>
+        }
+        else
+        {
+            <section class="candidate-card" aria-label="Potential duplicate farm pairs">
+                <div class="candidate-table-wrap">
+                    <table class="candidate-table">
+                        <thead>
+                            <tr>
+                                <th>Confidence</th>
+                                <th>Farm record</th>
+                                <th>Possible duplicate</th>
+                                <th>Why it was flagged</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var candidate in FilteredCandidates)
+                            {
+                                <tr>
+                                    <td class="confidence-column">
+                                        <span class="confidence @ConfidenceCss(candidate.Confidence)">@ConfidenceText(candidate.Confidence)</span>
+                                    </td>
+                                    <td>@FarmCell(candidate.First)</td>
+                                    <td>@FarmCell(candidate.Second)</td>
+                                    <td class="explanation-column">@candidate.Explanation</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+    }
+</div>
+
+<ConfirmDialog @ref="_confirm" />
+
+@code {
+    private static readonly string[] ConfidenceOptions = ["All", "Very high", "Likely", "Possible"];
+
+    private List<PropertyDuplicateCandidate> _candidates = [];
+    private Dictionary<int, PropertyBlockCount> _blockCounts = [];
+    private Dictionary<int, PropertyDependencySummary> _dependencySummaries = [];
+    private List<MetaGrowPropertyDeletionDto> _deletionRequests = [];
+    private ConfirmDialog? _confirm;
+    private string? _nameFilter;
+    private string _confidenceFilter = "All";
+    private string? _error;
+    private string? _message;
+    private int? _busyPropertyId;
+    private bool _includeInactive = true;
+    private bool _loading = true;
+    private bool _isReviewer;
+    private bool _messageIsError;
+
+    private List<PropertyDuplicateCandidate> FilteredCandidates => _candidates
+        .Where(candidate => _includeInactive || (candidate.First.IsActive && candidate.Second.IsActive))
+        .Where(candidate => string.IsNullOrWhiteSpace(_nameFilter) ||
+                            (candidate.First.PropertyName?.Contains(_nameFilter.Trim(), StringComparison.OrdinalIgnoreCase) ?? false) ||
+                            (candidate.Second.PropertyName?.Contains(_nameFilter.Trim(), StringComparison.OrdinalIgnoreCase) ?? false))
+        .Where(candidate => _confidenceFilter == "All" || ConfidenceText(candidate.Confidence) == _confidenceFilter)
+        .ToList();
+
+    private int AffectedFarmCount => _candidates
+        .SelectMany(candidate => new[] { candidate.First.PropertyId, candidate.Second.PropertyId })
+        .Distinct()
+        .Count();
+
+    private int VeryHighCount => _candidates.Count(candidate => candidate.Confidence == PropertyDuplicateConfidence.VeryHigh);
+
+    private int DeleteEligibleCount => _candidates
+        .SelectMany(candidate => new[] { candidate.First.PropertyId, candidate.Second.PropertyId })
+        .Distinct()
+        .Count(propertyId => _dependencySummaries.GetValueOrDefault(propertyId)?.PhysicalDeleteAllowed == true);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _isReviewer = user.IsInRole(MetaGrowRoles.Admin) || user.IsInRole(MetaGrowRoles.AgricultureManager);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var properties = await TgsApi.GetProperties();
+            if (properties is null)
+            {
+                _error = TgsApi.ErrorMessage ?? "The farm list could not be loaded.";
+                return;
+            }
+
+            var blockCounts = await TgsApi.GetPropertyBlockCounts();
+            if (blockCounts is null)
+            {
+                _error = TgsApi.ErrorMessage ?? "Farm block counts could not be loaded.";
+                return;
+            }
+
+            _blockCounts = blockCounts.ToDictionary(item => item.PropertyId);
+            _candidates = await Task.Run(() => Similarity.FindPotentialDuplicateProperties(properties));
+
+            var candidateIds = _candidates
+                .SelectMany(candidate => new[] { candidate.First.PropertyId, candidate.Second.PropertyId })
+                .Distinct()
+                .ToArray();
+            if (candidateIds.Length > 0)
+            {
+                var dependencies = await TgsApi.GetPropertyDependencySummaries(candidateIds);
+                if (dependencies is null)
+                {
+                    _error = TgsApi.ErrorMessage ?? "The farm safety checks could not be loaded.";
+                    return;
+                }
+
+                _dependencySummaries = dependencies.ToDictionary(item => item.PropertyId);
+            }
+
+            var (deletionRequests, deletionError) = await Deletions.GetPendingAsync();
+            if (deletionRequests is null)
+            {
+                _error = deletionError ?? "Property deletion requests could not be loaded.";
+                return;
+            }
+
+            _deletionRequests = deletionRequests.ToList();
+        }
+        catch (Exception exception)
+        {
+            _error = "Potential duplicate farms could not be calculated. " + exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private RenderFragment FarmCell(ApiModels.Property farm) => @<div class="farm-cell">
+        <div class="farm-name-row">
+            <strong>@farm.PropertyName</strong>
+            <span class="record-status @(farm.IsActive ? "active" : "inactive")">@(farm.IsActive ? "Active" : "Inactive")</span>
+        </div>
+        <div class="farm-meta">
+            <span>Farm @farm.PropertyId</span>
+            @if (_isReviewer)
+            {
+                <a href="@FarmUrl(farm.PropertyId)" target="_blank" rel="noopener">Open farm</a>
+            }
+        </div>
+        @BlockCounts(farm.PropertyId)
+        @DependencyAssessment(farm)
+    </div>;
+
+    private RenderFragment BlockCounts(int propertyId) => @<div class="block-counts">
+        @{ var counts = GetBlockCounts(propertyId); }
+        <span class="block-count banana">
+            <strong>@counts.BananaBlockCount</strong> banana @(counts.BananaBlockCount == 1 ? "block" : "blocks")
+            @if (counts.ActiveBananaBlockCount < counts.BananaBlockCount)
+            {
+                <small>@counts.ActiveBananaBlockCount active</small>
+            }
+        </span>
+        <span class="block-count multicrop">
+            <strong>@counts.MultiCropBlockCount</strong> multi-crop @(counts.MultiCropBlockCount == 1 ? "block" : "blocks")
+            @if (counts.ActiveMultiCropBlockCount < counts.MultiCropBlockCount)
+            {
+                <small>@counts.ActiveMultiCropBlockCount active</small>
+            }
+        </span>
+    </div>;
+
+    private PropertyBlockCount GetBlockCounts(int propertyId) =>
+        _blockCounts.GetValueOrDefault(propertyId) ?? new PropertyBlockCount { PropertyId = propertyId };
+
+    private RenderFragment DependencyAssessment(ApiModels.Property farm) => @<div class="dependency-assessment">
+        @if (!_dependencySummaries.TryGetValue(farm.PropertyId, out var summary))
+        {
+            <span class="merge-state unavailable">Safety check unavailable</span>
+        }
+        else if (summary.PhysicalDeleteAllowed)
+        {
+            <span class="merge-state delete-eligible">Delete eligible</span>
+            <small>No linked rows were found.</small>
+            @if (PendingRequest(farm.PropertyId) is not null)
+            {
+                <span class="merge-state pending-approval">Awaiting approval</span>
+            }
+            else
+            {
+                <DxButton Text="@(_isReviewer ? "Delete property" : "Request deletion")"
+                          RenderStyle="@(_isReviewer ? ButtonRenderStyle.Danger : ButtonRenderStyle.Secondary)"
+                          RenderStyleMode="@(_isReviewer ? ButtonRenderStyleMode.Contained : ButtonRenderStyleMode.Outline)"
+                          SizeMode="SizeMode.Small" Enabled="@(_busyPropertyId is null)"
+                          Click="@(() => ConfirmPropertyDeletionAsync(farm))" />
+            }
+        }
+        else
+        {
+            <span class="merge-state merge-required">Merge required</span>
+            <small>@summary.LinkedRowCount.ToString("N0") linked @(summary.LinkedRowCount == 1 ? "row" : "rows") in @summary.Dependencies.Count @(summary.Dependencies.Count == 1 ? "table" : "tables").</small>
+        }
+    </div>;
+
+    private MetaGrowPropertyDeletionDto? PendingRequest(int propertyId) =>
+        _deletionRequests.FirstOrDefault(request => request.PropertyId == propertyId);
+
+    private async Task ConfirmPropertyDeletionAsync(ApiModels.Property farm)
+    {
+        if (_confirm is null || _busyPropertyId is not null) return;
+
+        var confirmed = await _confirm.ShowAsync(
+            _isReviewer
+                ? $"Permanently delete {farm.PropertyName} (farm {farm.PropertyId})? The server will repeat the complete safety check before deletion."
+                : $"Request approval to delete {farm.PropertyName} (farm {farm.PropertyId})? A manager or administrator will review it before anything is deleted.",
+            _isReviewer ? "Delete property" : "Request property deletion",
+            _isReviewer ? "Delete permanently" : "Send request",
+            _isReviewer);
+        if (!confirmed) return;
+
+        _busyPropertyId = farm.PropertyId;
+        _message = null;
+        try
+        {
+            if (_isReviewer)
+            {
+                var (result, error) = await Deletions.DeleteImmediatelyAsync(farm.PropertyId);
+                if (result is null)
+                {
+                    ShowMessage(error ?? "The property could not be deleted.", true);
+                    return;
+                }
+
+                ShowMessage($"{result.PropertyName} was deleted.", false);
+                await LoadAsync();
+            }
+            else
+            {
+                var (request, error) = await Deletions.RequestAsync(farm.PropertyId);
+                if (request is null)
+                {
+                    ShowMessage(error ?? "The deletion request could not be sent.", true);
+                    return;
+                }
+
+                _deletionRequests.Add(request);
+                ShowMessage($"Deletion of {request.PropertyName} is awaiting manager or administrator approval.", false);
+            }
+        }
+        finally
+        {
+            _busyPropertyId = null;
+        }
+    }
+
+    private async Task ApproveAsync(MetaGrowPropertyDeletionDto request)
+    {
+        if (_confirm is null || _busyPropertyId is not null) return;
+        if (!await _confirm.ShowAsync(
+                $"Approve the request from {request.RequestedByEmail} and permanently delete {request.PropertyName} (farm {request.PropertyId})? The safety check will be repeated first.",
+                "Approve property deletion",
+                "Approve and delete",
+                true)) return;
+
+        _busyPropertyId = request.PropertyId;
+        _message = null;
+        try
+        {
+            var (completed, error) = await Deletions.ApproveAsync(request.Id);
+            if (completed is null)
+            {
+                ShowMessage(error ?? "The deletion request could not be approved.", true);
+                await RefreshDeletionRequestsAsync();
+                return;
+            }
+
+            ShowMessage($"{completed.PropertyName} was deleted and the request was completed.", false);
+            await LoadAsync();
+        }
+        finally
+        {
+            _busyPropertyId = null;
+        }
+    }
+
+    private async Task RejectAsync(MetaGrowPropertyDeletionDto request)
+    {
+        if (_confirm is null || _busyPropertyId is not null) return;
+        if (!await _confirm.ShowAsync(
+                $"Reject the request to delete {request.PropertyName} (farm {request.PropertyId})? No property data will be changed.",
+                "Reject deletion request",
+                "Reject request")) return;
+
+        _busyPropertyId = request.PropertyId;
+        _message = null;
+        try
+        {
+            var (rejected, error) = await Deletions.RejectAsync(request.Id);
+            if (rejected is null)
+            {
+                ShowMessage(error ?? "The deletion request could not be rejected.", true);
+                return;
+            }
+
+            _deletionRequests.RemoveAll(item => item.Id == request.Id);
+            ShowMessage($"The deletion request for {rejected.PropertyName} was rejected.", false);
+        }
+        finally
+        {
+            _busyPropertyId = null;
+        }
+    }
+
+    private async Task RefreshDeletionRequestsAsync()
+    {
+        var (requests, error) = await Deletions.GetPendingAsync();
+        if (requests is not null) _deletionRequests = requests.ToList();
+        else ShowMessage(error ?? "Property deletion requests could not be refreshed.", true);
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _messageIsError = isError;
+    }
+
+    private void ClearFilters()
+    {
+        _nameFilter = null;
+        _confidenceFilter = "All";
+        _includeInactive = true;
+    }
+
+    private void BackToFarmSetup() => Navigation.NavigateTo(_isReviewer ? "/farms" : "/");
+    private static string FarmUrl(int propertyId) => $"/farms?propertyId={propertyId}";
+    private static string ResultText(int count) => count == 1 ? "pair" : "pairs";
+
+    private static string ConfidenceText(PropertyDuplicateConfidence confidence) => confidence switch
+    {
+        PropertyDuplicateConfidence.VeryHigh => "Very high",
+        PropertyDuplicateConfidence.Likely => "Likely",
+        _ => "Possible"
+    };
+
+    private static string ConfidenceCss(PropertyDuplicateConfidence confidence) => confidence switch
+    {
+        PropertyDuplicateConfidence.VeryHigh => "very-high",
+        PropertyDuplicateConfidence.Likely => "likely",
+        _ => "possible"
+    };
+}

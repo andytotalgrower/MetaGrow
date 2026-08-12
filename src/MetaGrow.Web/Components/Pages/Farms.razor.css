@@ -2,6 +2,7 @@
 .farm-hero { align-items: center; background: linear-gradient(115deg, var(--mg-blue-0, #e7f5fb), transparent 70%); border-left: .3rem solid var(--mg-blue, #007cba); border-radius: .6rem; display: flex; gap: 1rem; justify-content: space-between; padding: 1.25rem 1.4rem; }
 .farm-hero h1 { font-size: clamp(1.55rem, 2.5vw, 2.15rem); margin: .15rem 0; }
 .farm-hero p { color: var(--dxds-color-content-neutral-subdued-rest); margin: 0; }
+.farm-hero-actions { align-items: center; display: flex; flex-wrap: wrap; gap: .55rem; }
 .eyebrow { color: var(--mg-blue, #007cba); font-size: .72rem; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
 .page-message { border-radius: .5rem; padding: .8rem 1rem; }
 .page-message.error { background: #fee2e2; color: #991b1b; }
@@ -89,6 +90,7 @@
 
 @media (max-width: 40rem) {
     .farm-hero, .detail-toolbar, .blocks-heading-row, .block-editor-heading { align-items: stretch; flex-direction: column; }
+    .farm-hero-actions { align-items: stretch; flex-direction: column; }
     .form-grid, .property-general, .block-form, .block-filter-row { grid-template-columns: 1fr; }
     .field.wide { grid-column: 1; }
     .compact-field { max-width: none; }

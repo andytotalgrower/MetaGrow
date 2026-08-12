@@ -5,6 +5,7 @@
 @inject ITgsApiService TgsApi
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 <PageTitle>Farm setup | MetaGrow</PageTitle>
 
@@ -15,7 +16,13 @@
             <h1>Farm setup</h1>
             <p>Find a property, maintain its details, then manage its banana and multi-crop blocks in one place.</p>
         </div>
-        <DxButton Text="New property" RenderStyle="ButtonRenderStyle.Primary" Click="NewProperty" Enabled="@(!_busy)" />
+        <div class="farm-hero-actions">
+            <DxButton Text="Potential duplicates" RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline" Click="OpenDuplicateFarms" />
+            <DxButton Text="Reporting groups" RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline" Click="OpenReportingGroups" />
+            <DxButton Text="New property" RenderStyle="ButtonRenderStyle.Primary" Click="NewProperty" Enabled="@(!_busy)" />
+        </div>
     </header>
 
     @if (!string.IsNullOrWhiteSpace(_message))
@@ -370,6 +377,13 @@
 </div>
 
 @code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "propertyId")]
+    public int? RequestedPropertyId { get; set; }
+
+    private void OpenDuplicateFarms() => Navigation.NavigateTo("/farms/duplicates");
+    private void OpenReportingGroups() => Navigation.NavigateTo("/farms/report-groups");
+
     private const string BananaBlockType = "banana";
     private const string MultiCropBlockType = "mcs";
     private const string PropertyFilterCookieName = "metagrow.farms.property-filter";
@@ -445,6 +459,9 @@
 
             if (_properties.Count == 0 && !string.IsNullOrWhiteSpace(TgsApi.ErrorMessage))
                 SetMessage("Farm setup could not be loaded. " + TgsApi.ErrorMessage, true);
+
+            if (RequestedPropertyId.HasValue && _properties.Any(item => item.PropertyId == RequestedPropertyId.Value))
+                await SelectPropertyAsync(RequestedPropertyId.Value);
         }
         finally
         {

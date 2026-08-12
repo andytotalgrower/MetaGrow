@@ -1,0 +1,482 @@
+@page "/farms/report-groups"
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager)]
+@using ApiModels
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@inject ITgsApiService TgsApi
+@inject NavigationManager Navigation
+
+<PageTitle>Reporting groups | MetaGrow</PageTitle>
+
+<div class="reporting-groups-page">
+    <header class="reporting-groups-hero">
+        <div>
+            <span class="eyebrow">Farm administration</span>
+            <h1>Reporting groups</h1>
+            <p>Group farms whose crop monitoring results can be combined in reporting charts.</p>
+        </div>
+        <div class="hero-actions">
+            <DxButton Text="Back to farm setup" RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline" Click="BackToFarmSetup" />
+            <DxButton Text="New reporting group" RenderStyle="ButtonRenderStyle.Primary"
+                      Click="NewGroup" Enabled="@(!_busy)" />
+        </div>
+    </header>
+
+    <section class="reporting-note" aria-label="How reporting groups are used">
+        <span class="note-icon" aria-hidden="true">i</span>
+        <div>
+            <strong>Used by grouped crop monitoring reports</strong>
+            <p>Each farm can belong to one reporting group. Removing a farm here stops it being combined with that group; it does not remove the farm or its surveys.</p>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="page-message @(_messageIsError ? "error" : "success")" role="status">@_message</div>
+    }
+
+    @if (_loading)
+    {
+        <div class="loading-state"><DxWaitIndicator Visible="true" /><span>Loading reporting groups...</span></div>
+    }
+    else
+    {
+        <div class="summary-strip" aria-label="Reporting group summary">
+            <div><strong>@_groups.Count</strong><span>Groups</span></div>
+            <div><strong>@AssignedPropertyCount</strong><span>Assigned farms</span></div>
+            <div><strong>@UnassignedPropertyCount</strong><span>Unassigned farms</span></div>
+        </div>
+
+        <div class="reporting-groups-workspace">
+            <aside class="group-browser" aria-labelledby="group-browser-heading">
+                <div class="panel-heading">
+                    <div>
+                        <span class="eyebrow">Report structure</span>
+                        <h2 id="group-browser-heading">Find a group</h2>
+                    </div>
+                    <span class="count-badge">@FilteredGroups.Count</span>
+                </div>
+
+                @if (_groups.Count > 0)
+                {
+                    <div class="filter-field">
+                        <label for="report-group-filter">Group name</label>
+                        <DxTextBox Id="report-group-filter" @bind-Text="_groupFilter"
+                                   BindValueMode="BindValueMode.OnDelayedInput" InputDelay="200"
+                                   NullText="Type any part of a name"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </div>
+                }
+
+                <div class="group-results">
+                    @if (FilteredGroups.Count == 0)
+                    {
+                        <div class="empty-compact">
+                            @(_groups.Count == 0 ? "No reporting groups have been created." : "No groups match that name.")
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var group in FilteredGroups)
+                        {
+                            <button type="button" class="group-result @(group.GroupId == _selectedGroupId && !_isNew ? "selected" : null)"
+                                    @onclick="@(() => SelectGroup(group))">
+                                <span class="group-result-name">@group.GroupName</span>
+                                <span class="group-result-meta">@PropertyCountText(group.Properties.Count)</span>
+                            </button>
+                        }
+                    }
+                </div>
+            </aside>
+
+            <main class="group-detail">
+                @if (_editor is null)
+                {
+                    <section class="welcome-state">
+                        <div class="welcome-icon" aria-hidden="true">◎</div>
+                        <h2>Choose a reporting group</h2>
+                        <p>Select a group to rename it or maintain the farms included in its grouped charts.</p>
+                        <DxButton Text="Create the first group" RenderStyle="ButtonRenderStyle.Primary" Click="NewGroup" />
+                    </section>
+                }
+                else
+                {
+                    <div class="detail-toolbar">
+                        <div>
+                            <span class="eyebrow">@(_isNew ? "New reporting group" : $"Reporting group {_editor.GroupId}")</span>
+                            <h2>@(string.IsNullOrWhiteSpace(_editor.GroupName) ? "Untitled group" : _editor.GroupName)</h2>
+                        </div>
+                        <div class="detail-actions">
+                            @if (!_isNew)
+                            {
+                                <DxButton Text="Delete group" RenderStyle="ButtonRenderStyle.Danger"
+                                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="DeleteGroupAsync" Enabled="@(!_busy)" />
+                            }
+                            <DxButton Text="@(_isNew ? "Create group" : "Save name")" RenderStyle="ButtonRenderStyle.Primary"
+                                      Click="SaveGroupAsync" Enabled="@(!_busy)" />
+                        </div>
+                    </div>
+
+                    <section class="detail-card" aria-labelledby="group-details-heading">
+                        <div class="section-heading">
+                            <span class="eyebrow">Reporting identity</span>
+                            <h3 id="group-details-heading">Group details</h3>
+                        </div>
+                        <div class="name-field">
+                            <label for="reporting-group-name">Group name *</label>
+                            <DxTextBox Id="reporting-group-name" @bind-Text="_editor.GroupName" MaxLength="45"
+                                       NullText="A clear name used by reporting staff" />
+                            <small>This name appears when a grouped report is selected.</small>
+                        </div>
+                    </section>
+
+                    @if (!_isNew)
+                    {
+                        <section class="detail-card membership-card" aria-labelledby="group-members-heading">
+                            <div class="membership-heading">
+                                <div class="section-heading">
+                                    <span class="eyebrow">Report membership</span>
+                                    <h3 id="group-members-heading">Farms in this group</h3>
+                                    <p>@PropertyCountText(_editor.Properties.Count) will be combined in grouped data charts.</p>
+                                </div>
+                                <span class="count-badge">@_editor.Properties.Count</span>
+                            </div>
+
+                            <div class="add-property-panel">
+                                <div class="add-property-field">
+                                    <label for="reporting-group-property">Add an unassigned farm</label>
+                                    <DxComboBox Id="reporting-group-property" Data="@AvailableProperties" @bind-Value="_propertyToAddId"
+                                                TextFieldName="@nameof(ApiModels.Property.PropertyName)"
+                                                ValueFieldName="@nameof(ApiModels.Property.PropertyId)"
+                                                SearchMode="ListSearchMode.AutoSearch"
+                                                SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                NullText="Search by farm name" />
+                                </div>
+                                <DxButton Text="Add farm" RenderStyle="ButtonRenderStyle.Primary" Click="AddPropertyAsync"
+                                          Enabled="@(!_busy && _propertyToAddId.HasValue)" />
+                            </div>
+                            @if (AvailableProperties.Count == 0)
+                            {
+                                <p class="availability-note">Every farm is already assigned to a reporting group.</p>
+                            }
+
+                            @if (_editor.Properties.Count > 0)
+                            {
+                                <div class="member-filter">
+                                    <label for="group-member-filter">Filter farms in this group</label>
+                                    <DxTextBox Id="group-member-filter" @bind-Text="_memberFilter"
+                                               BindValueMode="BindValueMode.OnDelayedInput" InputDelay="200"
+                                               NullText="Type any part of a farm name"
+                                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                                </div>
+                            }
+
+                            @if (FilteredMembers.Count == 0)
+                            {
+                                <div class="empty-members">
+                                    <strong>@(_editor.Properties.Count == 0 ? "No farms assigned" : "No matching farms")</strong>
+                                    <span>@(_editor.Properties.Count == 0 ? "Use the search above to add the first farm." : "Clear or change the filter to see this group's farms.")</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="member-table-wrap">
+                                    <table class="member-table">
+                                        <thead>
+                                            <tr><th>Farm</th><th>Status</th><th><span class="visually-hidden">Actions</span></th></tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var membership in FilteredMembers)
+                                            {
+                                                var farm = FindProperty(membership.PropertyId);
+                                                <tr>
+                                                    <td>@membership.PropertyName</td>
+                                                    <td>
+                                                        <span class="record-status @((farm?.IsActive ?? true) ? "active" : "inactive")">
+                                                            @((farm?.IsActive ?? true) ? "Active" : "Inactive")
+                                                        </span>
+                                                    </td>
+                                                    <td class="remove-column">
+                                                        <DxButton Text="Remove" RenderStyle="ButtonRenderStyle.Danger"
+                                                                  RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                                  Click="@(() => RemovePropertyAsync(membership))" Enabled="@(!_busy)" />
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </section>
+                    }
+                }
+            </main>
+        </div>
+    }
+</div>
+
+<ConfirmDialog @ref="_confirm" />
+
+@code {
+    private readonly List<ReportingGroup> _groups = [];
+    private readonly List<ApiModels.Property> _properties = [];
+    private ReportingGroup? _editor;
+    private ConfirmDialog? _confirm;
+    private int? _selectedGroupId;
+    private int? _propertyToAddId;
+    private string? _groupFilter;
+    private string? _memberFilter;
+    private string? _message;
+    private bool _messageIsError;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _isNew;
+
+    private List<ReportingGroup> FilteredGroups => _groups
+        .Where(group => string.IsNullOrWhiteSpace(_groupFilter) ||
+                        group.GroupName.Contains(_groupFilter.Trim(), StringComparison.OrdinalIgnoreCase))
+        .OrderBy(group => group.GroupName, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    private List<ReportingGroupProperty> FilteredMembers => (_editor?.Properties ?? [])
+        .Where(item => string.IsNullOrWhiteSpace(_memberFilter) ||
+                       item.PropertyName.Contains(_memberFilter.Trim(), StringComparison.OrdinalIgnoreCase))
+        .OrderBy(item => item.PropertyName, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    private HashSet<int> AssignedPropertyIds => _groups
+        .SelectMany(group => group.Properties)
+        .Select(item => item.PropertyId)
+        .ToHashSet();
+
+    private List<ApiModels.Property> AvailableProperties => _properties
+        .Where(property => !AssignedPropertyIds.Contains(property.PropertyId))
+        .OrderBy(property => property.PropertyName, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    private int AssignedPropertyCount => AssignedPropertyIds.Count;
+    private int UnassignedPropertyCount => _properties.Count(property => !AssignedPropertyIds.Contains(property.PropertyId));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync(int? groupId = null)
+    {
+        _loading = true;
+        try
+        {
+            var groups = await TgsApi.GetReportingGroups();
+            if (groups is null)
+            {
+                SetMessage(TgsApi.ErrorMessage ?? "Reporting groups could not be loaded.", true);
+                return;
+            }
+
+            var properties = await TgsApi.GetProperties();
+            if (properties is null)
+            {
+                SetMessage(TgsApi.ErrorMessage ?? "The farm list could not be loaded.", true);
+                return;
+            }
+
+            _groups.Clear();
+            _groups.AddRange(groups);
+            _properties.Clear();
+            _properties.AddRange(properties);
+
+            var selected = groupId.HasValue
+                ? _groups.FirstOrDefault(group => group.GroupId == groupId.Value)
+                : _groups.FirstOrDefault();
+
+            if (selected is not null) SelectGroup(selected);
+            else
+            {
+                _editor = null;
+                _selectedGroupId = null;
+                _isNew = false;
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void SelectGroup(ReportingGroup group)
+    {
+        _selectedGroupId = group.GroupId;
+        _editor = Clone(group);
+        _propertyToAddId = null;
+        _memberFilter = null;
+        _isNew = false;
+        ClearMessage();
+    }
+
+    private void NewGroup()
+    {
+        _selectedGroupId = null;
+        _editor = new ReportingGroup();
+        _propertyToAddId = null;
+        _memberFilter = null;
+        _isNew = true;
+        ClearMessage();
+    }
+
+    private async Task SaveGroupAsync()
+    {
+        if (_editor is null) return;
+        var wasNew = _isNew;
+        var name = _editor.GroupName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            SetMessage("Enter a reporting group name.", true);
+            return;
+        }
+
+        if (_groups.Any(group => group.GroupId != _editor.GroupId &&
+                                 string.Equals(group.GroupName.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+        {
+            SetMessage("A reporting group with that name already exists.", true);
+            return;
+        }
+
+        _editor.GroupName = name;
+        _busy = true;
+        try
+        {
+            var saved = _isNew
+                ? await TgsApi.CreateReportingGroup(_editor)
+                : await TgsApi.UpdateReportingGroup(_editor);
+
+            if (saved is null)
+            {
+                SetMessage(TgsApi.ErrorMessage ?? "The reporting group could not be saved.", true);
+                return;
+            }
+
+            await LoadAsync(saved.GroupId);
+            SetMessage(wasNew ? "Reporting group created." : "Reporting group name saved.");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteGroupAsync()
+    {
+        if (_editor is null || _isNew || _confirm is null) return;
+
+        var farmText = PropertyCountText(_editor.Properties.Count);
+        var confirmed = await _confirm.ShowAsync(
+            $"Delete '{_editor.GroupName}'? {farmText} will become unassigned, but no farms or surveys will be deleted.",
+            "Delete reporting group",
+            "Delete group",
+            danger: true);
+        if (!confirmed) return;
+
+        _busy = true;
+        try
+        {
+            if (!await TgsApi.DeleteReportingGroup(_editor.GroupId))
+            {
+                SetMessage(TgsApi.ErrorMessage ?? "The reporting group could not be deleted.", true);
+                return;
+            }
+
+            await LoadAsync();
+            SetMessage("Reporting group deleted. Its farms are now unassigned.");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AddPropertyAsync()
+    {
+        if (_editor is null || !_propertyToAddId.HasValue) return;
+
+        _busy = true;
+        try
+        {
+            if (!await TgsApi.AddPropertyToReportingGroup(_editor.GroupId, _propertyToAddId.Value))
+            {
+                SetMessage(TgsApi.ErrorMessage ?? "The farm could not be added to this reporting group.", true);
+                return;
+            }
+
+            var groupId = _editor.GroupId;
+            await LoadAsync(groupId);
+            SetMessage("Farm added to the reporting group.");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemovePropertyAsync(ReportingGroupProperty membership)
+    {
+        if (_editor is null || _confirm is null) return;
+
+        var confirmed = await _confirm.ShowAsync(
+            $"Remove '{membership.PropertyName}' from '{_editor.GroupName}'? The farm and its surveys will not be deleted.",
+            "Remove farm from group",
+            "Remove farm");
+        if (!confirmed) return;
+
+        _busy = true;
+        try
+        {
+            if (!await TgsApi.RemovePropertyFromReportingGroup(_editor.GroupId, membership.PropertyId))
+            {
+                SetMessage(TgsApi.ErrorMessage ?? "The farm could not be removed from this reporting group.", true);
+                return;
+            }
+
+            var groupId = _editor.GroupId;
+            await LoadAsync(groupId);
+            SetMessage("Farm removed from the reporting group.");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private ApiModels.Property? FindProperty(int propertyId) =>
+        _properties.FirstOrDefault(property => property.PropertyId == propertyId);
+
+    private void BackToFarmSetup() => Navigation.NavigateTo("/farms");
+
+    private static ReportingGroup Clone(ReportingGroup group) => new()
+    {
+        GroupId = group.GroupId,
+        GroupName = group.GroupName,
+        Properties = group.Properties.Select(item => new ReportingGroupProperty
+        {
+            GroupId = item.GroupId,
+            PropertyId = item.PropertyId,
+            PropertyName = item.PropertyName
+        }).ToList()
+    };
+
+    private static string PropertyCountText(int count) => $"{count} {(count == 1 ? "farm" : "farms")}";
+
+    private void SetMessage(string message, bool isError = false)
+    {
+        _message = message;
+        _messageIsError = isError;
+    }
+
+    private void ClearMessage()
+    {
+        _message = null;
+        _messageIsError = false;
+    }
+}

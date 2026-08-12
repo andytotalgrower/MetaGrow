@@ -25,4 +25,34 @@ public sealed class RoleContractTests
         Assert.Equal(MetaGrowRoles.All,
             authorization.Roles!.Split(',', StringSplitOptions.TrimEntries));
     }
+
+    [Fact]
+    public void Agronomists_can_submit_property_deletion_requests()
+    {
+        AssertRoles(nameof(PropertyDeletionsController.Create), [MetaGrowRoles.Agronomist]);
+    }
+
+    [Theory]
+    [InlineData(nameof(PropertyDeletionsController.DeleteImmediately))]
+    [InlineData(nameof(PropertyDeletionsController.Approve))]
+    [InlineData(nameof(PropertyDeletionsController.Reject))]
+    public void Only_managers_and_administrators_can_execute_property_deletion(string methodName)
+    {
+        AssertRoles(methodName, [MetaGrowRoles.Admin, MetaGrowRoles.AgricultureManager]);
+    }
+
+    [Fact]
+    public void Every_staff_role_can_view_the_relevant_deletion_queue()
+    {
+        AssertRoles(nameof(PropertyDeletionsController.GetPending), MetaGrowRoles.All);
+    }
+
+    private static void AssertRoles(string methodName, string[] expected)
+    {
+        var method = typeof(PropertyDeletionsController).GetMethod(methodName)!;
+        var authorization = Assert.Single(method.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>());
+
+        Assert.Equal(expected, authorization.Roles!.Split(',', StringSplitOptions.TrimEntries));
+    }
 }

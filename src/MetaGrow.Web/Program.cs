@@ -43,11 +43,13 @@ builder.Services.AddScoped<AuthApiClient>();
 builder.Services.AddScoped<ApiTokenService>();
 builder.Services.AddScoped<AccountApiClient>();
 builder.Services.AddScoped<ReportShareApiClient>();
+builder.Services.AddScoped<PropertyDeletionApiClient>();
 builder.Services.AddScoped<MfaFlowState>();
 builder.Services.AddScoped<MetaGrow.Web.Components.Account.IdentityRedirectManager>();
 
 builder.Services.AddScoped<EncryptionService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
+builder.Services.AddScoped<IStringSimilarityService, StringSimilarityService>();
 builder.Services.AddHttpClient<ITgsApiService, TgsApiService>(client =>
 {
     var developmentBaseUrl = builder.Configuration["TgsApi:DevelopmentBaseUrl"];
