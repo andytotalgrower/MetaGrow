@@ -8,6 +8,7 @@
 @inject ITgsApiService TgsApi
 @inject IStringSimilarityService Similarity
 @inject PropertyDeletionApiClient Deletions
+@inject PropertyMergeApiClient Merges
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 
@@ -28,7 +29,7 @@
         <span class="note-icon" aria-hidden="true">i</span>
         <div>
             <strong>Review list only</strong>
-            <p>Names are compared after ignoring spacing and punctuation. The safety check reads every table with a PropertyId column; no farms are changed or combined here.</p>
+            <p>Names are compared after ignoring spacing and punctuation. Choose a merge direction to review the farm fields, block matches and live collision checks before anything can be approved.</p>
         </div>
     </section>
 
@@ -53,6 +54,48 @@
             <div><strong>@VeryHighCount</strong><span>Very high confidence</span></div>
             <div><strong>@DeleteEligibleCount</strong><span>Delete eligible</span></div>
         </div>
+
+        @if (_mergeRequests.Count > 0)
+        {
+            <section class="approval-card" aria-labelledby="merge-queue-heading">
+                <div class="approval-heading">
+                    <div>
+                        <span class="eyebrow">Merge approval</span>
+                        <h2 id="merge-queue-heading">@(_isReviewer ? "Requests awaiting review" : "Your pending requests")</h2>
+                    </div>
+                    <span class="result-count">@_mergeRequests.Count pending</span>
+                </div>
+                <div class="approval-list">
+                    @foreach (var request in _mergeRequests)
+                    {
+                        <article class="approval-row">
+                            <div>
+                                <strong>@request.SourcePropertyName → @request.TargetPropertyName</strong>
+                                <span>Farm @request.SourcePropertyId into @request.TargetPropertyId · requested by @request.RequestedByEmail · @request.RequestedUtc.ToLocalTime().ToString("dd MMM yyyy h:mm tt")</span>
+                                @if (!string.IsNullOrWhiteSpace(request.LastError))
+                                {
+                                    <small class="approval-error">Last attempt: @request.LastError</small>
+                                }
+                            </div>
+                            @if (_isReviewer)
+                            {
+                                <div class="approval-actions">
+                                    <DxButton Text="Reject" RenderStyle="ButtonRenderStyle.Secondary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyPropertyId is null)" Click="@(() => RejectMergeAsync(request))" />
+                                    <DxButton Text="Review merge" RenderStyle="ButtonRenderStyle.Primary" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyPropertyId is null)" Click="@(() => ReviewMergeAsync(request))" />
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="merge-state pending-approval">Awaiting approval</span>
+                            }
+                        </article>
+                    }
+                </div>
+            </section>
+        }
 
         @if (_deletionRequests.Count > 0)
         {
@@ -149,6 +192,7 @@
                             <tr>
                                 <th>Confidence</th>
                                 <th>Farm record</th>
+                                <th class="merge-direction-heading">Merge direction</th>
                                 <th>Possible duplicate</th>
                                 <th>Why it was flagged</th>
                             </tr>
@@ -161,6 +205,7 @@
                                         <span class="confidence @ConfidenceCss(candidate.Confidence)">@ConfidenceText(candidate.Confidence)</span>
                                     </td>
                                     <td>@FarmCell(candidate.First)</td>
+                                    <td class="merge-direction-column">@MergeDirection(candidate)</td>
                                     <td>@FarmCell(candidate.Second)</td>
                                     <td class="explanation-column">@candidate.Explanation</td>
                                 </tr>
@@ -174,6 +219,7 @@
 </div>
 
 <ConfirmDialog @ref="_confirm" />
+<PropertyMergeReviewDialog @ref="_mergeDialog" IsReviewer="_isReviewer" MergeRequested="MergeRequestedAsync" />
 
 @code {
     private static readonly string[] ConfidenceOptions = ["All", "Very high", "Likely", "Possible"];
@@ -182,7 +228,9 @@
     private Dictionary<int, PropertyBlockCount> _blockCounts = [];
     private Dictionary<int, PropertyDependencySummary> _dependencySummaries = [];
     private List<MetaGrowPropertyDeletionDto> _deletionRequests = [];
+    private List<MetaGrowPropertyMergeRequestDto> _mergeRequests = [];
     private ConfirmDialog? _confirm;
+    private PropertyMergeReviewDialog? _mergeDialog;
     private string? _nameFilter;
     private string _confidenceFilter = "All";
     private string? _error;
@@ -267,6 +315,15 @@
             }
 
             _deletionRequests = deletionRequests.ToList();
+
+            var (mergeRequests, mergeError) = await Merges.GetPendingAsync();
+            if (mergeRequests is null)
+            {
+                _error = mergeError ?? "Property merge requests could not be loaded.";
+                return;
+            }
+
+            _mergeRequests = mergeRequests.ToList();
         }
         catch (Exception exception)
         {
@@ -346,6 +403,89 @@
 
     private MetaGrowPropertyDeletionDto? PendingRequest(int propertyId) =>
         _deletionRequests.FirstOrDefault(request => request.PropertyId == propertyId);
+
+    private MetaGrowPropertyMergeRequestDto? PendingMerge(int sourcePropertyId) =>
+        _mergeRequests.FirstOrDefault(request => request.SourcePropertyId == sourcePropertyId);
+
+    private RenderFragment MergeDirection(PropertyDuplicateCandidate candidate) => @<div class="merge-direction-buttons">
+        @{ var preferred = PreferredTargetId(candidate); }
+        <div title="Merge @candidate.First.PropertyName into @candidate.Second.PropertyName">
+            <DxButton Text="→" RenderStyle="@(preferred == candidate.Second.PropertyId ? ButtonRenderStyle.Primary : ButtonRenderStyle.Secondary)"
+                      RenderStyleMode="@(preferred == candidate.Second.PropertyId ? ButtonRenderStyleMode.Contained : ButtonRenderStyleMode.Outline)"
+                      SizeMode="SizeMode.Small" Enabled="@(PendingMerge(candidate.First.PropertyId) is null)"
+                      Click="@(() => OpenMergeAsync(candidate.First.PropertyId, candidate.Second.PropertyId))" />
+        </div>
+        <div title="Merge @candidate.Second.PropertyName into @candidate.First.PropertyName">
+            <DxButton Text="←" RenderStyle="@(preferred == candidate.First.PropertyId ? ButtonRenderStyle.Primary : ButtonRenderStyle.Secondary)"
+                      RenderStyleMode="@(preferred == candidate.First.PropertyId ? ButtonRenderStyleMode.Contained : ButtonRenderStyleMode.Outline)"
+                      SizeMode="SizeMode.Small" Enabled="@(PendingMerge(candidate.Second.PropertyId) is null)"
+                      Click="@(() => OpenMergeAsync(candidate.Second.PropertyId, candidate.First.PropertyId))" />
+        </div>
+        <small>Highlighted is preferred</small>
+    </div>;
+
+    private int PreferredTargetId(PropertyDuplicateCandidate candidate)
+    {
+        var firstScore = MergePreferenceScore(candidate.First.PropertyId);
+        var secondScore = MergePreferenceScore(candidate.Second.PropertyId);
+        return firstScore >= secondScore ? candidate.First.PropertyId : candidate.Second.PropertyId;
+    }
+
+    private long MergePreferenceScore(int propertyId)
+    {
+        var blocks = GetBlockCounts(propertyId);
+        var dependencies = _dependencySummaries.GetValueOrDefault(propertyId);
+        return ((long)blocks.BananaBlockCount + blocks.MultiCropBlockCount) * 1_000L +
+               Math.Min(dependencies?.LinkedRowCount ?? 0L, 100_000L) +
+               (dependencies?.IsActive == true ? 25L : 0L);
+    }
+
+    private Task OpenMergeAsync(int sourcePropertyId, int targetPropertyId) =>
+        _mergeDialog?.OpenAsync(sourcePropertyId, targetPropertyId) ?? Task.CompletedTask;
+
+    private Task ReviewMergeAsync(MetaGrowPropertyMergeRequestDto request) =>
+        _mergeDialog?.OpenAsync(request) ?? Task.CompletedTask;
+
+    private async Task MergeRequestedAsync()
+    {
+        await RefreshMergeRequestsAsync();
+        ShowMessage("The merge plan is awaiting manager or administrator approval.", false);
+    }
+
+    private async Task RejectMergeAsync(MetaGrowPropertyMergeRequestDto request)
+    {
+        if (_confirm is null || _busyPropertyId is not null) return;
+        if (!await _confirm.ShowAsync(
+                $"Reject the request to merge {request.SourcePropertyName} into {request.TargetPropertyName}? No farm data will be changed.",
+                "Reject merge request",
+                "Reject request")) return;
+
+        _busyPropertyId = request.SourcePropertyId;
+        _message = null;
+        try
+        {
+            var (rejected, error) = await Merges.RejectAsync(request.Id);
+            if (rejected is null)
+            {
+                ShowMessage(error ?? "The merge request could not be rejected.", true);
+                return;
+            }
+
+            _mergeRequests.RemoveAll(item => item.Id == request.Id);
+            ShowMessage($"The merge request for {rejected.SourcePropertyName} was rejected.", false);
+        }
+        finally
+        {
+            _busyPropertyId = null;
+        }
+    }
+
+    private async Task RefreshMergeRequestsAsync()
+    {
+        var (requests, error) = await Merges.GetPendingAsync();
+        if (requests is not null) _mergeRequests = requests.ToList();
+        else ShowMessage(error ?? "Property merge requests could not be refreshed.", true);
+    }
 
     private async Task ConfirmPropertyDeletionAsync(ApiModels.Property farm)
     {

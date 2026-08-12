@@ -44,6 +44,7 @@ builder.Services.AddScoped<ApiTokenService>();
 builder.Services.AddScoped<AccountApiClient>();
 builder.Services.AddScoped<ReportShareApiClient>();
 builder.Services.AddScoped<PropertyDeletionApiClient>();
+builder.Services.AddScoped<PropertyMergeApiClient>();
 builder.Services.AddScoped<MfaFlowState>();
 builder.Services.AddScoped<MetaGrow.Web.Components.Account.IdentityRedirectManager>();
 

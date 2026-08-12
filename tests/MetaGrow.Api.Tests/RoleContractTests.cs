@@ -47,9 +47,37 @@ public sealed class RoleContractTests
         AssertRoles(nameof(PropertyDeletionsController.GetPending), MetaGrowRoles.All);
     }
 
+    [Fact]
+    public void Agronomists_can_submit_property_merge_requests()
+    {
+        AssertRoles<PropertyMergesController>(nameof(PropertyMergesController.Create), [MetaGrowRoles.Agronomist]);
+    }
+
+    [Fact]
+    public void Only_managers_and_administrators_can_reject_property_merges()
+    {
+        AssertRoles<PropertyMergesController>(nameof(PropertyMergesController.Reject),
+            [MetaGrowRoles.Admin, MetaGrowRoles.AgricultureManager]);
+    }
+
+    [Fact]
+    public void Every_staff_role_can_view_the_relevant_merge_queue()
+    {
+        AssertRoles<PropertyMergesController>(nameof(PropertyMergesController.GetPending), MetaGrowRoles.All);
+    }
+
     private static void AssertRoles(string methodName, string[] expected)
     {
         var method = typeof(PropertyDeletionsController).GetMethod(methodName)!;
+        var authorization = Assert.Single(method.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>());
+
+        Assert.Equal(expected, authorization.Roles!.Split(',', StringSplitOptions.TrimEntries));
+    }
+
+    private static void AssertRoles<TController>(string methodName, string[] expected)
+    {
+        var method = typeof(TController).GetMethod(methodName)!;
         var authorization = Assert.Single(method.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
             .Cast<AuthorizeAttribute>());
 

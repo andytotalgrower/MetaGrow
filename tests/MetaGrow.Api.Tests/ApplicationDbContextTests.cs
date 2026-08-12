@@ -91,11 +91,55 @@ public sealed class ApplicationDbContextTests
         }
     }
 
+    [Fact]
+    public async Task Only_one_open_property_merge_request_is_allowed_per_source_property()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using (var setup = new ApplicationDbContext(options))
+        {
+            await setup.Database.EnsureCreatedAsync();
+            setup.PropertyMergeRequests.Add(MergeRequest(MetaGrowPropertyMergeStatus.Pending));
+            await setup.SaveChangesAsync();
+        }
+
+        await using (var duplicate = new ApplicationDbContext(options))
+        {
+            duplicate.PropertyMergeRequests.Add(MergeRequest(MetaGrowPropertyMergeStatus.Processing));
+            await Assert.ThrowsAsync<DbUpdateException>(() => duplicate.SaveChangesAsync());
+        }
+
+        await using (var historical = new ApplicationDbContext(options))
+        {
+            historical.PropertyMergeRequests.Add(MergeRequest(MetaGrowPropertyMergeStatus.Rejected));
+            await historical.SaveChangesAsync();
+        }
+    }
+
     private static PropertyDeletionRequest DeletionRequest(MetaGrowPropertyDeletionStatus status) => new()
     {
         Id = Guid.NewGuid(),
         PropertyId = 123,
         PropertyName = "Example farm",
+        Status = status,
+        RequestedByUserId = "user",
+        RequestedByEmail = "user@example.com",
+        RequestedUtc = DateTime.UtcNow
+    };
+
+    private static PropertyMergeRequest MergeRequest(MetaGrowPropertyMergeStatus status) => new()
+    {
+        Id = Guid.NewGuid(),
+        SourcePropertyId = 123,
+        SourcePropertyName = "Duplicate farm",
+        TargetPropertyId = 456,
+        TargetPropertyName = "Surviving farm",
+        PlanJson = "{}",
+        PlanHash = new string('A', 64),
         Status = status,
         RequestedByUserId = "user",
         RequestedByEmail = "user@example.com",

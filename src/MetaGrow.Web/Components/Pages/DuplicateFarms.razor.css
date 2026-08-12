@@ -25,10 +25,14 @@
 .filter-check { padding-bottom: .45rem; white-space: nowrap; }
 .candidate-card { overflow: hidden; }
 .candidate-table-wrap { overflow-x: auto; }
-.candidate-table { border-collapse: collapse; font-size: .84rem; min-width: 58rem; width: 100%; }
+.candidate-table { border-collapse: collapse; font-size: .84rem; min-width: 66rem; width: 100%; }
 .candidate-table th { background: var(--dxds-color-surface-neutral-subdued-rest, #f7f9fb); color: var(--dxds-color-content-neutral-subdued-rest); font-size: .7rem; letter-spacing: .035em; padding: .7rem .75rem; text-align: left; text-transform: uppercase; }
 .candidate-table td { border-top: 1px solid var(--dxds-color-border-neutral-subdued-rest); padding: .72rem .75rem; vertical-align: top; }
 .confidence-column { width: 8rem; }
+.merge-direction-heading, .merge-direction-column { text-align: center !important; width: 8.5rem; }
+.merge-direction-buttons { align-items: center; display: flex; flex-wrap: wrap; gap: .35rem; justify-content: center; min-width: 7rem; }
+.merge-direction-buttons > small { color: var(--dxds-color-content-neutral-subdued-rest); flex-basis: 100%; font-size: .6rem; text-align: center; }
+.merge-direction-buttons ::deep .dxbl-btn { font-size: 1.05rem; font-weight: 800; min-width: 2.45rem; padding-inline: .55rem; }
 .confidence { border-radius: 999px; display: inline-block; font-size: .7rem; font-weight: 750; padding: .28rem .52rem; white-space: nowrap; }
 .confidence.very-high { background: #fee2e2; color: #991b1b; }
 .confidence.likely { background: #fef3c7; color: #92400e; }

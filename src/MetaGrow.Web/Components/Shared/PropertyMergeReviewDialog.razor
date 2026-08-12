@@ -1,0 +1,376 @@
+@using ApiModels
+@using Metagen.Shared.Services
+@using MetaGrow.Web.Services
+@inject ITgsApiService TgsApi
+@inject PropertyMergeApiClient Merges
+
+<DxPopup @bind-Visible="_visible" ShowFooter="true" HeaderText="Review property merge"
+         AllowDrag="true" ShowCloseButton="true" CloseOnEscape="true"
+         Width="1100px">
+    <BodyContentTemplate>
+        <div class="merge-review">
+            @if (_loading)
+            {
+                <div class="merge-loading">
+                    <DxWaitIndicator Visible="true" />
+                    <div>
+                        <strong>Running live merge safety checks...</strong>
+                        <span>Comparing farm fields, linked tables, blocks and unique-key collisions.</span>
+                    </div>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="merge-message error" role="alert">@_error</div>
+            }
+            else if (_preview is not null)
+            {
+                <div class="merge-direction-banner">
+                    <div>
+                        <small>Source — this record is swallowed</small>
+                        <strong>@_preview.Source.PropertyName</strong>
+                        <span>Farm @_preview.Source.PropertyId</span>
+                    </div>
+                    <span class="direction-arrow" aria-hidden="true">→</span>
+                    <div>
+                        <small>Target — this record survives</small>
+                        <strong>@_preview.Target.PropertyName</strong>
+                        <span>Farm @_preview.Target.PropertyId</span>
+                    </div>
+                </div>
+
+                <div class="merge-recommendation @(_preview.IsRecommendedDirection ? "recommended" : "reverse")">
+                    <strong>@(_preview.IsRecommendedDirection ? "Recommended direction" : "Reverse of recommendation")</strong>
+                    <span>@_preview.Recommendation</span>
+                </div>
+
+                @foreach (var warning in _preview.Warnings)
+                {
+                    <div class="merge-message warning">@warning</div>
+                }
+
+                @if (_preview.PropertyCollisions.Any(collision => collision.IsBlocking))
+                {
+                    <div class="property-collisions" role="alert">
+                        <strong>Property-level collisions</strong>
+                        @foreach (var collision in _preview.PropertyCollisions.Where(item => item.IsBlocking))
+                        {
+                            <span>@collision.Message</span>
+                        }
+                    </div>
+                }
+
+                <div class="property-summary-grid">
+                    @PropertySummary(_preview.Source, "Source")
+                    @PropertySummary(_preview.Target, "Target")
+                </div>
+
+                @if (_preview.FieldDifferences.Count > 0)
+                {
+                    <details class="merge-details">
+                        <summary>Compare differing farm fields (@_preview.FieldDifferences.Count)</summary>
+                        <div class="field-table-wrap">
+                            <table class="field-table">
+                                <thead><tr><th>Field</th><th>Source value</th><th>Target value</th><th>Value to retain</th></tr></thead>
+                                <tbody>
+                                    @foreach (var field in _preview.FieldDifferences)
+                                    {
+                                        <tr>
+                                            <th>@field.Label</th>
+                                            <td class="@(field.ValueSource == PropertyMergeFieldValue.Source ? "selected-value" : null)">@Display(field.SourceValue)</td>
+                                            <td class="@(field.ValueSource == PropertyMergeFieldValue.Target ? "selected-value" : null)">@Display(field.TargetValue)</td>
+                                            <td>
+                                                <DxComboBox Data="@FieldChoiceOptions"
+                                                            Value="@field.ValueSource"
+                                                            ValueChanged="@((PropertyMergeFieldValue value) => ChangeFieldChoice(field, value))"
+                                                            TextFieldName="@nameof(FieldChoiceOption.Label)"
+                                                            ValueFieldName="@nameof(FieldChoiceOption.Value)"
+                                                            AllowUserInput="false" SizeMode="SizeMode.Small"
+                                                            CssClass="merge-combo" />
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                }
+
+                <section class="block-plan" aria-labelledby="block-plan-heading">
+                    <div class="block-plan-heading">
+                        <div>
+                            <span class="eyebrow">Required decisions</span>
+                            <h3 id="block-plan-heading">Source block plan</h3>
+                        </div>
+                        <span>@_preview.Blocks.Count source @(_preview.Blocks.Count == 1 ? "block" : "blocks")</span>
+                    </div>
+
+                    @if (_preview.Blocks.Count == 0)
+                    {
+                        <p class="no-blocks">The source farm has no banana or multi-crop blocks.</p>
+                    }
+                    else
+                    {
+                        <div class="block-table-wrap">
+                            <table class="block-table">
+                                <thead><tr><th>Type</th><th>Source block</th><th>Decision</th><th>Target block</th><th>Safety check</th></tr></thead>
+                                <tbody>
+                                    @foreach (var block in _preview.Blocks)
+                                    {
+                                        <tr>
+                                            <td><span class="block-type @block.BlockType">@BlockType(block.BlockType)</span></td>
+                                            <td><strong>@block.SourceBlockName</strong><small>Block @block.SourceBlockId</small></td>
+                                            <td>
+                                                <DxComboBox Data="@BlockActionOptions"
+                                                            Value="@block.Action"
+                                                            ValueChanged="@((PropertyMergeBlockAction value) => ChangeActionAsync(block, value))"
+                                                            TextFieldName="@nameof(BlockActionOption.Label)"
+                                                            ValueFieldName="@nameof(BlockActionOption.Value)"
+                                                            AllowUserInput="false" Enabled="@(!_refreshing)"
+                                                            SizeMode="SizeMode.Small" CssClass="merge-combo" />
+                                            </td>
+                                            <td>
+                                                @if (block.Action == PropertyMergeBlockAction.Merge)
+                                                {
+                                                    <DxComboBox Data="@TargetBlockOptions(block)"
+                                                                Value="@(block.TargetBlockId ?? 0)"
+                                                                ValueChanged="@((int value) => ChangeTargetAsync(block, value))"
+                                                                TextFieldName="@nameof(TargetBlockOption.Label)"
+                                                                ValueFieldName="@nameof(TargetBlockOption.BlockId)"
+                                                                AllowUserInput="false" Enabled="@(!_refreshing)"
+                                                                SizeMode="SizeMode.Small" CssClass="merge-combo" />
+                                                }
+                                                else
+                                                {
+                                                    <span class="move-note">Keeps its name and order</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (!block.IsResolved)
+                                                {
+                                                    <span class="check-state unresolved">Target required</span>
+                                                }
+                                                else if (block.Collisions.Any(collision => collision.IsBlocking))
+                                                {
+                                                    <span class="check-state collision">Collision found</span>
+                                                    @foreach (var collision in block.Collisions.Where(item => item.IsBlocking))
+                                                    {
+                                                        <small class="collision-detail">@collision.Message</small>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <span class="check-state clear">Checked</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </section>
+
+                @if (_isReviewer)
+                {
+                    <div class="merge-message info">
+                        The live preview is available now. Approve-and-merge will be enabled after the reviewed atomic TGS stored procedure is installed; it will repeat these checks immediately before committing.
+                    </div>
+                }
+                else
+                {
+                    <div class="merge-message info">
+                        Requesting approval saves this direction and every block decision. A manager or administrator must review the live data again before the merge can run.
+                    </div>
+                }
+            }
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="merge-footer">
+            <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Click="Close" />
+            @if (_preview is not null && !_isReviewer)
+            {
+                <DxButton Text="Request merge approval" RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(_preview.CanRequestMerge && !_working && !_refreshing)" Click="RequestApprovalAsync" />
+            }
+            else if (_preview is not null && _isReviewer)
+            {
+                <DxButton Text="Approve and merge" RenderStyle="ButtonRenderStyle.Primary" Enabled="false" />
+            }
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public bool IsReviewer { get; set; }
+    [Parameter] public EventCallback MergeRequested { get; set; }
+
+    private PropertyMergePreview? _preview;
+    private string? _error;
+    private bool _visible;
+    private bool _loading;
+    private bool _refreshing;
+    private bool _working;
+    private bool _isReviewer;
+    private static readonly BlockActionOption[] BlockActionOptions =
+    [
+        new(PropertyMergeBlockAction.Move, "Move as a separate block"),
+        new(PropertyMergeBlockAction.Merge, "Merge into an existing block")
+    ];
+    private static readonly FieldChoiceOption[] FieldChoiceOptions =
+    [
+        new(PropertyMergeFieldValue.Target, "Keep target value"),
+        new(PropertyMergeFieldValue.Source, "Use source value")
+    ];
+
+    protected override void OnParametersSet() => _isReviewer = IsReviewer;
+
+    public Task OpenAsync(int sourcePropertyId, int targetPropertyId) =>
+        OpenAsync(new PropertyMergePreviewRequest
+        {
+            SourcePropertyId = sourcePropertyId,
+            TargetPropertyId = targetPropertyId
+        });
+
+    public Task OpenAsync(ApiModels.MetaGrow.MetaGrowPropertyMergeRequestDto request) =>
+        OpenAsync(new PropertyMergePreviewRequest
+        {
+            SourcePropertyId = request.SourcePropertyId,
+            TargetPropertyId = request.TargetPropertyId,
+            BlockDecisions = request.BlockDecisions.Select(Clone).ToList(),
+            FieldChoices = request.FieldChoices.Select(Clone).ToList()
+        });
+
+    private async Task OpenAsync(PropertyMergePreviewRequest request)
+    {
+        _visible = true;
+        _loading = true;
+        _error = null;
+        _preview = null;
+        StateHasChanged();
+        try
+        {
+            await LoadPreviewAsync(request).WaitAsync(TimeSpan.FromSeconds(60));
+        }
+        catch (TimeoutException)
+        {
+            _error = "The live merge safety check did not finish within 60 seconds. No data was changed. Close this window and try again.";
+        }
+        catch (Exception exception)
+        {
+            _error = "The live merge safety check could not be completed. " + exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadPreviewAsync(PropertyMergePreviewRequest request)
+    {
+        _preview = await TgsApi.GetPropertyMergePreview(request);
+        _error = _preview is null ? TgsApi.ErrorMessage ?? "The merge preview could not be loaded." : null;
+    }
+
+    private async Task ChangeActionAsync(PropertyMergeBlockPreview block, PropertyMergeBlockAction action)
+    {
+        block.Action = action;
+        block.TargetBlockId = block.Action == PropertyMergeBlockAction.Merge
+            ? block.TargetBlockId ?? block.Candidates.FirstOrDefault()?.BlockId
+            : null;
+        await RefreshAsync();
+    }
+
+    private async Task ChangeTargetAsync(PropertyMergeBlockPreview block, int blockId)
+    {
+        block.TargetBlockId = blockId > 0 ? blockId : null;
+        await RefreshAsync();
+    }
+
+    private static void ChangeFieldChoice(
+        PropertyMergeFieldDifference field,
+        PropertyMergeFieldValue value) => field.ValueSource = value;
+
+    private static List<TargetBlockOption> TargetBlockOptions(PropertyMergeBlockPreview block) =>
+    [
+        new(0, "Select target block"),
+        .. block.Candidates.Select(candidate => new TargetBlockOption(
+            candidate.BlockId,
+            $"{candidate.BlockName} ({candidate.MatchScore:P0}){(candidate.IsActive ? string.Empty : " · inactive")}"))
+    ];
+
+    private async Task RefreshAsync()
+    {
+        if (_preview is null) return;
+        _refreshing = true;
+        var request = CurrentPlan();
+        await LoadPreviewAsync(request);
+        _refreshing = false;
+    }
+
+    private async Task RequestApprovalAsync()
+    {
+        if (_preview is null || !_preview.CanRequestMerge || _working) return;
+        _working = true;
+        _error = null;
+        var (request, error) = await Merges.RequestAsync(CurrentPlan());
+        _working = false;
+        if (request is null)
+        {
+            _error = error ?? "The merge approval request could not be sent.";
+            return;
+        }
+
+        _visible = false;
+        await MergeRequested.InvokeAsync();
+    }
+
+    private PropertyMergePreviewRequest CurrentPlan() => new()
+    {
+        SourcePropertyId = _preview!.Source.PropertyId,
+        TargetPropertyId = _preview.Target.PropertyId,
+        BlockDecisions = _preview.Blocks.Select(block => new PropertyMergeBlockDecision
+        {
+            BlockType = block.BlockType,
+            SourceBlockId = block.SourceBlockId,
+            Action = block.Action,
+            TargetBlockId = block.Action == PropertyMergeBlockAction.Merge ? block.TargetBlockId : null
+        }).ToList(),
+        FieldChoices = _preview.FieldDifferences.Select(field => new PropertyMergeFieldChoice
+        {
+            FieldName = field.FieldName,
+            ValueSource = field.ValueSource
+        }).ToList()
+    };
+
+    private RenderFragment PropertySummary(PropertyMergePropertySummary summary, string label) => @<article class="property-summary">
+        <small>@label</small>
+        <strong>@summary.PropertyName</strong>
+        <span>Farm @summary.PropertyId · @(summary.IsActive ? "Active" : "Inactive")</span>
+        <div><b>@summary.BananaBlockCount</b> banana · <b>@summary.MultiCropBlockCount</b> multi-crop blocks</div>
+        <div><b>@summary.IncludedRowCount.ToString("N0")</b> included · <b>@summary.ExcludedRowCount.ToString("N0")</b> retained rows</div>
+    </article>;
+
+    private static PropertyMergeBlockDecision Clone(PropertyMergeBlockDecision item) => new()
+    {
+        BlockType = item.BlockType,
+        SourceBlockId = item.SourceBlockId,
+        Action = item.Action,
+        TargetBlockId = item.TargetBlockId
+    };
+
+    private static PropertyMergeFieldChoice Clone(PropertyMergeFieldChoice item) => new()
+    {
+        FieldName = item.FieldName,
+        ValueSource = item.ValueSource
+    };
+
+    private void Close() => _visible = false;
+    private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "Not set" : value;
+    private static string BlockType(string value) => value.Equals(PropertyMergeBlockTypes.MultiCrop, StringComparison.OrdinalIgnoreCase) ? "Multi-crop" : "Banana";
+    private sealed record BlockActionOption(PropertyMergeBlockAction Value, string Label);
+    private sealed record FieldChoiceOption(PropertyMergeFieldValue Value, string Label);
+    private sealed record TargetBlockOption(int BlockId, string Label);
+}
