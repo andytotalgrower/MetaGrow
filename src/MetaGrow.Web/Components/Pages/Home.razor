@@ -1,5 +1,11 @@
 @page "/"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using MetaGrow.Shared
 @using MetaGrow.Web.Components.Pages.Index
+@using Metagen.Shared.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject ITgsApiService TgsApi
 
 <PageTitle>MetaGrow</PageTitle>
 
@@ -23,7 +29,221 @@
         </div>
     </section>
 
+    <section class="incomplete-surveys" aria-labelledby="incomplete-surveys-heading">
+        <div class="queue-heading">
+            <div>
+                <span class="mg-eyebrow">Work queue</span>
+                <h2 id="incomplete-surveys-heading">To Do List</h2>
+                <p>Surveys that still need work or sign off.</p>
+            </div>
+            @if (!_loading && _errorMessage is null && _surveys.Count > 0)
+            {
+                <span class="queue-count">@ResultSummary</span>
+            }
+        </div>
+
+        @if (_loading)
+        {
+            <div class="queue-state" role="status">
+                <DxWaitIndicator Visible="true" />
+                <span>Loading incomplete surveys...</span>
+            </div>
+        }
+        else if (_errorMessage is not null)
+        {
+            <div class="alert alert-danger" role="alert">
+                <strong>Incomplete surveys could not be loaded.</strong> @_errorMessage
+            </div>
+        }
+        else if (_surveys.Count == 0)
+        {
+            <div class="queue-state queue-clear">
+                <span class="queue-clear-icon" aria-hidden="true">✓</span>
+                <div>
+                    <strong>Everything is up to date.</strong>
+                    <span>No incomplete banana or multi-crop surveys were found.</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="queue-filters">
+                <div class="queue-filter queue-property-filter">
+                    <label for="home-survey-property">Property</label>
+                    <DxTextBox Id="home-survey-property" @bind-Text="_propertySearch"
+                               NullText="Type a property name" BindValueMode="BindValueMode.OnDelayedInput"
+                               InputDelay="300" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </div>
+                <div class="queue-filter">
+                    <label for="home-survey-area">Area</label>
+                    <DxComboBox Id="home-survey-area" Data="@AreaOptions" @bind-Value="_area"
+                                TextFieldName="@nameof(AreaOption.Name)" ValueFieldName="@nameof(AreaOption.Area)"
+                                NullText="All areas" AllowUserInput="false"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </div>
+                <div class="queue-filter">
+                    <label for="home-survey-status">Status</label>
+                    <DxComboBox Id="home-survey-status" Data="@StatusOptions" @bind-Value="_statusId"
+                                TextFieldName="@nameof(StatusOption.Name)" ValueFieldName="@nameof(StatusOption.Id)"
+                                NullText="All statuses" AllowUserInput="false"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </div>
+                <div class="queue-filter">
+                    <label for="home-survey-agronomist">Agronomist</label>
+                    <DxComboBox Id="home-survey-agronomist" Data="@AgronomistOptions" @bind-Value="_agronomistId"
+                                TextFieldName="@nameof(AgronomistOption.Name)" ValueFieldName="@nameof(AgronomistOption.Id)"
+                                NullText="All agronomists" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </div>
+                <DxButton Text="Clear" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearFilters" CssClass="queue-clear-button" />
+            </div>
+
+            @if (FilteredSurveys.Count == 0)
+            {
+                <div class="queue-state">
+                    <div>
+                        <strong>No incomplete surveys match these filters.</strong>
+                        <span>Clear one or more filters to see the full work queue.</span>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="queue-desktop">
+                    <DxGrid Data="@FilteredSurveys" PageSize="10" ShowAllRows="false"
+                            TextWrapEnabled="false" HighlightRowOnHover="true"
+                            ColumnResizeMode="GridColumnResizeMode.NextColumn" CssClass="home-survey-grid">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(IncompleteSurveySummaryDto.AreaName)" Caption="Area" Width="110px">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var survey = (IncompleteSurveySummaryDto)cell.DataItem; }
+                                    @AreaBadge(survey)
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            <DxGridDataColumn FieldName="@nameof(IncompleteSurveySummaryDto.SurveyDate)" Caption="Survey date" Width="115px" DisplayFormat="dd/MM/yyyy" />
+                            <DxGridDataColumn FieldName="@nameof(IncompleteSurveySummaryDto.PropertyName)" Caption="Property" MinWidth="190" />
+                            <DxGridDataColumn FieldName="@nameof(IncompleteSurveySummaryDto.AgronomistName)" Caption="Agronomist" MinWidth="150" />
+                            <DxGridDataColumn FieldName="@nameof(IncompleteSurveySummaryDto.StatusName)" Caption="Status" MinWidth="170">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var survey = (IncompleteSurveySummaryDto)cell.DataItem; }
+                                    <span class="status-badge @MultiCropSurveyFilter.StatusBadgeClass(survey.StatusName)">@survey.StatusName</span>
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            <DxGridDataColumn FieldName="@nameof(IncompleteSurveySummaryDto.LastModified)" Caption="Modified" Width="110px" DisplayFormat="dd/MM/yyyy" />
+                            <DxGridDataColumn FieldName="@nameof(IncompleteSurveySummaryDto.PhotoCount)" Caption="Photos" Width="75px" />
+                            <DxGridDataColumn Caption="Actions" Width="180px" AllowSort="false">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var survey = (IncompleteSurveySummaryDto)cell.DataItem; }
+                                    <div class="queue-links">
+                                        <a class="queue-edit-link" href="@IncompleteSurveyNavigation.EditUrl(survey)">Edit</a>
+                                        <a href="@IncompleteSurveyNavigation.OnlineReportUrl(survey)">Online</a>
+                                        <a href="@IncompleteSurveyNavigation.PrintReportUrl(survey)">Print</a>
+                                    </div>
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                        </Columns>
+                    </DxGrid>
+                </div>
+
+                <div class="queue-mobile">
+                    @foreach (var survey in FilteredSurveys)
+                    {
+                        <article class="queue-card @IncompleteSurveyFilter.AreaBadgeClass(survey.Area)">
+                            <div class="queue-card-heading">
+                                <div>
+                                    <strong>@survey.PropertyName</strong>
+                                    <span>@survey.SurveyDate.ToString("dd MMM yyyy")</span>
+                                </div>
+                                @AreaBadge(survey)
+                            </div>
+                            <dl>
+                                <div><dt>Status</dt><dd><span class="status-badge @MultiCropSurveyFilter.StatusBadgeClass(survey.StatusName)">@survey.StatusName</span></dd></div>
+                                <div><dt>Agronomist</dt><dd>@survey.AgronomistName</dd></div>
+                                <div><dt>Modified</dt><dd>@survey.LastModified.ToString("dd MMM yyyy")</dd></div>
+                                <div><dt>Photos</dt><dd>@survey.PhotoCount</dd></div>
+                            </dl>
+                            <div class="queue-card-actions">
+                                <a class="btn btn-primary" href="@IncompleteSurveyNavigation.EditUrl(survey)">Edit survey</a>
+                                <a class="btn btn-outline-secondary" href="@IncompleteSurveyNavigation.OnlineReportUrl(survey)">Online report</a>
+                                <a class="btn btn-outline-secondary" href="@IncompleteSurveyNavigation.PrintReportUrl(survey)">Print report</a>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        }
+    </section>
+
     <div class="release-note">
-        <strong>Current phase:</strong> authentication and the multi-crop survey finder are available. Online and printable reporting comes next.
+        <strong>Current phase:</strong> Multi-crop and banana survey workflows, online and printable reporting, farm setup, reporting groups and controlled duplicate-property management are available. Sample surveys and the full administration area are still to come.
     </div>
 </div>
+
+@code {
+    private static readonly AreaOption[] AreaOptions =
+    [
+        new(IncompleteSurveyArea.Banana, "Banana"),
+        new(IncompleteSurveyArea.MultiCrop, "Multi-crop")
+    ];
+
+    private bool _loading = true;
+    private string? _errorMessage;
+    private string? _propertySearch;
+    private IncompleteSurveyArea? _area;
+    private int? _statusId;
+    private int? _agronomistId;
+    private List<IncompleteSurveySummaryDto> _surveys = [];
+
+    private sealed record AreaOption(IncompleteSurveyArea Area, string Name);
+    private sealed record StatusOption(int Id, string Name, int Priority);
+    private sealed record AgronomistOption(int Id, string Name);
+
+    private IReadOnlyList<IncompleteSurveySummaryDto> FilteredSurveys =>
+        IncompleteSurveyFilter.Apply(_surveys, _propertySearch, _area, _statusId, _agronomistId);
+
+    private IReadOnlyList<StatusOption> StatusOptions => _surveys
+        .GroupBy(survey => new { survey.StatusId, survey.StatusName, survey.WorkflowPriority })
+        .Select(group => new StatusOption(group.Key.StatusId, group.Key.StatusName, group.Key.WorkflowPriority))
+        .OrderBy(status => status.Priority)
+        .ThenBy(status => status.Name)
+        .ToList();
+
+    private IReadOnlyList<AgronomistOption> AgronomistOptions => _surveys
+        .GroupBy(survey => new { survey.AgronomistId, survey.AgronomistName })
+        .Select(group => new AgronomistOption(group.Key.AgronomistId, group.Key.AgronomistName))
+        .OrderBy(agronomist => agronomist.Name)
+        .ToList();
+
+    private string ResultSummary => FilteredSurveys.Count == _surveys.Count
+        ? $"{_surveys.Count} incomplete {SurveyText(_surveys.Count)}"
+        : $"{FilteredSurveys.Count} of {_surveys.Count} incomplete surveys";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var surveys = await TgsApi.GetIncompleteSurveySummaries();
+            _surveys = surveys ?? [];
+            _errorMessage = surveys is null
+                ? TgsApi.ErrorMessage ?? "The incomplete survey work queue could not be loaded from the TGS API."
+                : null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ClearFilters()
+    {
+        _propertySearch = null;
+        _area = null;
+        _statusId = null;
+        _agronomistId = null;
+    }
+
+    private static RenderFragment AreaBadge(IncompleteSurveySummaryDto survey) =>
+        @<span class="area-badge @IncompleteSurveyFilter.AreaBadgeClass(survey.Area)">@survey.AreaName</span>;
+
+    private static string SurveyText(int count) => count == 1 ? "survey" : "surveys";
+}

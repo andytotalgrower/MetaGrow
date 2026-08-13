@@ -120,12 +120,6 @@
                                 <span class="status-badge @MultiCropSurveyFilter.StatusBadgeClass(statusName)">@statusName</span>
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyReference)" Caption="Reference" MinWidth="150">
-                            <CellDisplayTemplate Context="cell">
-                                @{ var survey = (MultiCropSurveySummaryDto)cell.DataItem; }
-                                <a href="@OnlineReportUrl(survey)">@survey.SurveyReference</a>
-                            </CellDisplayTemplate>
-                        </DxGridDataColumn>
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.PhotoCount)" Caption="Photos" Width="80px" />
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.LastModified)" Caption="Modified" Width="110px" DisplayFormat="dd/MM/yyyy" />
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyHours)" Caption="Survey hours" Width="110px" DisplayFormat="N2" Visible="false" />
@@ -160,7 +154,6 @@
                             <div><dt>Type</dt><dd>@survey.ApplicationName</dd></div>
                             <div><dt>Crop</dt><dd>@survey.CropTypeName</dd></div>
                             <div><dt>Agronomist</dt><dd>@survey.AgronomistName</dd></div>
-                            <div><dt>Reference</dt><dd>@survey.SurveyReference</dd></div>
                             <div><dt>Photos</dt><dd>@survey.PhotoCount</dd></div>
                         </dl>
                         <div class="survey-card-actions">

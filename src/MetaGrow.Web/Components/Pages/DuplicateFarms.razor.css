@@ -49,6 +49,7 @@
 .block-count.multicrop { border-left: .2rem solid var(--mg-blue, #007cba); }
 .dependency-assessment { align-items: flex-start; display: flex; flex-direction: column; gap: .22rem; margin-top: .15rem; }
 .dependency-assessment small { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .65rem; }
+.dependency-assessment .property-operation-error { color: #991b1b; font-weight: 650; }
 .merge-state { border-radius: 999px; display: inline-block; font-size: .65rem; font-weight: 750; padding: .22rem .43rem; }
 .merge-state.delete-eligible { background: #dcfce7; color: #166534; }
 .merge-state.merge-required { background: #fef3c7; color: #92400e; }

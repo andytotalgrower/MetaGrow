@@ -235,6 +235,7 @@
     private List<PropertyDuplicateCandidate> _candidates = [];
     private Dictionary<int, PropertyBlockCount> _blockCounts = [];
     private Dictionary<int, PropertyDependencySummary> _dependencySummaries = [];
+    private Dictionary<int, string> _propertyOperationErrors = [];
     private List<MetaGrowPropertyDeletionDto> _deletionRequests = [];
     private List<MetaGrowPropertyMergeRequestDto> _mergeRequests = [];
     private ConfirmDialog? _confirm;
@@ -390,7 +391,14 @@
         else if (summary.PhysicalDeleteAllowed)
         {
             <span class="merge-state delete-eligible">Delete eligible</span>
-            <small>No linked rows were found.</small>
+            @if (summary.RetainedLinkedRowCount > 0)
+            {
+                <small>@summary.RetainedLinkedRowCount.ToString("N0") retained historical @(summary.RetainedLinkedRowCount == 1 ? "row" : "rows") will not block deletion.</small>
+            }
+            else
+            {
+                <small>No linked rows were found.</small>
+            }
             @if (PendingRequest(farm.PropertyId) is not null)
             {
                 <span class="merge-state pending-approval">Awaiting approval</span>
@@ -414,7 +422,15 @@
         else
         {
             <span class="merge-state merge-required">Merge required</span>
-            <small>@summary.LinkedRowCount.ToString("N0") linked @(summary.LinkedRowCount == 1 ? "row" : "rows") in @summary.Dependencies.Count @(summary.Dependencies.Count == 1 ? "table" : "tables").</small>
+            <small>@summary.BlockingLinkedRowCount.ToString("N0") linked @(summary.BlockingLinkedRowCount == 1 ? "row" : "rows") in @summary.BlockingDependencyCount @(summary.BlockingDependencyCount == 1 ? "table" : "tables").</small>
+            @if (summary.RetainedLinkedRowCount > 0)
+            {
+                <small>@summary.RetainedLinkedRowCount.ToString("N0") additional historical rows are retained but do not block deletion.</small>
+            }
+        }
+        @if (_propertyOperationErrors.TryGetValue(farm.PropertyId, out var operationError))
+        {
+            <small class="property-operation-error" role="alert">@operationError</small>
         }
     </div>;
 
@@ -532,6 +548,7 @@
         _deletingPropertyId = farm.PropertyId;
         _deletionProgressText = _isReviewer ? "Deleting property..." : "Sending deletion request...";
         _message = null;
+        _propertyOperationErrors.Remove(farm.PropertyId);
         await InvokeAsync(StateHasChanged);
         try
         {
@@ -540,10 +557,13 @@
                 var (result, error) = await Deletions.DeleteImmediatelyAsync(farm.PropertyId);
                 if (result is null)
                 {
-                    ShowMessage(error ?? "The property could not be deleted.", true);
+                    var message = error ?? "The property could not be deleted.";
+                    _propertyOperationErrors[farm.PropertyId] = message;
+                    ShowMessage(message, true);
                     return;
                 }
 
+                _propertyOperationErrors.Remove(farm.PropertyId);
                 ShowMessage($"{result.PropertyName} was deleted.", false);
                 await LoadAsync();
             }
@@ -552,10 +572,13 @@
                 var (request, error) = await Deletions.RequestAsync(farm.PropertyId);
                 if (request is null)
                 {
-                    ShowMessage(error ?? "The deletion request could not be sent.", true);
+                    var message = error ?? "The deletion request could not be sent.";
+                    _propertyOperationErrors[farm.PropertyId] = message;
+                    ShowMessage(message, true);
                     return;
                 }
 
+                _propertyOperationErrors.Remove(farm.PropertyId);
                 _deletionRequests.Add(request);
                 ShowMessage($"Deletion of {request.PropertyName} is awaiting manager or administrator approval.", false);
             }
