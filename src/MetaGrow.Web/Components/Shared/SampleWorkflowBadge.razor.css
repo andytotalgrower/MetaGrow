@@ -1,0 +1,9 @@
+.status-badge { border-radius: 999px; display: inline-block; font-size: .72rem; font-weight: 650; max-width: 100%; overflow: hidden; padding: .2rem .55rem; text-overflow: ellipsis; white-space: nowrap; }
+.status-in-transit { background: #eef0f2; color: #495057; }
+.status-at-lab { background: #e1efff; color: #0b4f8a; }
+.status-ready { background: #fff3cd; color: #664d03; }
+.status-awaiting-qa { background: #f8d7da; color: #842029; }
+.status-ready-to-send { background: #d1e7dd; color: #0f5132; }
+.status-completed { background: #198754; color: #fff; }
+.status-in-progress { background: var(--mg-blue, #007cba); color: #fff; }
+.not-applicable { color: var(--dxds-color-content-neutral-subdued-rest); }

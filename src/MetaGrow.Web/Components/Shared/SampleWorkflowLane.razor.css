@@ -1,0 +1,19 @@
+.sample-lane { background: var(--dxds-color-surface-neutral-subdued-rest); border: 1px solid var(--dxds-color-border-neutral-subdued-rest); border-radius: .6rem; display: flex; flex-direction: column; gap: 1rem; min-width: 0; padding: 1rem; }
+.sample-lane.metagen { border-top: 4px solid #007cba; }
+.sample-lane.nutrition { border-top: 4px solid #648b2c; }
+header { align-items: flex-start; display: flex; gap: 1rem; justify-content: space-between; }
+h2 { font-size: 1.15rem; margin: .15rem 0 0; }
+.lane-kicker { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.lab-progress { display: grid; gap: .5rem; grid-template-columns: repeat(3, 1fr); }
+.lab-progress span { background: var(--dxds-color-surface-neutral-rest); border-radius: .35rem; display: flex; flex-direction: column; font-size: .72rem; padding: .5rem; }
+.lab-progress strong { font-size: 1.1rem; }
+.report-steps { display: grid; gap: .4rem; grid-template-columns: repeat(4, 1fr); list-style: none; margin: 0; padding: 0; }
+.report-steps li { align-items: center; color: var(--dxds-color-content-neutral-subdued-rest); display: flex; font-size: .72rem; gap: .35rem; }
+.report-steps li span { background: var(--dxds-color-surface-neutral-rest); border: 2px solid var(--dxds-color-border-neutral-subdued-rest); border-radius: 50%; height: .75rem; width: .75rem; }
+.report-steps li.complete span { background: #648b2c; border-color: #648b2c; }
+.report-steps li.current { color: inherit; font-weight: 700; }
+.report-steps li.current span { background: #007cba; border-color: #007cba; box-shadow: 0 0 0 3px color-mix(in srgb, #007cba 20%, transparent); }
+.lane-note { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .78rem; margin: 0; min-height: 2.4em; }
+.lane-actions { align-items: center; display: flex; gap: .75rem; justify-content: space-between; margin-top: auto; }
+.lane-busy { align-items: center; display: flex; font-size: .8rem; gap: .45rem; }
+@media (max-width: 32rem) { .lab-progress { grid-template-columns: 1fr; } .report-steps { grid-template-columns: repeat(2, 1fr); } }

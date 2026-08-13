@@ -1,0 +1,17 @@
+@page "/surveys/samples/{SurveyId:int}/import"
+@using ApiModels.MetaGrow
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist + "," + MetaGrowRoles.Accountant)]
+
+<PageTitle>Import Sample results @SurveyId | MetaGrow</PageTitle>
+
+<div class="placeholder-page">
+    <a href="@($"/surveys/samples/{SurveyId}/edit")">Back to Sample survey</a>
+    <section>
+        <span class="eyebrow">Sample survey #@SurveyId</span>
+        <h1>Soil import workspace</h1>
+        <p>The survey editor and controlled status workflow are now connected. CSV upload, preview and farm/crop reconciliation are the next import slice.</p>
+        <div class="actions"><a class="btn btn-primary" href="@($"/surveys/samples/{SurveyId}/lab-results")">View linked Soil data</a></div>
+    </section>
+</div>
+
+@code { [Parameter] public int SurveyId { get; set; } }

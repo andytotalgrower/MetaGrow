@@ -9,20 +9,20 @@ public sealed class RoleContractTests
     [Fact]
     public void Initial_registration_roles_are_exactly_the_agreed_roles()
     {
-        Assert.Equal(["Admin", "Agriculture Manager", "Agronomist"], MetaGrowRoles.All);
+        Assert.Equal(["Admin", "Agriculture Manager", "Agronomist", "Accountant"], MetaGrowRoles.All);
     }
 
     [Theory]
     [InlineData(nameof(ReportSharesController.GetForSurvey))]
     [InlineData(nameof(ReportSharesController.Create))]
     [InlineData(nameof(ReportSharesController.Revoke))]
-    public void Every_staff_role_can_manage_report_shares(string methodName)
+    public void Core_survey_roles_can_manage_report_shares(string methodName)
     {
         var method = typeof(ReportSharesController).GetMethod(methodName)!;
         var authorization = Assert.Single(method.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
             .Cast<AuthorizeAttribute>());
 
-        Assert.Equal(MetaGrowRoles.All,
+        Assert.Equal([MetaGrowRoles.Admin, MetaGrowRoles.AgricultureManager, MetaGrowRoles.Agronomist],
             authorization.Roles!.Split(',', StringSplitOptions.TrimEntries));
     }
 
@@ -42,9 +42,10 @@ public sealed class RoleContractTests
     }
 
     [Fact]
-    public void Every_staff_role_can_view_the_relevant_deletion_queue()
+    public void Core_survey_roles_can_view_the_relevant_deletion_queue()
     {
-        AssertRoles(nameof(PropertyDeletionsController.GetPending), MetaGrowRoles.All);
+        AssertRoles(nameof(PropertyDeletionsController.GetPending),
+            [MetaGrowRoles.Admin, MetaGrowRoles.AgricultureManager, MetaGrowRoles.Agronomist]);
     }
 
     [Fact]
@@ -64,9 +65,10 @@ public sealed class RoleContractTests
     }
 
     [Fact]
-    public void Every_staff_role_can_view_the_relevant_merge_queue()
+    public void Core_survey_roles_can_view_the_relevant_merge_queue()
     {
-        AssertRoles<PropertyMergesController>(nameof(PropertyMergesController.GetPending), MetaGrowRoles.All);
+        AssertRoles<PropertyMergesController>(nameof(PropertyMergesController.GetPending),
+            [MetaGrowRoles.Admin, MetaGrowRoles.AgricultureManager, MetaGrowRoles.Agronomist]);
     }
 
     private static void AssertRoles(string methodName, string[] expected)

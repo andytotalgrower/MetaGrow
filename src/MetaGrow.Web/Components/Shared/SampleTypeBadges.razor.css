@@ -1,0 +1,4 @@
+.type-badges { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
+.type-badge { border-radius: 999px; display: inline-block; font-size: .72rem; font-weight: 700; padding: .2rem .55rem; white-space: nowrap; }
+.metagen { background: #dceff8; color: #00577f; }
+.nutrition { background: #e7f3e8; color: #235b2a; }

@@ -4,8 +4,9 @@
 @using MetaGrow.Shared
 @using MetaGrow.Web.Components.Pages.Index
 @using Metagen.Shared.Services
-@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist + "," + MetaGrowRoles.Accountant)]
 @inject ITgsApiService TgsApi
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>MetaGrow</PageTitle>
 
@@ -21,14 +22,21 @@
         <h2 id="work-areas-heading">Work areas</h2>
         <p class="section-intro">Choose an area to open its dashboard and dedicated search.</p>
         <div class="tiles">
-            <IndexTile NavigateUrl="/surveys/multicrop" Title="Multi-crop surveys" Description="Find surveys and open online or printable reports." IconCssClass="icon-chart" />
-            <IndexTile NavigateUrl="/surveys/banana" Title="Banana surveys" Description="Open the dedicated banana survey dashboard." IconCssClass="icon-basic-form" />
-            <IndexTile NavigateUrl="/surveys/samples" Title="Sample surveys" Description="Find sample surveys and open their reports." IconCssClass="icon-demos" />
-            <IndexTile NavigateUrl="/farms" Title="Farm setup" Description="Maintain properties, growers and blocks." IconCssClass="icon-editable-grid" />
-            <IndexTile NavigateUrl="/admin" Title="Administration" Description="Manage users, roles, MFA and application access." IconCssClass="icon-settings" />
+            <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)">
+                <IndexTile NavigateUrl="/surveys/multicrop" Title="Multi-crop surveys" Description="Find surveys and open online or printable reports." IconCssClass="icon-chart" />
+                <IndexTile NavigateUrl="/surveys/banana" Title="Banana surveys" Description="Open the dedicated banana survey dashboard." IconCssClass="icon-basic-form" />
+            </AuthorizeView>
+            <IndexTile NavigateUrl="/surveys/samples" Title="Sample surveys" Description="Find surveys, returned lab data and imports in one work area." IconCssClass="icon-demos" />
+            <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager)">
+                <IndexTile NavigateUrl="/farms" Title="Farm setup" Description="Maintain properties, growers and blocks." IconCssClass="icon-editable-grid" />
+            </AuthorizeView>
+            <AuthorizeView Roles="@MetaGrowRoles.Admin">
+                <IndexTile NavigateUrl="/admin" Title="Administration" Description="Manage users, roles, MFA and application access." IconCssClass="icon-settings" />
+            </AuthorizeView>
         </div>
     </section>
 
+    <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)">
     <section class="incomplete-surveys" aria-labelledby="incomplete-surveys-heading">
         <div class="queue-heading">
             <div>
@@ -173,9 +181,10 @@
             }
         }
     </section>
+    </AuthorizeView>
 
     <div class="release-note">
-        <strong>Current phase:</strong> Multi-crop and banana survey workflows, online and printable reporting, farm setup, reporting groups and controlled duplicate-property management are available. Sample surveys and the full administration area are still to come.
+        <strong>Current phase:</strong> Multi-crop and banana workflows, farm setup and controlled property management are available. Sample survey search and returned Soil-data navigation are now being introduced; editing, importing and reporting will follow.
     </div>
 </div>
 
@@ -220,6 +229,15 @@
 
     protected override async Task OnInitializedAsync()
     {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        if (!user.IsInRole(MetaGrowRoles.Admin) &&
+            !user.IsInRole(MetaGrowRoles.AgricultureManager) &&
+            !user.IsInRole(MetaGrowRoles.Agronomist))
+        {
+            _loading = false;
+            return;
+        }
+
         try
         {
             var surveys = await TgsApi.GetIncompleteSurveySummaries();

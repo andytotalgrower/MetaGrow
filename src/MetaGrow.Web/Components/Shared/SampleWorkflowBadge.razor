@@ -1,0 +1,12 @@
+@using MetaGrow.Shared
+
+@if (string.IsNullOrWhiteSpace(Name))
+{
+    <span class="not-applicable">—</span>
+}
+else
+{
+    <span class="status-badge @SampleSurveyFilter.StatusBadgeClass(Name)">@Name</span>
+}
+
+@code { [Parameter] public string? Name { get; set; } }

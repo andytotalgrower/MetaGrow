@@ -1,0 +1,348 @@
+@page "/surveys/samples/{SurveyId:int}/edit"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using MetaGrow.Web.Services
+@using Metagen.Shared.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist + "," + MetaGrowRoles.Accountant)]
+@inject ITgsApiService TgsApi
+@inject ApiTokenService ApiTokens
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Sample survey @SurveyId | MetaGrow</PageTitle>
+
+<div class="sample-editor-page">
+    @if (_loading)
+    {
+        <div class="editor-loading"><DxWaitIndicator Visible="true" /><span>Loading Sample survey...</span></div>
+    }
+    else if (_editor is null)
+    {
+        <div class="alert alert-danger" role="alert">@_message</div>
+        <DxButton Text="Back to Sample surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
+    }
+    else
+    {
+        <div class="editor-toolbar" role="toolbar" aria-label="Sample survey actions">
+            <div class="toolbar-left">
+                <DxButton Text="Back to Sample surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
+                <DxButton Text="Lab data" RenderStyle="ButtonRenderStyle.Secondary" Click="ViewLabData" />
+                <DxButton Text="Import results" RenderStyle="ButtonRenderStyle.Secondary" Click="ImportResults" />
+            </div>
+            @if (_canEditOperations || _canEditFinance)
+            {
+                <DxButton Text="Save changes" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="SaveAsync" />
+            }
+        </div>
+
+        <header class="editor-hero">
+            <div>
+                <span class="editor-kicker">Sample survey @SurveyId</span>
+                <h1>@_editor.PropertyName</h1>
+                <p>@_editor.SurveyDate.ToString("dd MMMM yyyy") · @_editor.AgronomistName · @_editor.Samples.Count samples</p>
+            </div>
+            <div class="type-summary">
+                @if (_editor.Metagen is not null) { <span class="type-badge metagen">Metagen</span> }
+                @if (_editor.Nutrition is not null) { <span class="type-badge nutrition">Nutrition</span> }
+            </div>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="alert @(_success ? "alert-success" : "alert-danger")" role="alert">@_message</div>
+        }
+
+        <section class="workflow-section" aria-labelledby="workflow-heading">
+            <div class="section-heading">
+                <span class="editor-kicker">Independent status tracks</span>
+                <h2 id="workflow-heading">Laboratory and report workflow</h2>
+                <p>Metagen and nutrition samples move independently. Report QA only opens after every sample in that lane is lab-complete.</p>
+            </div>
+            <div class="workflow-lanes">
+                @if (_editor.Metagen is not null)
+                {
+                    <SampleWorkflowLane Lane="@_editor.Metagen" CanMove="@_canMoveStatuses" Busy="@_busy"
+                                        Move="@(action => TransitionAsync(SampleSurveyCategory.Metagen, action))" />
+                }
+                @if (_editor.Nutrition is not null)
+                {
+                    <SampleWorkflowLane Lane="@_editor.Nutrition" CanMove="@_canMoveStatuses" Busy="@_busy"
+                                        Move="@(action => TransitionAsync(SampleSurveyCategory.Nutrition, action))" />
+                }
+            </div>
+        </section>
+
+        <div class="editor-grid">
+            <section class="editor-card" aria-labelledby="details-heading">
+                <div class="section-heading">
+                    <span class="editor-kicker">Survey setup</span>
+                    <h2 id="details-heading">Details and time</h2>
+                </div>
+                <div class="field-grid">
+                    <div class="field">
+                        <label for="sample-survey-date">Survey date</label>
+                        <DxDateEdit Id="sample-survey-date" @bind-Date="_editor.SurveyDate" DisplayFormat="dd/MM/yyyy" Enabled="@_canEditOperations" />
+                    </div>
+                    <div class="field wide">
+                        <label for="sample-agronomist">Agronomist</label>
+                        <DxComboBox Id="sample-agronomist" Data="@_editor.Agronomists" @bind-Value="_editor.AgronomistId"
+                                    TextFieldName="@nameof(Staff.StaffName)" ValueFieldName="@nameof(Staff.StaffId)"
+                                    AllowUserInput="false" Enabled="@_canEditOperations" />
+                    </div>
+                    <div class="field">
+                        <label for="sample-hours">Sample hours</label>
+                        <DxSpinEdit Id="sample-hours" @bind-Value="_editor.SampleHours" Increment="0.25" MinValue="0" DisplayFormat="0.00" Enabled="@_canEditOperations" />
+                    </div>
+                    <div class="field">
+                        <label for="sample-report-hours">Report hours</label>
+                        <DxSpinEdit Id="sample-report-hours" @bind-Value="_editor.ReportHours" Increment="0.25" MinValue="0" DisplayFormat="0.00" Enabled="@_canEditOperations" />
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="sample-general-notes">General notes</label>
+                    <DxMemo Id="sample-general-notes" @bind-Text="_editor.GeneralNotes" Rows="4" Enabled="@_canEditOperations" />
+                </div>
+            </section>
+
+            <section class="editor-card" aria-labelledby="billing-heading">
+                <div class="section-heading">
+                    <span class="editor-kicker">Billing</span>
+                    <h2 id="billing-heading">Survey billing</h2>
+                </div>
+                <div class="field-grid">
+                    <div class="field wide">
+                        <label for="sample-billing-entity">Billing entity</label>
+                        <DxComboBox Id="sample-billing-entity" Data="@_editor.BillingEntities" @bind-Value="_editor.BillingEntityId"
+                                    TextFieldName="@nameof(BillingEntity.BillingEntityName)" ValueFieldName="@nameof(BillingEntity.BillingEntityId)"
+                                    AllowUserInput="false" Enabled="@_canEditFinance" />
+                    </div>
+                    <div class="field">
+                        <label for="sample-postage-bags">Postage bags</label>
+                        <DxSpinEdit Id="sample-postage-bags" @bind-Value="_editor.NoPostageBags" MinValue="0" Enabled="@_canEditFinance" />
+                    </div>
+                    <div class="field wide">
+                        <label for="sample-po">Survey P.O. number</label>
+                        <DxTextBox Id="sample-po" @bind-Text="_editor.SurveyPurchaseOrderNumber" Enabled="@_canEditFinance"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="sample-accountant-notes">Notes for accountant</label>
+                    <DxMemo Id="sample-accountant-notes" @bind-Text="_editor.NotesForAccountant" Rows="4" Enabled="@_canEditFinance" />
+                </div>
+            </section>
+
+            <section class="editor-card full-width" aria-labelledby="samples-heading">
+                <div class="section-heading split-heading">
+                    <div>
+                        <span class="editor-kicker">Collected samples</span>
+                        <h2 id="samples-heading">Samples and laboratory progress</h2>
+                    </div>
+                    <span>@_editor.Samples.Count total</span>
+                </div>
+                <div class="sample-grid-wrap">
+                    <DxGrid Data="@_editor.Samples" PageSize="20" HighlightRowOnHover="true" TextWrapEnabled="false"
+                            ColumnResizeMode="GridColumnResizeMode.NextColumn" CssClass="editor-sample-grid">
+                        <Columns>
+                            <DxGridDataColumn Caption="Type" Width="92px" AllowSort="false">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var item = (SampleSurveyItem)cell.DataItem; }
+                                    <span class="type-badge @(item.LabId == 6 ? "metagen" : "nutrition")">@(item.LabId == 6 ? "Metagen" : "Nutrition")</span>
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.LabName)" Caption="Laboratory" MinWidth="130" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.LabStatusName)" Caption="Lab status" MinWidth="130" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.BarcodeId)" Caption="Barcode" Width="95px" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.BlockName)" Caption="Block" MinWidth="140" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.TestName)" Caption="Test" MinWidth="140" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.CropTypeName)" Caption="Crop" MinWidth="120" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.IsBillable)" Caption="Billable" Width="80px" />
+                        </Columns>
+                    </DxGrid>
+                </div>
+            </section>
+
+            <section class="editor-card full-width" aria-labelledby="invoice-heading">
+                <div class="section-heading">
+                    <span class="editor-kicker">Accounts</span>
+                    <h2 id="invoice-heading">Invoice details</h2>
+                </div>
+                <div class="field-grid invoice-grid">
+                    <div class="field">
+                        <label for="sample-invoice-number">Invoice number</label>
+                        <DxTextBox Id="sample-invoice-number" @bind-Text="_editor.InvoiceNumber" Enabled="@_canEditFinance" />
+                    </div>
+                    <div class="field">
+                        <label for="sample-invoice-date">Invoice date</label>
+                        <DxDateEdit Id="sample-invoice-date" @bind-Date="_editor.InvoiceDate" DisplayFormat="dd/MM/yyyy" Enabled="@_canEditFinance" />
+                    </div>
+                    <div class="field">
+                        <label for="sample-invoice-email-date">Invoice emailed</label>
+                        <DxDateEdit Id="sample-invoice-email-date" @bind-Date="_editor.InvoiceEmailedDate" DisplayFormat="dd/MM/yyyy" Enabled="@_canEditFinance" />
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="sample-invoice-notes">Invoice notes</label>
+                    <DxMemo Id="sample-invoice-notes" @bind-Text="_editor.InvoiceNotes" Rows="3" Enabled="@_canEditFinance" />
+                </div>
+            </section>
+        </div>
+
+        <footer class="audit-strip">
+            <span><strong>Created</strong> @_editor.CreationDate.ToString("dd MMM yyyy HH:mm") by @_editor.CreatedBy</span>
+            @if (_editor.ModificationDate.HasValue)
+            {
+                <span><strong>Last changed</strong> @_editor.ModificationDate.Value.ToString("dd MMM yyyy HH:mm") by @_editor.ModifiedBy</span>
+            }
+        </footer>
+    }
+</div>
+
+@code {
+    [Parameter] public int SurveyId { get; set; }
+
+    private SampleSurveyEditorDto? _editor;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _success;
+    private bool _canEditOperations;
+    private bool _canEditFinance;
+    private bool _canMoveStatuses;
+    private string? _message;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _message = null;
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authenticationState.User;
+        _canEditOperations = user.IsInRole(MetaGrowRoles.Admin) || user.IsInRole(MetaGrowRoles.AgricultureManager) || user.IsInRole(MetaGrowRoles.Agronomist);
+        _canEditFinance = user.IsInRole(MetaGrowRoles.Admin) || user.IsInRole(MetaGrowRoles.AgricultureManager) || user.IsInRole(MetaGrowRoles.Accountant);
+        _canMoveStatuses = _canEditOperations;
+
+        _editor = await TgsApi.GetSampleSurveyEditor(SurveyId);
+        if (_editor is null) _message = TgsApi.ErrorMessage ?? "The Sample survey could not be loaded.";
+        _loading = false;
+    }
+
+    private async Task SaveAsync() => await SaveAsync(showSuccess: true);
+
+    private async Task<bool> SaveAsync(bool showSuccess)
+    {
+        if (_editor is null || !ValidateEditor()) return false;
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var accessToken = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            SetError("Your session has expired. Sign in again before saving the survey.");
+            return false;
+        }
+
+        _busy = true;
+        _message = null;
+        _success = false;
+        try
+        {
+            var updated = await TgsApi.UpdateSampleSurveyEditor(
+                SurveyId,
+                new SampleSurveyEditorUpdateRequest
+                {
+                    SurveyDate = _editor.SurveyDate,
+                    AgronomistId = _editor.AgronomistId,
+                    BillingEntityId = _editor.BillingEntityId,
+                    SampleHours = _editor.SampleHours,
+                    ReportHours = _editor.ReportHours,
+                    GeneralNotes = _editor.GeneralNotes,
+                    NotesForAccountant = _editor.NotesForAccountant,
+                    NoPostageBags = _editor.NoPostageBags,
+                    InvoiceNumber = _editor.InvoiceNumber,
+                    InvoiceDate = _editor.InvoiceDate,
+                    InvoiceNotes = _editor.InvoiceNotes,
+                    InvoiceEmailedDate = _editor.InvoiceEmailedDate,
+                    SurveyPurchaseOrderNumber = _editor.SurveyPurchaseOrderNumber,
+                    ExpectedModificationDate = _editor.ModificationDate,
+                    ModifiedBy = authenticationState.User.Identity?.Name ?? "MetaGrow"
+                },
+                accessToken);
+            if (updated is null)
+            {
+                SetError(TgsApi.ErrorMessage ?? "The Sample survey could not be saved.");
+                return false;
+            }
+
+            _editor = updated;
+            if (showSuccess)
+            {
+                _success = true;
+                _message = "Sample survey changes saved.";
+            }
+            return true;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task TransitionAsync(SampleSurveyCategory category, SampleSurveyWorkflowAction action)
+    {
+        if (_editor is null || !await SaveAsync(showSuccess: false)) return;
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var accessToken = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            SetError("Your session has expired. Sign in again before moving the survey status.");
+            return;
+        }
+
+        _busy = true;
+        _message = null;
+        _success = false;
+        try
+        {
+            var updated = await TgsApi.TransitionSampleSurvey(
+                SurveyId,
+                new SampleSurveyTransitionRequest
+                {
+                    Category = category,
+                    Action = action,
+                    ExpectedModificationDate = _editor.ModificationDate,
+                    ModifiedBy = authenticationState.User.Identity?.Name ?? "MetaGrow"
+                },
+                accessToken);
+            if (updated is null)
+            {
+                SetError(TgsApi.ErrorMessage ?? "The Sample survey status could not be changed.");
+                return;
+            }
+
+            _editor = updated;
+            var lane = category == SampleSurveyCategory.Metagen ? updated.Metagen : updated.Nutrition;
+            _success = true;
+            _message = $"{category} moved to {lane?.WorkflowName.ToLowerInvariant() ?? "the next stage"}.";
+        }
+        finally { _busy = false; }
+    }
+
+    private bool ValidateEditor()
+    {
+        if (_editor is null) return false;
+        if (_editor.SurveyDate == default) { SetError("Enter a survey date."); return false; }
+        if (_editor.AgronomistId <= 0) { SetError("Select an agronomist."); return false; }
+        if (_editor.BillingEntityId <= 0) { SetError("Select a billing entity."); return false; }
+        if (!IsQuarterHour(_editor.SampleHours) || !IsQuarterHour(_editor.ReportHours))
+        {
+            SetError("Sample and report hours must be entered in quarter-hour increments.");
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(_editor.InvoiceNumber) && !_editor.InvoiceDate.HasValue)
+        {
+            SetError("Enter the invoice date or clear the invoice number.");
+            return false;
+        }
+        return true;
+    }
+
+    private static bool IsQuarterHour(double value) => value >= 0 && Math.Abs(value * 4 - Math.Round(value * 4)) < .0001;
+    private void SetError(string message) { _success = false; _message = message; }
+    private void BackToSurveys() => Navigation.NavigateTo("/surveys/samples");
+    private void ViewLabData() => Navigation.NavigateTo($"/surveys/samples/{SurveyId}/lab-results");
+    private void ImportResults() => Navigation.NavigateTo($"/surveys/samples/{SurveyId}/import");
+}

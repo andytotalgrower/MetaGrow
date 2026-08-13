@@ -1,0 +1,109 @@
+@using ApiModels
+
+<section class="sample-lane @Lane.Category.ToString().ToLowerInvariant()" aria-label="@Lane.Category workflow">
+    <header>
+        <div>
+            <span class="lane-kicker">@Lane.Category</span>
+            <h2>@Lane.SampleCount sample@(Lane.SampleCount == 1 ? string.Empty : "s")</h2>
+        </div>
+        <SampleWorkflowBadge Name="@Lane.WorkflowName" />
+    </header>
+
+    <div class="lab-progress" aria-label="Laboratory progress">
+        <span><strong>@Lane.InTransitCount</strong> in transit</span>
+        <span><strong>@Lane.AtLabCount</strong> at lab</span>
+        <span><strong>@Lane.CompleteCount</strong> complete</span>
+    </div>
+
+    @if (Lane.IsLabWorkComplete)
+    {
+        <ol class="report-steps" aria-label="Report workflow">
+            @foreach (var step in ReportSteps)
+            {
+                <li class="@StepClass(step.StatusId)"><span></span>@step.Label</li>
+            }
+        </ol>
+        @if (Lane.ReportStatusId == MultiCropSurveyStatus.AwaitingQa)
+        {
+            <p class="lane-note">QA must be completed by a different agronomist, unless an administrator is approving a survey they created.</p>
+        }
+    }
+    else if (Lane.AtLabCount > 0)
+    {
+        <p class="lane-note">This lane moves on when its returned lab data is processed. Lab work cannot be skipped from the survey screen.</p>
+    }
+    else
+    {
+        <p class="lane-note">Mark the samples as received when the laboratory confirms delivery.</p>
+    }
+
+    @if (CanMove)
+    {
+        <div class="lane-actions">
+            <div>
+                @if (BackwardAction is not null)
+                {
+                    <DxButton Text="@BackwardAction.Label" RenderStyle="ButtonRenderStyle.Secondary"
+                              Enabled="@(!Busy)" Click="@(() => Move.InvokeAsync(BackwardAction.Action))" />
+                }
+            </div>
+            <div>
+                @if (Busy)
+                {
+                    <span class="lane-busy"><DxWaitIndicator Visible="true" /> Updating...</span>
+                }
+                else if (ForwardAction is not null)
+                {
+                    <DxButton Text="@ForwardAction.Label" RenderStyle="ButtonRenderStyle.Primary"
+                              Click="@(() => Move.InvokeAsync(ForwardAction.Action))" />
+                }
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public SampleSurveyLaneDto Lane { get; set; } = default!;
+    [Parameter] public bool CanMove { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback<SampleSurveyWorkflowAction> Move { get; set; }
+
+    private sealed record WorkflowStep(int StatusId, string Label);
+    private sealed record WorkflowOption(SampleSurveyWorkflowAction Action, string Label);
+    private static readonly WorkflowStep[] ReportSteps =
+    [
+        new(MultiCropSurveyStatus.InProgress, "Report"),
+        new(MultiCropSurveyStatus.AwaitingQa, "QA"),
+        new(MultiCropSurveyStatus.ReadyToSend, "Ready"),
+        new(MultiCropSurveyStatus.Complete, "Sent")
+    ];
+
+    private WorkflowOption? ForwardAction
+    {
+        get
+        {
+            if (Lane.InTransitCount > 0)
+                return new(SampleSurveyWorkflowAction.MarkReceivedByLab, "Mark received");
+            if (!Lane.IsLabWorkComplete) return null;
+            return Lane.ReportStatusId switch
+            {
+                MultiCropSurveyStatus.InProgress => new(SampleSurveyWorkflowAction.SubmitForQa, "Submit for QA"),
+                MultiCropSurveyStatus.AwaitingQa => new(SampleSurveyWorkflowAction.CompleteQa, "Complete QA"),
+                MultiCropSurveyStatus.ReadyToSend => new(SampleSurveyWorkflowAction.MarkSent, "Mark sent"),
+                _ => null
+            };
+        }
+    }
+
+    private WorkflowOption? BackwardAction => !Lane.IsLabWorkComplete ? null : Lane.ReportStatusId switch
+    {
+        MultiCropSurveyStatus.AwaitingQa => new(SampleSurveyWorkflowAction.ReturnToEditing, "Return to editing"),
+        MultiCropSurveyStatus.ReadyToSend => new(SampleSurveyWorkflowAction.ReturnToQa, "Return to QA"),
+        MultiCropSurveyStatus.Complete => new(SampleSurveyWorkflowAction.ReopenForSending, "Reopen for sending"),
+        _ => null
+    };
+
+    private string StepClass(int statusId) => Lane.ReportStatusId == statusId
+        ? "current"
+        : Lane.ReportStatusId > statusId ? "complete" : string.Empty;
+}

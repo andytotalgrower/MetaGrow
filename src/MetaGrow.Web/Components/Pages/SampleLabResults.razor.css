@@ -1,0 +1,40 @@
+.lab-results-page { display: flex; flex-direction: column; gap: 1rem; padding-bottom: 2rem; }
+.sample-nav { align-items: center; border-bottom: 1px solid var(--dxds-color-border-neutral-subdued-rest); display: flex; gap: .25rem; }
+.sample-nav a, .sample-nav span { border-bottom: 3px solid transparent; color: inherit; padding: .65rem .9rem; text-decoration: none; }
+.sample-nav a:hover { background: var(--dxds-color-surface-neutral-subdued-rest); }
+.sample-nav .active { border-bottom-color: var(--mg-blue, #007cba); color: var(--mg-link, #0d8ecb); font-weight: 650; }
+.sample-nav .disabled { color: var(--dxds-color-content-neutral-subdued-rest); cursor: not-allowed; }
+.survey-context { align-items: center; background: var(--dxds-color-surface-neutral-subdued-rest); border-left: 3px solid var(--mg-blue, #007cba); display: flex; justify-content: space-between; padding: .65rem .85rem; }
+.survey-context div { display: flex; gap: .4rem; }
+.filter-panel { background: var(--dxds-color-surface-neutral-subdued-rest); border: 1px solid var(--dxds-color-border-neutral-subdued-rest); border-radius: .5rem; padding: 1rem; }
+.filter-heading, .result-heading { align-items: center; display: flex; gap: 1rem; justify-content: space-between; }
+.filter-heading h2, .result-heading h2 { font-size: 1.125rem; margin: 0; }
+.filter-heading p, .result-heading span { color: var(--dxds-color-content-neutral-subdued-rest); margin: .25rem 0 0; }
+.filter-actions { display: flex; gap: .5rem; }
+.filter-grid { display: grid; gap: .75rem; grid-template-columns: repeat(4, minmax(10rem, 1fr)); margin-top: 1rem; }
+.filter-field { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.filter-field label { font-size: .8rem; font-weight: 600; }
+::deep .filter-field > .dxbl-component { width: 100%; }
+.loading-state, .empty-state { align-items: center; border: 1px dashed var(--dxds-color-border-neutral-subdued-rest); border-radius: .5rem; display: flex; gap: .6rem; justify-content: center; min-height: 8rem; padding: 1.5rem; }
+.empty-state { flex-direction: column; }
+.empty-state span { color: var(--dxds-color-content-neutral-subdued-rest); }
+.mapping-badge { border-radius: 999px; display: inline-block; font-size: .72rem; font-weight: 700; padding: .2rem .55rem; white-space: nowrap; }
+.mapping-badge.mapped { background: #d1e7dd; color: #0f5132; }
+.mapping-badge.attention { background: #fff3cd; color: #664d03; }
+.result-detail { background: var(--dxds-color-surface-neutral-subdued-rest); padding: .8rem 1rem 1rem; }
+.detail-heading { display: flex; gap: .5rem; margin-bottom: .65rem; }
+.detail-heading span { color: var(--dxds-color-content-neutral-subdued-rest); }
+.result-detail table { border-collapse: collapse; width: 100%; }
+.result-detail th, .result-detail td { border-bottom: 1px solid var(--dxds-color-border-neutral-subdued-rest); padding: .45rem .55rem; text-align: left; }
+.result-detail th { font-size: .76rem; }
+.mobile-results { display: none; }
+.result-card { border: 1px solid var(--dxds-color-border-neutral-subdued-rest); border-left: 3px solid var(--mg-blue, #007cba); border-radius: .4rem; padding: 1rem; }
+.result-card header { align-items: flex-start; display: flex; justify-content: space-between; }
+.result-card header > div { display: flex; flex-direction: column; }
+.result-card header span:not(.mapping-badge) { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .82rem; }
+.result-card dl > div { display: grid; grid-template-columns: 7rem 1fr; padding: .2rem 0; }
+.result-card dt { color: var(--dxds-color-content-neutral-subdued-rest); font-weight: 500; }
+.result-card dd { margin: 0; }
+@media (max-width: 70rem) { .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 48rem) { .desktop-results { display: none; } .mobile-results { display: grid; gap: .75rem; } }
+@media (max-width: 34rem) { .filter-heading, .survey-context { align-items: stretch; flex-direction: column; } .filter-actions { display: grid; grid-template-columns: 1fr 1fr; } .filter-grid { grid-template-columns: 1fr; } .sample-nav { overflow-x: auto; } }

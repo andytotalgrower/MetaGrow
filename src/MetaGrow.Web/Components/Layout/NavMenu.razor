@@ -7,7 +7,9 @@
             <DxMenuItem NavigateUrl="/" Text="Home" CssClass="@MenuItemCssClass("/")" IconCssClass="icon icon-home" />
             <DxMenuItem NavigateUrl="/surveys/multicrop" Text="Multi-crop surveys" CssClass="@MenuItemCssClass("/surveys/multicrop")" IconCssClass="icon icon-chart" />
             <DxMenuItem NavigateUrl="/surveys/banana" Text="Banana surveys" CssClass="@MenuItemCssClass("/surveys/banana")" IconCssClass="icon icon-basic-form" />
-            <DxMenuItem NavigateUrl="/surveys/samples" Text="Sample surveys" CssClass="@MenuItemCssClass("/surveys/samples")" IconCssClass="icon icon-demos" />
+            <AuthorizeView Roles="@(ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager + "," + ApiModels.MetaGrow.MetaGrowRoles.Agronomist + "," + ApiModels.MetaGrow.MetaGrowRoles.Accountant)">
+                <DxMenuItem NavigateUrl="/surveys/samples" Text="Sample surveys" CssClass="@MenuItemCssClass("/surveys/samples")" IconCssClass="icon icon-demos" />
+            </AuthorizeView>
             <AuthorizeView Roles="@(ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager)">
                 <DxMenuItem NavigateUrl="/farms" Text="Farm setup" CssClass="@MenuItemCssClass("/farms")" IconCssClass="icon icon-editable-grid" />
             </AuthorizeView>

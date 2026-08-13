@@ -1,3 +1,356 @@
 @page "/surveys/samples"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using MetaGrow.Shared
+@using MetaGrow.Web.Services
+@using Metagen.Shared.Services
+@using System.Text.Json
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist + "," + MetaGrowRoles.Accountant)]
+@inject ITgsApiService TgsApi
+@inject IJSRuntime JS
+@inject ApiTokenService ApiTokens
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
 <PageTitle>Sample surveys | MetaGrow</PageTitle>
-<ModuleLanding Title="Sample surveys" Description="A dedicated dashboard for the distinct sample survey structure." />
+
+<div class="samples-page">
+    <div class="title">
+        <div class="title-header-text">Sample surveys</div>
+        <div class="title-content-text">Find one survey across all laboratories and sample categories.</div>
+    </div>
+
+    <nav class="sample-nav" aria-label="Sample survey area">
+        <a class="active" href="/surveys/samples">Surveys</a>
+        <a href="/surveys/samples/lab-results">Lab results</a>
+        <span class="disabled" title="Available with the CSV importer phase">Import activity</span>
+    </nav>
+
+    @if (!string.IsNullOrWhiteSpace(_workflowMessage))
+    {
+        <div class="alert @(_workflowSuccess ? "alert-success" : "alert-danger")" role="alert">@_workflowMessage</div>
+    }
+
+    <section class="filter-panel" aria-labelledby="sample-search-heading">
+        <div class="filter-heading">
+            <div>
+                <h2 id="sample-search-heading">Find surveys</h2>
+                <p>Each survey appears once, including surveys containing both Metagen and nutrition samples.</p>
+            </div>
+            <div class="filter-actions">
+                <DxButton Text="Clear" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearFiltersAsync" Enabled="@(!_loading)" />
+                <DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="SearchAsync" Enabled="@(!_loading)" />
+            </div>
+        </div>
+
+        <div class="filter-grid">
+            <div class="filter-field">
+                <label for="sample-start-date">From</label>
+                <DxDateEdit Id="sample-start-date" @bind-Date="_startDate" @bind-Date:after="DateRangeChangedAsync" DisplayFormat="dd/MM/yyyy" />
+            </div>
+            <div class="filter-field">
+                <label for="sample-end-date">To</label>
+                <DxDateEdit Id="sample-end-date" @bind-Date="_endDate" @bind-Date:after="DateRangeChangedAsync" DisplayFormat="dd/MM/yyyy" />
+            </div>
+            <div class="filter-field property-filter">
+                <label for="sample-property">Property</label>
+                <DxTextBox Id="sample-property" @bind-Text="_propertySearch" @bind-Text:after="SaveFiltersAsync"
+                           NullText="Type a property name" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="300"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div class="filter-field">
+                <label for="sample-agronomist">Agronomist</label>
+                <DxComboBox Id="sample-agronomist" Data="@AgronomistOptions" @bind-Value="_agronomistId" @bind-Value:after="SaveFiltersAsync"
+                            TextFieldName="@nameof(FilterOption.Name)" ValueFieldName="@nameof(FilterOption.Id)"
+                            NullText="All agronomists" AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div class="filter-field">
+                <label for="sample-category">Sample category</label>
+                <DxComboBox Id="sample-category" Data="@CategoryOptions" @bind-Value="_category" @bind-Value:after="SaveFiltersAsync"
+                            NullText="All categories" AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div class="filter-field">
+                <label for="sample-workflow">Workflow</label>
+                <DxComboBox Id="sample-workflow" Data="@WorkflowOptions" @bind-Value="_workflow" @bind-Value:after="SaveFiltersAsync"
+                            NullText="All stages" AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div class="filter-field">
+                <label for="sample-lab">Laboratory</label>
+                <DxComboBox Id="sample-lab" Data="@LaboratoryOptions" @bind-Value="_labId" @bind-Value:after="SaveFiltersAsync"
+                            TextFieldName="@nameof(FilterOption.Name)" ValueFieldName="@nameof(FilterOption.Id)"
+                            NullText="All laboratories" AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div class="filter-field">
+                <label for="sample-test">Test type</label>
+                <DxComboBox Id="sample-test" Data="@TestTypeOptions" @bind-Value="_testTypeId" @bind-Value:after="SaveFiltersAsync"
+                            TextFieldName="@nameof(FilterOption.Name)" ValueFieldName="@nameof(FilterOption.Id)"
+                            NullText="All test types" AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+        </div>
+    </section>
+
+    @if (_loading)
+    {
+        <div class="loading-state" role="status"><div class="spinner-border spinner-border-sm" aria-hidden="true"></div><span>Loading Sample surveys…</span></div>
+    }
+    else if (_errorMessage is not null)
+    {
+        <div class="alert alert-danger" role="alert"><strong>Surveys could not be loaded.</strong> @_errorMessage</div>
+    }
+    else
+    {
+        <div class="result-heading">
+            <div><h2>Results</h2><span>@ResultSummary</span></div>
+            @if (_surveys.Count > 0)
+            {
+                <DxButton Text="Choose columns" RenderStyle="ButtonRenderStyle.Secondary" Click="ShowColumnChooser" CssClass="desktop-only" />
+            }
+        </div>
+
+        @if (_surveys.Count == 0)
+        {
+            <div class="empty-state"><strong>No surveys were found.</strong><span>Try a wider date range.</span></div>
+        }
+        else if (FilteredSurveys.Count == 0)
+        {
+            <div class="empty-state"><strong>No surveys match the current filters.</strong><span>Clear one or more filters to see more results.</span></div>
+        }
+        else
+        {
+            <div class="desktop-results">
+                <DxGrid @ref="_grid" Data="@FilteredSurveys" PageSize="20" ShowAllRows="false" TextWrapEnabled="false"
+                        HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn" CssClass="sample-grid">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.SurveyDate)" Caption="Date" Width="110px" DisplayFormat="dd/MM/yyyy" />
+                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.PropertyName)" Caption="Property" MinWidth="180" />
+                        <DxGridDataColumn Caption="Type" Width="155px" AllowSort="false">
+                            <CellDisplayTemplate Context="cell"><SampleTypeBadges Survey="@((SampleSurveySummaryDto)cell.DataItem)" /></CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.CropNames)" Caption="Crop" MinWidth="135" />
+                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.AgronomistName)" Caption="Agronomist" MinWidth="150" />
+                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.SampleCount)" Caption="Samples" Width="82px" />
+                        <DxGridDataColumn Caption="Nutrition" MinWidth="170">
+                            <CellDisplayTemplate Context="cell">
+                                @{
+                                    var survey = (SampleSurveySummaryDto)cell.DataItem;
+                                    var action = NextAction(survey, SampleSurveyCategory.Nutrition);
+                                    var busy = IsLaneBusy(survey.SurveyId, SampleSurveyCategory.Nutrition);
+                                }
+                                <div class="lane-status">
+                                    <SampleWorkflowBadge Name="@survey.NutritionWorkflowName" />
+                                    @if (busy)
+                                    {
+                                        <span class="lane-working"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Moving...</span>
+                                    }
+                                    else if (_canMoveStatuses && action is not null)
+                                    {
+                                        <DxButton Text="@action.Label" RenderStyle="ButtonRenderStyle.Secondary" SizeMode="SizeMode.Small"
+                                                  Click="@(() => AdvanceLaneAsync(survey, SampleSurveyCategory.Nutrition, action.Action))" />
+                                    }
+                                    else if (string.Equals(survey.NutritionWorkflowName, "At lab", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="lane-hint">Continue through lab processing</span>
+                                    }
+                                </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.NutritionSampleCount)" Caption="Nutrition samples" Width="125px" Visible="false" />
+                        <DxGridDataColumn Caption="Actions" Width="188px" AllowSort="false">
+                            <CellDisplayTemplate Context="cell">
+                                @{ var survey = (SampleSurveySummaryDto)cell.DataItem; }
+                                <div class="survey-links"><a href="@EditorUrl(survey)">Open survey</a><a href="@LabResultsUrl(survey)">Lab data</a><a href="@ImportUrl(survey)">Import</a></div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </div>
+
+            <div class="mobile-results">
+                @foreach (var survey in FilteredSurveys)
+                {
+                    <article class="survey-card">
+                        <div class="survey-card-heading"><div><strong>@survey.PropertyName</strong><span>@survey.SurveyDate.ToString("dd MMM yyyy") · @survey.SampleCount samples</span></div><SampleTypeBadges Survey="survey" /></div>
+                        <dl>
+                            <div><dt>Crop</dt><dd>@survey.CropNames</dd></div>
+                            <div><dt>Agronomist</dt><dd>@survey.AgronomistName</dd></div>
+                            <div><dt>Nutrition</dt><dd>@LaneMobileContent(survey, SampleSurveyCategory.Nutrition)</dd></div>
+                        </dl>
+                        <div class="survey-card-actions"><a class="btn btn-primary" href="@EditorUrl(survey)">Open survey</a><a class="btn btn-outline-secondary" href="@LabResultsUrl(survey)">Lab data</a><a class="btn btn-outline-secondary" href="@ImportUrl(survey)">Import</a></div>
+                    </article>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private const string FilterCookieName = "metagrow.samples.filters";
+    private static readonly string[] CategoryOptions = [SampleSurveyFilter.MetagenCategory, SampleSurveyFilter.NutritionCategory];
+    private readonly DateTime _today = DateTime.Today;
+    private IGrid? _grid;
+    private DateTime _startDate;
+    private DateTime _endDate;
+    private string? _propertySearch;
+    private int? _agronomistId;
+    private string? _category;
+    private string? _workflow;
+    private int? _labId;
+    private int? _testTypeId;
+    private bool _loading = true;
+    private bool _canMoveStatuses;
+    private bool _workflowSuccess;
+    private string? _errorMessage;
+    private string? _workflowMessage;
+    private string? _busyLane;
+    private List<SampleSurveySummaryDto> _surveys = [];
+
+    private sealed record FilterOption(int Id, string Name);
+    private sealed record LaneAction(SampleSurveyWorkflowAction Action, string Label);
+    private IReadOnlyList<FilterOption> AgronomistOptions => _surveys.GroupBy(item => new { item.AgronomistId, item.AgronomistName }).Select(group => new FilterOption(group.Key.AgronomistId, group.Key.AgronomistName)).OrderBy(item => item.Name).ToList();
+    private IReadOnlyList<FilterOption> LaboratoryOptions => _surveys.SelectMany(item => item.Laboratories).GroupBy(item => item.Id).Select(group => new FilterOption(group.Key, group.First().Name)).OrderBy(item => item.Name).ToList();
+    private IReadOnlyList<FilterOption> TestTypeOptions => _surveys.SelectMany(item => item.TestTypes).GroupBy(item => item.Id).Select(group => new FilterOption(group.Key, group.First().Name)).OrderBy(item => item.Name).ToList();
+    private IReadOnlyList<string> WorkflowOptions => _surveys.SelectMany(item => new[] { item.MetagenWorkflowName, item.NutritionWorkflowName }).Where(item => !string.IsNullOrWhiteSpace(item)).Select(item => item!).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(item => item).ToList();
+    private IReadOnlyList<SampleSurveySummaryDto> FilteredSurveys => SampleSurveyFilter.Apply(_surveys, _propertySearch, _agronomistId, _category, _workflow, _labId, _testTypeId);
+    private string ResultSummary => FilteredSurveys.Count == _surveys.Count ? $"{_surveys.Count} survey{(_surveys.Count == 1 ? string.Empty : "s")}" : $"{FilteredSurveys.Count} of {_surveys.Count} surveys";
+
+    protected override void OnInitialized() => ApplyFilters(SampleSurveyFilterPreferences.CreateDefault(_today));
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _canMoveStatuses = authenticationState.User.IsInRole(MetaGrowRoles.Admin) ||
+            authenticationState.User.IsInRole(MetaGrowRoles.AgricultureManager) ||
+            authenticationState.User.IsInRole(MetaGrowRoles.Agronomist);
+        await RestoreFiltersAsync();
+        await LoadSurveysAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadSurveysAsync()
+    {
+        if (_endDate.Date < _startDate.Date) { _errorMessage = "The end date must be on or after the start date."; return; }
+        _loading = true;
+        _errorMessage = null;
+        try
+        {
+            var surveys = await TgsApi.GetSampleSurveySummaries(_startDate.Date, _endDate.Date);
+            _surveys = surveys ?? [];
+            _errorMessage = surveys is null ? TgsApi.ErrorMessage ?? "The Sample surveys could not be loaded from the TGS API." : null;
+        }
+        finally { _loading = false; }
+    }
+
+    private async Task SearchAsync() { await SaveFiltersAsync(); await LoadSurveysAsync(); }
+    private async Task DateRangeChangedAsync() { await SaveFiltersAsync(); await LoadSurveysAsync(); }
+    private async Task ClearFiltersAsync() { ApplyFilters(SampleSurveyFilterPreferences.CreateDefault(_today)); await SaveFiltersAsync(); await LoadSurveysAsync(); }
+    private async Task RestoreFiltersAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("metaGrowFilterPreferences.get", FilterCookieName);
+            if (string.IsNullOrWhiteSpace(json)) return;
+            var filters = JsonSerializer.Deserialize<SampleSurveyFilterPreferences>(json);
+            if (filters?.HasValidDateRange == true) ApplyFilters(filters);
+        }
+        catch (JsonException) { ApplyFilters(SampleSurveyFilterPreferences.CreateDefault(_today)); }
+    }
+    private async Task SaveFiltersAsync()
+    {
+        var filters = new SampleSurveyFilterPreferences(_startDate.Date, _endDate.Date, _propertySearch, _agronomistId, _category, _workflow, _labId, _testTypeId);
+        await JS.InvokeVoidAsync("metaGrowFilterPreferences.set", FilterCookieName, JsonSerializer.Serialize(filters));
+    }
+    private void ApplyFilters(SampleSurveyFilterPreferences filters)
+    {
+        _startDate = filters.StartDate.Date; _endDate = filters.EndDate.Date; _propertySearch = filters.PropertySearch; _agronomistId = filters.AgronomistId; _category = filters.Category; _workflow = filters.Workflow; _labId = filters.LabId; _testTypeId = filters.TestTypeId;
+    }
+    private void ShowColumnChooser() => _grid?.ShowColumnChooser();
+    private static LaneAction? NextAction(SampleSurveySummaryDto survey, SampleSurveyCategory category)
+    {
+        var hasSamples = category == SampleSurveyCategory.Metagen ? survey.HasMetagenSamples : survey.HasNutritionSamples;
+        if (!hasSamples) return null;
+        var workflow = category == SampleSurveyCategory.Metagen ? survey.MetagenWorkflowName : survey.NutritionWorkflowName;
+        if (string.Equals(workflow, "In transit", StringComparison.OrdinalIgnoreCase))
+            return new LaneAction(SampleSurveyWorkflowAction.MarkReceivedByLab, "Mark received");
+        if (string.Equals(workflow, "At lab", StringComparison.OrdinalIgnoreCase)) return null;
+
+        var status = (category == SampleSurveyCategory.Metagen
+            ? survey.MetagenReportStatusId
+            : survey.NutritionReportStatusId) ?? MultiCropSurveyStatus.InProgress;
+        return status switch
+        {
+            MultiCropSurveyStatus.InProgress => new(SampleSurveyWorkflowAction.SubmitForQa, "Submit for QA"),
+            MultiCropSurveyStatus.AwaitingQa => new(SampleSurveyWorkflowAction.CompleteQa, "Complete QA"),
+            MultiCropSurveyStatus.ReadyToSend => new(SampleSurveyWorkflowAction.MarkSent, "Mark sent"),
+            _ => null
+        };
+    }
+
+    private RenderFragment LaneMobileContent(SampleSurveySummaryDto survey, SampleSurveyCategory category) => builder =>
+    {
+        var workflow = category == SampleSurveyCategory.Metagen ? survey.MetagenWorkflowName : survey.NutritionWorkflowName;
+        var action = NextAction(survey, category);
+        var sequence = 0;
+        builder.OpenComponent<SampleWorkflowBadge>(sequence++);
+        builder.AddAttribute(sequence++, "Name", workflow);
+        builder.CloseComponent();
+        if (!_canMoveStatuses || action is null) return;
+        builder.OpenElement(sequence++, "button");
+        builder.AddAttribute(sequence++, "type", "button");
+        builder.AddAttribute(sequence++, "class", "btn btn-sm btn-outline-secondary lane-mobile-action");
+        builder.AddAttribute(sequence++, "disabled", IsLaneBusy(survey.SurveyId, category));
+        builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, () => AdvanceLaneAsync(survey, category, action.Action)));
+        builder.AddContent(sequence++, IsLaneBusy(survey.SurveyId, category) ? "Moving..." : action.Label);
+        builder.CloseElement();
+    };
+
+    private async Task AdvanceLaneAsync(
+        SampleSurveySummaryDto survey,
+        SampleSurveyCategory category,
+        SampleSurveyWorkflowAction action)
+    {
+        _busyLane = LaneKey(survey.SurveyId, category);
+        _workflowMessage = null;
+        _workflowSuccess = false;
+        try
+        {
+            var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var accessToken = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                _workflowMessage = "Your session has expired. Sign in again before moving the survey status.";
+                return;
+            }
+
+            var updated = await TgsApi.TransitionSampleSurvey(
+                survey.SurveyId,
+                new SampleSurveyTransitionRequest
+                {
+                    Category = category,
+                    Action = action,
+                    ExpectedModificationDate = survey.LastModified,
+                    ModifiedBy = authenticationState.User.Identity?.Name ?? "MetaGrow"
+                },
+                accessToken);
+            if (updated is null)
+            {
+                _workflowMessage = TgsApi.ErrorMessage ?? "The Sample survey status could not be changed.";
+                return;
+            }
+
+            await LoadSurveysAsync();
+            var lane = category == SampleSurveyCategory.Metagen ? updated.Metagen : updated.Nutrition;
+            _workflowSuccess = true;
+            _workflowMessage = $"{category} moved to {lane?.WorkflowName.ToLowerInvariant() ?? "the next stage"}.";
+        }
+        finally
+        {
+            _busyLane = null;
+        }
+    }
+
+    private bool IsLaneBusy(int surveyId, SampleSurveyCategory category) =>
+        string.Equals(_busyLane, LaneKey(surveyId, category), StringComparison.Ordinal);
+    private static string LaneKey(int surveyId, SampleSurveyCategory category) => $"{surveyId}:{category}";
+    private static string EditorUrl(SampleSurveySummaryDto survey) => $"/surveys/samples/{survey.SurveyId}/edit";
+    private static string LabResultsUrl(SampleSurveySummaryDto survey) => $"/surveys/samples/{survey.SurveyId}/lab-results";
+    private static string ImportUrl(SampleSurveySummaryDto survey) => $"/surveys/samples/{survey.SurveyId}/import";
+}
