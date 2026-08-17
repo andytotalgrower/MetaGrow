@@ -39,7 +39,7 @@
             </div>
             <div class="filter-field property-filter">
                 <label for="survey-property">Property</label>
-                <DxTextBox Id="survey-property" @bind-Text="_propertySearch" @bind-Text:after="SaveFiltersAsync" NullText="Type a property name"
+                <DxTextBox Id="survey-property" @bind-Text="_propertySearch" @bind-Text:after="PropertySearchChangedAsync" NullText="Type a property name"
                            BindValueMode="BindValueMode.OnDelayedInput" InputDelay="300" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
             </div>
             <div class="filter-field">
@@ -169,6 +169,12 @@
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "property")]
+    public string? RequestedProperty { get; set; }
+
+    [SupplyParameterFromQuery(Name = "propertyId")]
+    public int? RequestedPropertyId { get; set; }
+
     private IGrid? _grid;
     private const string FilterCookieName = "metagrow.multicrop.filters";
     private readonly DateTime _today = DateTime.Today;
@@ -191,7 +197,9 @@
         .ToList();
 
     private IReadOnlyList<MultiCropSurveySummaryDto> FilteredSurveys =>
-        MultiCropSurveyFilter.Apply(_surveys, _propertySearch, _applicationId, _statusId);
+        MultiCropSurveyFilter.Apply(_surveys, _propertySearch, _applicationId, _statusId)
+            .Where(survey => RequestedPropertyId is null || survey.PropertyId == RequestedPropertyId)
+            .ToList();
 
     private string ResultSummary => FilteredSurveys.Count == _surveys.Count
         ? $"{_surveys.Count} survey{(_surveys.Count == 1 ? string.Empty : "s")}"
@@ -211,8 +219,20 @@
         }
 
         await RestoreFiltersAsync();
+        ApplyLinkedPropertyFilter();
         await LoadSurveysAsync();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyLinkedPropertyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(RequestedProperty)) return;
+
+        _startDate = new DateTime(1990, 1, 1);
+        _endDate = _today;
+        _propertySearch = RequestedProperty.Trim();
+        _applicationId = null;
+        _statusId = null;
     }
 
     private async Task LoadSurveysAsync()
@@ -266,9 +286,16 @@
 
     private async Task ClearFiltersAsync()
     {
+        RequestedPropertyId = null;
         ApplyFilters(MultiCropSurveyFilterPreferences.CreateDefault(_today));
         await SaveFiltersAsync();
         await LoadSurveysAsync();
+    }
+
+    private async Task PropertySearchChangedAsync()
+    {
+        RequestedPropertyId = null;
+        await SaveFiltersAsync();
     }
 
     private async Task RestoreFiltersAsync()

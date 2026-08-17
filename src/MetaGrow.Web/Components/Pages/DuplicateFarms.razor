@@ -214,7 +214,11 @@
                                     <td>@FarmCell(candidate.First)</td>
                                     <td class="merge-direction-column">@MergeDirection(candidate)</td>
                                     <td>@FarmCell(candidate.Second)</td>
-                                    <td class="explanation-column">@candidate.Explanation</td>
+                                    <td class="explanation-column">
+                                        <div>@candidate.Explanation</div>
+                                        @LinkedDataSummary(candidate.First)
+                                        @LinkedDataSummary(candidate.Second)
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -361,6 +365,44 @@
         @BlockCounts(farm.PropertyId)
         @DependencyAssessment(farm)
     </div>;
+
+    private RenderFragment LinkedDataSummary(ApiModels.Property farm) => @<text>
+        @if (_dependencySummaries.TryGetValue(farm.PropertyId, out var summary))
+        {
+            var categories = PropertyDependencyPresentation.Summarize(summary);
+            @if (categories.Count > 0)
+            {
+                <small class="linked-data-breakdown">
+                    <strong>@farm.PropertyName:</strong>
+                    <span class="linked-data-items">
+                        @for (var index = 0; index < categories.Count; index++)
+                        {
+                            var category = categories[index];
+                            @if (index > 0)
+                            {
+                                <span class="linked-data-separator" aria-hidden="true"> · </span>
+                            }
+                            @if (category.FinderPath is not null)
+                            {
+                                <a href="@LinkedDataUrl(category.FinderPath, farm)" target="_blank" rel="noopener">@category.DisplayText</a>
+                            }
+                            else
+                            {
+                                <span>@category.DisplayText</span>
+                            }
+                        }
+                    </span>
+                </small>
+            }
+            else
+            {
+                <small class="linked-data-breakdown"><strong>@farm.PropertyName:</strong> no linked data</small>
+            }
+        }
+    </text>;
+
+    private static string LinkedDataUrl(string finderPath, ApiModels.Property farm) =>
+        $"{finderPath}{(finderPath.Contains('?') ? '&' : '?')}propertyId={farm.PropertyId}&property={Uri.EscapeDataString(farm.PropertyName ?? string.Empty)}";
 
     private RenderFragment BlockCounts(int propertyId) => @<div class="block-counts">
         @{ var counts = GetBlockCounts(propertyId); }

@@ -70,6 +70,12 @@
 .record-status.active { background: #dcfce7; color: #166534; }
 .record-status.inactive { background: #e2e8f0; color: #475569; }
 .explanation-column { color: var(--dxds-color-content-neutral-subdued-rest); line-height: 1.4; width: 28%; }
+.linked-data-breakdown { border-left: .15rem solid color-mix(in srgb, var(--mg-blue, #007cba) 45%, transparent); display: block; font-size: .65rem; line-height: 1.35; margin-top: .45rem; padding-left: .45rem; }
+.linked-data-breakdown strong { color: var(--dxds-color-content-neutral-rest); }
+.linked-data-breakdown span { display: block; }
+.linked-data-breakdown .linked-data-items, .linked-data-breakdown .linked-data-items > span { display: inline; }
+.linked-data-breakdown a { color: var(--mg-blue, #007cba); font-weight: 650; }
+.linked-data-breakdown a::after { content: " ↗"; font-size: .58rem; }
 .clear-state, .empty-state { align-items: center; display: flex; flex-direction: column; justify-content: center; min-height: 15rem; padding: 2rem; text-align: center; }
 .clear-state h2, .empty-state h2 { margin: .7rem 0 .3rem; }
 .clear-state p, .empty-state p { color: var(--dxds-color-content-neutral-subdued-rest); margin: 0; }

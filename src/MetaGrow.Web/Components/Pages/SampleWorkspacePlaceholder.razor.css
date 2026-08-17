@@ -28,6 +28,7 @@
 ::deep .field > .dxbl-component { width: 100%; }
 .sample-grid-wrap { margin-top: 1rem; overflow-x: auto; }
 ::deep .editor-sample-grid { min-width: 58rem; }
+.barcode-value { display: block; text-align: left; }
 .audit-strip { color: var(--dxds-color-content-neutral-subdued-rest); display: flex; flex-wrap: wrap; font-size: .76rem; gap: .5rem 1.5rem; justify-content: flex-end; padding: 0 .25rem; }
 @media (max-width: 64rem) { .workflow-lanes, .editor-grid { grid-template-columns: 1fr; } .full-width { grid-column: 1; } }
 @media (max-width: 46rem) { .editor-toolbar { align-items: stretch; flex-direction: column; position: static; } .toolbar-left { display: grid; grid-template-columns: 1fr 1fr; } .editor-hero { align-items: flex-start; flex-direction: column; } .field-grid, .invoice-grid { grid-template-columns: 1fr; } .field.wide { grid-column: 1; } }

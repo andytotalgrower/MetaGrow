@@ -1,0 +1,1103 @@
+@page "/surveys/samples/lab-results/historical"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@using MetaGrow.Shared
+@using MetaGrow.Web.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist + "," + MetaGrowRoles.Accountant)]
+@inject ITgsApiService TgsApi
+@inject IStringSimilarityService Similarity
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ApiTokenService ApiTokens
+@inject NavigationManager Navigation
+
+<PageTitle>Historical soil data | MetaGrow</PageTitle>
+
+<div class="historical-soil-page">
+    <div class="title">
+        <div class="title-header-text">Historical soil data</div>
+        <div class="title-content-text">Clean up returned Soil results that pre-date the Sample survey workflow.</div>
+    </div>
+    <nav class="sample-nav" aria-label="Sample survey area">
+        <a href="/surveys/samples">Surveys</a>
+        <a href="/surveys/samples/lab-results">Lab results</a>
+        <a class="active" href="/surveys/samples/lab-results/historical">Historical data</a>
+        <span class="disabled">Import activity</span>
+    </nav>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="workflow-message @(_messageIsError ? "error" : "success")" role="status">@_message</div>
+    }
+
+    <section class="filter-panel" aria-labelledby="historical-search-heading">
+        <div class="filter-heading">
+            <div>
+                <h2 id="historical-search-heading">Find unlinked results</h2>
+                <p>Rows are grouped by laboratory, received date and the customer name supplied by the lab.</p>
+            </div>
+            <div class="filter-actions">
+                @if (_canBulkGenerate)
+                {
+                    <DxButton Text="Generate all ready" RenderStyle="ButtonRenderStyle.Secondary"
+                              Click="OpenBulkGenerationAsync" Enabled="@(!_loading && !_busy)" />
+                }
+                <DxButton Text="Clear" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearFiltersAsync" Enabled="@(!_loading && !_busy)" />
+                <DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="LoadGroupsAsync" Enabled="@(!_loading && !_busy)" />
+            </div>
+        </div>
+        <div class="filter-grid">
+            <div class="filter-field">
+                <label for="historical-start-date">Received from</label>
+                <DxDateEdit Id="historical-start-date" @bind-Date="_startDate" DisplayFormat="dd/MM/yyyy" Enabled="@(!_allDates)" />
+            </div>
+            <div class="filter-field">
+                <label for="historical-end-date">Received to</label>
+                <DxDateEdit Id="historical-end-date" @bind-Date="_endDate" DisplayFormat="dd/MM/yyyy" Enabled="@(!_allDates)" />
+            </div>
+            <div class="filter-field check-field">
+                <label>Date range</label>
+                <DxCheckBox @bind-Checked="_allDates">Search all dates</DxCheckBox>
+            </div>
+            <div class="filter-field">
+                <label for="historical-customer">Lab customer or property</label>
+                <DxTextBox Id="historical-customer" @bind-Text="_customerSearch" NullText="Type a farm name"
+                           BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div class="filter-field">
+                <label for="historical-reference">Order, field or crop</label>
+                <DxTextBox Id="historical-reference" @bind-Text="_referenceSearch" NullText="Type an order or field"
+                           BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div class="filter-field">
+                <label for="historical-lab">Laboratory</label>
+                <DxComboBox Id="historical-lab" Data="@LabOptions" @bind-Value="_labId"
+                            TextFieldName="@nameof(FilterOption.Name)" ValueFieldName="@nameof(FilterOption.Id)"
+                            NullText="All laboratories" AllowUserInput="false"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+            <div class="filter-field">
+                <label for="historical-mapping">Workflow state</label>
+                <DxComboBox Id="historical-mapping" Data="@MappingOptions" @bind-Value="_mappingFilter"
+                            TextFieldName="@nameof(MappingOption.Name)" ValueFieldName="@nameof(MappingOption.Value)"
+                            AllowUserInput="false" />
+            </div>
+        </div>
+    </section>
+
+    @if (_loading)
+    {
+        <div class="loading-state"><DxWaitIndicator Visible="true" /><span>Loading historical Soil data…</span></div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <div class="alert alert-danger"><strong>Historical Soil data could not be loaded.</strong> @_loadError</div>
+    }
+    else if (FilteredGroups.Count == 0)
+    {
+        <div class="empty-state"><strong>No unlinked Soil data was found.</strong><span>Try a wider date range, search all dates or clear a filter.</span></div>
+    }
+    else
+    {
+        <div class="result-heading">
+            <div><h2>Unlinked batches</h2><span>@FilteredGroups.Count batch@(FilteredGroups.Count == 1 ? string.Empty : "es"), @FilteredGroups.Sum(group => group.ResultCount) results</span></div>
+            <span class="result-help">Expand a batch to map its raw field names.</span>
+        </div>
+        <div class="desktop-results">
+            <DxGrid @ref="_historicalGrid" Data="@FilteredGroups" KeyFieldName="@nameof(HistoricalSoilResultGroupDto.GroupKey)"
+                    PageSize="20" TextWrapEnabled="false" HighlightRowOnHover="true"
+                    ColumnResizeMode="GridColumnResizeMode.NextColumn">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(HistoricalSoilResultGroupDto.DateReceived)" Caption="Received" Width="110px" DisplayFormat="dd/MM/yyyy" />
+                    <DxGridDataColumn FieldName="@nameof(HistoricalSoilResultGroupDto.RawCustomerName)" Caption="Lab customer" MinWidth="180" />
+                    <DxGridDataColumn FieldName="@nameof(HistoricalSoilResultGroupDto.PropertyName)" Caption="Property" MinWidth="170" />
+                    <DxGridDataColumn FieldName="@nameof(HistoricalSoilResultGroupDto.LabName)" Caption="Laboratory" MinWidth="145" />
+                    <DxGridDataColumn FieldName="@nameof(HistoricalSoilResultGroupDto.RawCropNames)" Caption="Crop" MinWidth="110" />
+                    <DxGridDataColumn FieldName="@nameof(HistoricalSoilResultGroupDto.ResultCount)" Caption="Results" Width="72px" />
+                    <DxGridDataColumn Caption="Mapping" Width="115px">
+                        <CellDisplayTemplate Context="cell">
+                            @{ var group = (HistoricalSoilResultGroupDto)cell.DataItem; }
+                            @{ var isReady = group.IsFullyMapped && group.HasSingleEffectiveSurveyDate; }
+                            <span class="mapping-badge @(isReady ? "mapped" : "attention")">@(isReady ? "Ready" : group.IsFullyMapped ? "Review date" : $"{group.MappedResultCount}/{group.ResultCount}")</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Action" Width="145px" AllowSort="false">
+                        <CellDisplayTemplate Context="cell">
+                            @{ var group = (HistoricalSoilResultGroupDto)cell.DataItem; }
+                            <DxButton Text="Generate survey" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Primary"
+                                      RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(group.IsFullyMapped && group.HasSingleEffectiveSurveyDate && !_busy)"
+                                      Click="@(() => OpenGeneration(group))" />
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <DetailRowTemplate Context="detail">
+                    @{ var group = (HistoricalSoilResultGroupDto)detail.DataItem; }
+                    @BatchDetail(group)
+                </DetailRowTemplate>
+            </DxGrid>
+        </div>
+        <div class="mobile-results">
+            @foreach (var group in FilteredGroups)
+            {
+                var isReady = group.IsFullyMapped && group.HasSingleEffectiveSurveyDate;
+                <article class="result-card">
+                    <header><div><strong>@group.RawCustomerName</strong><span>@group.DateReceived?.ToString("dd MMM yyyy") · @group.LabName</span></div><span class="mapping-badge @(isReady ? "mapped" : "attention")">@(isReady ? "Ready" : group.IsFullyMapped ? "Review date" : "Needs mapping")</span></header>
+                    <dl><div><dt>Property</dt><dd>@group.PropertyName</dd></div><div><dt>Crop</dt><dd>@group.RawCropNames</dd></div><div><dt>Results</dt><dd>@group.ResultCount across @group.OrderCount order@(group.OrderCount == 1 ? string.Empty : "s")</dd></div></dl>
+                    <details><summary>Review raw results</summary>@BatchDetail(group)</details>
+                    <DxButton Text="Generate survey" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(group.IsFullyMapped && group.HasSingleEffectiveSurveyDate && !_busy)" Click="@(() => OpenGeneration(group))" />
+                </article>
+            }
+        </div>
+    }
+</div>
+
+<DxPopup @bind-Visible="_mappingVisible" ShowFooter="true" HeaderText="Map historical batch"
+         AllowDrag="true" ShowCloseButton="@(!_mappingBusy)" CloseOnEscape="@(!_mappingBusy)"
+         CloseOnOutsideClick="false" Width="min(980px, calc(100vw - 2rem))">
+    <BodyContentTemplate>
+        @if (_mappingGroup is not null)
+        {
+            <div class="mapping-dialog">
+                <div class="raw-map-summary">
+                    <div><span>Lab customer</span><strong>@Display(_mappingGroup.RawCustomerName)</strong></div>
+                    <div><span>Received</span><strong>@(_mappingGroup.DateReceived?.ToString("dd MMM yyyy") ?? "—")</strong></div>
+                    <div><span>Unmapped fields</span><strong>@_mappingRows.Count</strong></div>
+                </div>
+                <p class="mapping-scope">Choose the property once, then confirm a block for every raw field. Confident name matches are preselected. All mappings are saved together, or none are saved.</p>
+                @if (_mappingWasSuggested)
+                {
+                    <div class="property-suggestion"><strong>Best property guess</strong><span>@MappingPropertyName was matched from the lab customer name. Please confirm it before applying the mapping.</span></div>
+                }
+                else if (!MappingPropertyLocked && _mappingPropertyId == 0)
+                {
+                    <div class="no-property-suggestion">No confident property match was found. Select the property manually.</div>
+                }
+                @if (_mappingGroup.HasMixedProperties)
+                {
+                    <div class="batch-warning">This batch already contains conflicting property mappings. Resolve those mappings before applying the remaining fields as one batch.</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_dialogError)) { <div class="dialog-error" role="alert">@_dialogError</div> }
+                <div class="mapping-property-field filter-field">
+                    <label for="mapping-property">Property</label>
+                    <DxComboBox Id="mapping-property" Data="@_properties" Value="@_mappingPropertyId" ValueChanged="@((int value) => MappingPropertyChangedAsync(value))" TextFieldName="@nameof(ApiModels.Property.PropertyName)" ValueFieldName="@nameof(ApiModels.Property.PropertyId)" NullText="Select a property" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_mappingBusy && !MappingPropertyLocked)" />
+                </div>
+                @if (_loadingBlocks) { <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Loading farm blocks…</span></div> }
+                else if (_mappingPropertyId > 0)
+                {
+                    <div class="mapping-list" aria-label="Unmapped historical fields">
+                        @foreach (var row in _mappingRows)
+                        {
+                            <div class="mapping-row">
+                                <div class="mapping-row-source">
+                                    <strong>@Display(row.RawFieldReference)</strong>
+                                    <span>@Display(row.RawCropName) · @row.ExpectedRowCount matching result@(row.ExpectedRowCount == 1 ? string.Empty : "s")</span>
+                                </div>
+                                <div class="mapping-row-block filter-field">
+                                    <label for="@row.ControlId">Canonical block</label>
+                                    <DxComboBox Id="@row.ControlId" Data="@_mappingBlocks" Value="@row.BlockKey" ValueChanged="@((string value) => MappingBlockChanged(row, value))"
+                                                TextFieldName="@nameof(BlockChoice.Label)" ValueFieldName="@nameof(BlockChoice.Key)"
+                                                NullText="Select a banana or multi-crop block" AllowUserInput="false"
+                                                SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                                Enabled="@(!_mappingBusy)" />
+                                </div>
+                                <div class="mapping-row-status">
+                                    @if (row.WasSuggested) { <span class="suggestion-badge">Best guess</span> }
+                                    else { <span class="review-badge">Review</span> }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="dialog-footer">
+            <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseMapping" Enabled="@(!_mappingBusy)" />
+            @if (_mappingBusy) { <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Applying @_mappingRows.Count mappings…</span></div> }
+            <DxButton Text="Apply all mappings" RenderStyle="ButtonRenderStyle.Primary" Click="SaveMappingsAsync" Enabled="@CanSaveMappings" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="_generationVisible" ShowFooter="true" HeaderText="Generate Sample survey"
+         AllowDrag="true" ShowCloseButton="@(!_generationBusy)" CloseOnEscape="@(!_generationBusy)"
+         CloseOnOutsideClick="false" Width="min(760px, calc(100vw - 2rem))">
+    <BodyContentTemplate>
+        @if (_generationGroup is not null)
+        {
+            <div class="generation-dialog">
+                <div class="generation-banner"><div><span>Property</span><strong>@_generationGroup.PropertyName</strong></div><div><span>Laboratory</span><strong>@_generationGroup.LabName</strong></div><div><span>Soil results</span><strong>@_generationGroup.ResultCount</strong></div></div>
+                <p>The survey will be created as <strong>Complete</strong>. Every result in this batch will become a Soil sample item, and the generated survey will open for historical review.</p>
+                @if (!string.IsNullOrWhiteSpace(_dialogError)) { <div class="dialog-error" role="alert">@_dialogError</div> }
+                <div class="dialog-fields">
+                    <div class="filter-field">
+                        <label for="generation-date">Survey date</label>
+                        <DxDateEdit Id="generation-date" @bind-Date="_generationDate" DisplayFormat="dd/MM/yyyy" Enabled="false" />
+                        <small>@GenerationDateSource</small>
+                    </div>
+                    <div class="filter-field"><label for="generation-agronomist">Agronomist</label><DxComboBox Id="generation-agronomist" Data="@_agronomists" @bind-Value="_generationAgronomistId" TextFieldName="@nameof(Staff.StaffName)" ValueFieldName="@nameof(Staff.StaffId)" NullText="Select an agronomist" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_generationBusy)" /></div>
+                    <div class="filter-field generation-test-field"><label for="generation-lab-test">Lab test</label><DxComboBox Id="generation-lab-test" Data="@GenerationLabTestOptions" @bind-Value="_generationLabTestTypeId" TextFieldName="@nameof(LabTestOption.Label)" ValueFieldName="@nameof(LabTestOption.Id)" NullText="Select a Soil lab test" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_generationBusy)" /></div>
+                </div>
+                @if (GenerationLabTestOptions.Count == 0)
+                {
+                    <div class="dialog-error">This laboratory has no configured Soil lab tests. The survey cannot be generated until one is added.</div>
+                }
+                else if (_generationLabTestTypeId == 0)
+                {
+                    <div class="batch-warning">No standard “Soil” test was found for this laboratory. Select the appropriate Soil test before generating the survey.</div>
+                }
+                @if (!_generationGroup.HasSingleEffectiveSurveyDate)
+                {
+                    <div class="dialog-error">@EffectiveSurveyDateError(_generationGroup)</div>
+                }
+                <section class="generation-blocks" aria-labelledby="generation-blocks-heading">
+                    <div class="generation-blocks-heading">
+                        <strong id="generation-blocks-heading">Blocks in this survey</strong>
+                        <span>@GenerationBlocks.Count block@(GenerationBlocks.Count == 1 ? string.Empty : "s")</span>
+                    </div>
+                    <div class="generation-block-list">
+                        @foreach (var block in GenerationBlocks)
+                        {
+                            <div class="generation-block-row">
+                                <div><strong>@block.Name</strong><span>@block.TypeLabel</span></div>
+                                <span>@block.ResultCount result@(block.ResultCount == 1 ? string.Empty : "s")</span>
+                            </div>
+                        }
+                    </div>
+                </section>
+                @if (GenerationBlocks.Count == 0)
+                {
+                    <div class="dialog-error">No mapped blocks were found in this batch. Return to the results grid and complete its mappings first.</div>
+                }
+            </div>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="dialog-footer">
+            <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseGeneration" Enabled="@(!_generationBusy)" />
+            @if (_generationBusy) { <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Generating survey…</span></div> }
+            <DxButton Text="Generate and open" RenderStyle="ButtonRenderStyle.Primary" Click="GenerateSurveyAsync" Enabled="@CanGenerateSurvey" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="_bulkVisible" ShowFooter="true" HeaderText="Generate ready historical surveys"
+         AllowDrag="true" ShowCloseButton="@(!_bulkRunning)" CloseOnEscape="@(!_bulkRunning)"
+         CloseOnOutsideClick="false" Width="min(1120px, calc(100vw - 2rem))">
+    <BodyContentTemplate>
+        <div class="bulk-generation-dialog">
+            @if (_bulkLoading)
+            {
+                <div class="loading-state"><DxWaitIndicator Visible="true" /><span>Running the live generation preview…</span></div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_bulkError))
+            {
+                <div class="dialog-error" role="alert">@_bulkError</div>
+            }
+
+            @if (!_bulkLoading && _bulkPreview.Count > 0)
+            {
+                <div class="bulk-summary" aria-label="Bulk generation preview summary">
+                    <div class="bulk-summary-card ready"><span>Ready surveys</span><strong>@BulkReadyCount.ToString("N0")</strong><small>@BulkReadyResultCount.ToString("N0") Soil results</small></div>
+                    <div class="bulk-summary-card existing"><span>Existing surveys</span><strong>@BulkExistingCount.ToString("N0")</strong><small>Will remain unlinked</small></div>
+                    <div class="bulk-summary-card blocked"><span>Needs attention</span><strong>@BulkBlockedCount.ToString("N0")</strong><small>Will not be processed</small></div>
+                </div>
+
+                @if (!_bulkHasStarted)
+                {
+                    <p class="bulk-explanation">MetaGrow will create one <strong>Complete</strong> Sample survey for each ready farm and survey date, using the same selected agronomist throughout. Existing surveys and blocked rows are never changed.</p>
+                }
+
+                <div class="bulk-controls">
+                    <div class="filter-field">
+                        <label for="bulk-agronomist">Agronomist for every generated survey</label>
+                        <DxComboBox Id="bulk-agronomist" Data="@_agronomists" @bind-Value="_bulkAgronomistId"
+                                    TextFieldName="@nameof(Staff.StaffName)" ValueFieldName="@nameof(Staff.StaffId)"
+                                    NullText="Select an agronomist" AllowUserInput="false"
+                                    SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                    Enabled="@(!_bulkRunning)" />
+                    </div>
+                    <div class="bulk-safety-note"><strong>Safe to resume</strong><span>Every farm/date is committed separately and rechecked immediately before creation.</span></div>
+                </div>
+
+                @if (_bulkHasStarted)
+                {
+                    <section class="bulk-run-panel" aria-labelledby="bulk-run-heading">
+                        <div class="bulk-run-heading">
+                            <div><strong id="bulk-run-heading">@BulkRunHeading</strong><span>@BulkRunDetail</span></div>
+                            <strong>@BulkProgressPercent%</strong>
+                        </div>
+                        <div class="bulk-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@BulkProgressPercent">
+                            <div class="bulk-progress-value" style="width: @BulkProgressPercent%"></div>
+                        </div>
+                        <div class="bulk-run-counts">
+                            <span class="created">@BulkCreatedCount created</span>
+                            <span class="skipped">@BulkSkippedCount skipped safely</span>
+                            <span class="review">@BulkReviewCount needs review</span>
+                            <span>@BulkPendingCount remaining</span>
+                        </div>
+                        @if (_bulkRunResults.Count > 0)
+                        {
+                            <div class="bulk-receipts">
+                                @foreach (var receipt in _bulkRunResults.TakeLast(8).Reverse())
+                                {
+                                    <div class="bulk-receipt">
+                                        <span class="bulk-status-badge @BulkOutcomeCss(receipt.Result.OutcomeCode)">@BulkOutcomeLabel(receipt.Result.OutcomeCode)</span>
+                                        <div><strong>@receipt.Item.PropertyName · @receipt.Item.SurveyDate?.ToString("dd MMM yyyy")</strong><span>@receipt.Result.Message</span></div>
+                                        @if (receipt.Result.SurveyId.HasValue)
+                                        {
+                                            <a href="@($"/surveys/samples/{receipt.Result.SurveyId}/edit")" target="_blank">Survey @receipt.Result.SurveyId</a>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </section>
+                }
+                else
+                {
+                    <div class="bulk-preview-grid">
+                        <DxGrid Data="@_bulkPreview" PageSize="10" ShowAllRows="false" TextWrapEnabled="false"
+                                HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn">
+                            <Columns>
+                                <DxGridDataColumn FieldName="@nameof(HistoricalSoilBulkPreviewItemDto.SurveyDate)" Caption="Survey date" Width="112px" DisplayFormat="dd/MM/yyyy" />
+                                <DxGridDataColumn FieldName="@nameof(HistoricalSoilBulkPreviewItemDto.PropertyName)" Caption="Property" MinWidth="190" />
+                                <DxGridDataColumn FieldName="@nameof(HistoricalSoilBulkPreviewItemDto.LabNames)" Caption="Laboratory" MinWidth="185" />
+                                <DxGridDataColumn FieldName="@nameof(HistoricalSoilBulkPreviewItemDto.SourceBatchCount)" Caption="Batches" Width="78px" />
+                                <DxGridDataColumn FieldName="@nameof(HistoricalSoilBulkPreviewItemDto.BlockCount)" Caption="Blocks" Width="70px" />
+                                <DxGridDataColumn FieldName="@nameof(HistoricalSoilBulkPreviewItemDto.ResultCount)" Caption="Results" Width="72px" />
+                                <DxGridDataColumn Caption="Outcome" Width="145px" AllowSort="false">
+                                    <CellDisplayTemplate Context="cell">
+                                        @{ var item = (HistoricalSoilBulkPreviewItemDto)cell.DataItem; }
+                                        <span class="bulk-status-badge @BulkStatusCss(item.StatusCode)">@BulkStatusLabel(item.StatusCode)</span>
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                            </Columns>
+                        </DxGrid>
+                    </div>
+                }
+            }
+            else if (!_bulkLoading && string.IsNullOrWhiteSpace(_bulkError))
+            {
+                <div class="empty-state"><strong>No mapped historical Soil destinations remain.</strong><span>There is nothing available for bulk generation.</span></div>
+            }
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="dialog-footer bulk-footer">
+            @if (_bulkRunning)
+            {
+                <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Processing @_bulkCurrentItem?.PropertyName…</span></div>
+                <DxButton Text="@(_bulkStopRequested ? "Stopping…" : "Stop after current")" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="RequestBulkStop" Enabled="@(!_bulkStopRequested)" />
+            }
+            else
+            {
+                <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseBulkGeneration" />
+                @if (!_bulkLoading)
+                {
+                    <DxButton Text="Refresh preview" RenderStyle="ButtonRenderStyle.Secondary" Click="RefreshBulkPreviewAsync" />
+                    @if (BulkPendingCount > 0)
+                    {
+                        <DxButton Text="@BulkGenerateButtonText" RenderStyle="ButtonRenderStyle.Primary"
+                                  Click="GenerateReadySurveysAsync" Enabled="@(_bulkAgronomistId > 0)" />
+                    }
+                }
+            }
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    private DateTime _startDate = DateTime.Today.AddMonths(-3);
+    private DateTime _endDate = DateTime.Today;
+    private bool _allDates = true;
+    private string? _customerSearch;
+    private string? _referenceSearch;
+    private int? _labId;
+    private string _mappingFilter = MappingAll;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _loadError;
+    private string? _message;
+    private bool _messageIsError;
+    private List<HistoricalSoilResultGroupDto> _groups = [];
+    private List<ApiModels.Property> _properties = [];
+    private List<Staff> _agronomists = [];
+    private List<LabTestType> _labTestTypes = [];
+    private IGrid? _historicalGrid;
+    private HashSet<string> _expandedGroupKeys = [];
+    private bool _restoreExpandedRows;
+
+    private bool _mappingVisible;
+    private bool _mappingBusy;
+    private bool _loadingBlocks;
+    private HistoricalSoilResultGroupDto? _mappingGroup;
+    private int _mappingPropertyId;
+    private bool _mappingPropertyLocked;
+    private bool _mappingWasSuggested;
+    private List<BlockChoice> _mappingBlocks = [];
+    private List<MappingRow> _mappingRows = [];
+
+    private bool _generationVisible;
+    private bool _generationBusy;
+    private HistoricalSoilResultGroupDto? _generationGroup;
+    private DateTime _generationDate = DateTime.Today;
+    private int _generationAgronomistId;
+    private int _generationLabTestTypeId;
+    private string? _dialogError;
+
+    private bool _canBulkGenerate;
+    private bool _bulkVisible;
+    private bool _bulkLoading;
+    private bool _bulkRunning;
+    private bool _bulkStopRequested;
+    private bool _bulkHasStarted;
+    private string? _bulkError;
+    private int _bulkAgronomistId;
+    private List<HistoricalSoilBulkPreviewItemDto> _bulkPreview = [];
+    private List<HistoricalSoilBulkPreviewItemDto> _bulkQueue = [];
+    private HashSet<string> _bulkProcessedKeys = [];
+    private List<BulkRunReceipt> _bulkRunResults = [];
+    private HistoricalSoilBulkPreviewItemDto? _bulkCurrentItem;
+
+    private const string MappingAll = "All";
+    private const string MappingReady = "Ready";
+    private const string MappingNeeded = "Needs mapping";
+    private const int SoilLabTestCategoryId = 10;
+    private sealed record FilterOption(int Id, string Name);
+    private sealed record MappingOption(string Value, string Name);
+    private sealed record BlockChoice(string Key, int BlockId, string Label, string BlockType, Block MatchBlock);
+    private sealed record LabTestOption(int Id, string TestName, string Label);
+    private sealed record GenerationBlockSummary(int BlockId, string BlockType, string Name, string TypeLabel, int ResultCount);
+    private sealed record BulkRunReceipt(HistoricalSoilBulkPreviewItemDto Item, HistoricalSoilBulkGenerationResultDto Result);
+    private sealed class MappingRow
+    {
+        public string ControlId { get; init; } = string.Empty;
+        public string? RawCustomerName { get; init; }
+        public string? RawFieldReference { get; init; }
+        public string? RawCropName { get; init; }
+        public int ExpectedRowCount { get; init; }
+        public string BlockKey { get; set; } = string.Empty;
+        public bool WasSuggested { get; set; }
+    }
+    private static readonly MappingOption[] MappingOptions = [new(MappingAll, "All results"), new(MappingReady, "Ready to generate"), new(MappingNeeded, "Needs mapping")];
+
+    private IReadOnlyList<FilterOption> LabOptions => _groups
+        .GroupBy(group => new { group.LabId, group.LabName })
+        .Select(group => new FilterOption(group.Key.LabId, group.Key.LabName))
+        .OrderBy(item => item.Name)
+        .ToList();
+
+    private IReadOnlyList<HistoricalSoilResultGroupDto> FilteredGroups => _groups
+        .Where(group => !_labId.HasValue || group.LabId == _labId.Value)
+        .Where(group => string.IsNullOrWhiteSpace(_customerSearch) ||
+            group.RawCustomerName.Contains(_customerSearch.Trim(), StringComparison.OrdinalIgnoreCase) ||
+            group.PropertyName.Contains(_customerSearch.Trim(), StringComparison.OrdinalIgnoreCase))
+        .Where(group => string.IsNullOrWhiteSpace(_referenceSearch) || group.Results.Any(result =>
+            Contains(result.OrderNo, _referenceSearch) || Contains(result.RawFieldReference, _referenceSearch) || Contains(result.RawCropName, _referenceSearch)))
+        .Where(group => _mappingFilter == MappingAll ||
+            (_mappingFilter == MappingReady && group.IsFullyMapped) ||
+            (_mappingFilter == MappingNeeded && !group.IsFullyMapped))
+        .ToList();
+
+    private bool MappingPropertyLocked => _mappingPropertyLocked;
+    private bool CanSaveMappings => !_mappingBusy && !_loadingBlocks && _mappingGroup is not null &&
+        !_mappingGroup.HasMixedProperties && _mappingPropertyId > 0 && _mappingRows.Count > 0 &&
+        _mappingRows.All(row => !string.IsNullOrWhiteSpace(row.BlockKey));
+    private string MappingPropertyName => _properties.FirstOrDefault(property => property.PropertyId == _mappingPropertyId)?.PropertyName ?? "The selected property";
+    private IReadOnlyList<LabTestOption> GenerationLabTestOptions => GetGenerationLabTestOptions(_generationGroup);
+    private IReadOnlyList<GenerationBlockSummary> GenerationBlocks => GetGenerationBlocks(_generationGroup);
+    private string GenerationDateSource => _generationGroup is null
+        ? string.Empty
+        : _generationGroup.VisitDatedResultCount == _generationGroup.ResultCount
+            ? "Linked visit date"
+            : _generationGroup.VisitDatedResultCount > 0
+                ? "Visit date where available; received date otherwise"
+                : "Lab received date";
+    private bool CanGenerateSurvey => !_generationBusy && _generationGroup is not null &&
+        _generationGroup.HasSingleEffectiveSurveyDate &&
+        _generationAgronomistId > 0 && GenerationBlocks.Count > 0 &&
+        GenerationLabTestOptions.Any(option => option.Id == _generationLabTestTypeId);
+    private int BulkReadyCount => _bulkPreview.Count(item => item.IsEligible);
+    private int BulkReadyResultCount => _bulkPreview.Where(item => item.IsEligible).Sum(item => item.ResultCount);
+    private int BulkExistingCount => _bulkPreview.Count(item =>
+        string.Equals(item.StatusCode, "ExistingSurvey", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(item.StatusCode, "MultipleExistingSurveys", StringComparison.OrdinalIgnoreCase));
+    private int BulkBlockedCount => _bulkPreview.Count - BulkReadyCount - BulkExistingCount;
+    private int BulkPendingCount => _bulkQueue.Count(item => !_bulkProcessedKeys.Contains(item.DestinationKey));
+    private int BulkCompletedCount => _bulkQueue.Count - BulkPendingCount;
+    private int BulkCreatedCount => _bulkRunResults.Count(receipt => string.Equals(receipt.Result.OutcomeCode, "Created", StringComparison.OrdinalIgnoreCase));
+    private int BulkSkippedCount => _bulkRunResults.Count(receipt =>
+        string.Equals(receipt.Result.OutcomeCode, "SkippedExisting", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(receipt.Result.OutcomeCode, "MultipleExistingSurveys", StringComparison.OrdinalIgnoreCase));
+    private int BulkReviewCount => _bulkRunResults.Count(receipt =>
+        _bulkProcessedKeys.Contains(receipt.Item.DestinationKey) &&
+        !string.Equals(receipt.Result.OutcomeCode, "Created", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(receipt.Result.OutcomeCode, "SkippedExisting", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(receipt.Result.OutcomeCode, "MultipleExistingSurveys", StringComparison.OrdinalIgnoreCase));
+    private int BulkProgressPercent => _bulkQueue.Count == 0 ? 0 : (int)Math.Round(BulkCompletedCount * 100d / _bulkQueue.Count);
+    private string BulkRunHeading => _bulkRunning
+        ? "Generating historical Sample surveys"
+        : BulkPendingCount == 0
+            ? "Generation run complete"
+            : "Generation run paused";
+    private string BulkRunDetail => _bulkRunning
+        ? $"{BulkCompletedCount:N0} of {_bulkQueue.Count:N0} destinations completed"
+        : BulkPendingCount == 0
+            ? $"{BulkCompletedCount:N0} destinations were checked"
+            : $"{BulkPendingCount:N0} destinations remain and can be resumed safely";
+    private string BulkGenerateButtonText => _bulkHasStarted
+        ? $"Resume {BulkPendingCount:N0} remaining"
+        : $"Generate {BulkPendingCount:N0} surveys";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userEmail = authState.User.Identity?.Name;
+        _canBulkGenerate = authState.User.IsInRole(MetaGrowRoles.Admin) ||
+            authState.User.IsInRole(MetaGrowRoles.AgricultureManager);
+        var propertiesTask = TgsApi.GetProperties();
+        var agronomistsTask = TgsApi.GetActiveTgsStaff();
+        var labTestTypesTask = TgsApi.GetLabTestTypes();
+        var groupsTask = LoadGroupsCoreAsync();
+        await Task.WhenAll(propertiesTask, agronomistsTask, labTestTypesTask, groupsTask);
+
+        _properties = (await propertiesTask ?? []).Where(property => property.IsActive).OrderBy(property => property.PropertyName).ToList();
+        _agronomists = (await agronomistsTask ?? []).OrderBy(staff => staff.StaffName).ToList();
+        _labTestTypes = (await labTestTypesTask ?? []).ToList();
+        _generationAgronomistId = _agronomists.FirstOrDefault(staff => !string.IsNullOrWhiteSpace(userEmail) && string.Equals(staff.Email, userEmail, StringComparison.OrdinalIgnoreCase))?.StaffId ?? 0;
+        _bulkAgronomistId = _generationAgronomistId;
+        _loading = false;
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_restoreExpandedRows || _historicalGrid is null)
+            return Task.CompletedTask;
+
+        _restoreExpandedRows = false;
+        for (var visibleIndex = 0; visibleIndex < _historicalGrid.GetVisibleRowCount(); visibleIndex++)
+        {
+            if (_historicalGrid.GetDataItem(visibleIndex) is HistoricalSoilResultGroupDto group &&
+                _expandedGroupKeys.Contains(group.GroupKey) &&
+                !_historicalGrid.IsDetailRowExpanded(visibleIndex))
+            {
+                _historicalGrid.ExpandDetailRow(visibleIndex);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadGroupsAsync()
+    {
+        _loading = true;
+        await LoadGroupsCoreAsync();
+        _loading = false;
+    }
+
+    private async Task LoadGroupsCoreAsync()
+    {
+        _loadError = null;
+        _message = null;
+        if (!_allDates && _endDate.Date < _startDate.Date)
+        {
+            _loadError = "The end date must be on or after the start date.";
+            return;
+        }
+
+        var groups = await TgsApi.GetUnlinkedSampleSoilResultGroups(_allDates ? null : _startDate, _allDates ? null : _endDate);
+        _groups = groups ?? [];
+        if (groups is null) _loadError = TgsApi.ErrorMessage ?? "Historical Soil data could not be loaded.";
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _startDate = DateTime.Today.AddMonths(-3);
+        _endDate = DateTime.Today;
+        _allDates = true;
+        _customerSearch = _referenceSearch = null;
+        _labId = null;
+        _mappingFilter = MappingAll;
+        await LoadGroupsAsync();
+    }
+
+    private RenderFragment BatchDetail(HistoricalSoilResultGroupDto group) => @<div class="result-detail">
+        <div class="detail-heading">
+            <div><strong>@group.ResultCount raw result@(group.ResultCount == 1 ? string.Empty : "s")</strong><span>@(group.BananaVisitCount > 0 ? $"Includes {group.BananaVisitCount} legacy banana visit link(s)" : "No legacy visit link")</span></div>
+            @if (!group.IsFullyMapped)
+            {
+                var unmappedFieldCount = GetDistinctUnmappedResults(group).Count;
+                @if (unmappedFieldCount > 0)
+                {
+                    <DxButton Text="@($"Map {unmappedFieldCount} field{(unmappedFieldCount == 1 ? string.Empty : "s")}")" SizeMode="SizeMode.Small"
+                              RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="@(() => OpenMappingAsync(group))" />
+                }
+            }
+        </div>
+        @if (group.HasMixedProperties) { <div class="batch-warning">This batch currently resolves to more than one property. It cannot be generated as one survey; review its mappings first.</div> }
+        @if (!group.HasSingleEffectiveSurveyDate) { <div class="batch-warning">@EffectiveSurveyDateError(group)</div> }
+        <div class="detail-table-wrap"><table><thead><tr><th>Order</th><th>Lab field</th><th>Raw crop</th><th>Property</th><th>Canonical block</th><th>Test</th><th>Status</th></tr></thead><tbody>
+        @foreach (var result in group.Results)
+        {
+            <tr><td>@Display(result.OrderNo)</td><td>@Display(result.RawFieldReference)</td><td>@Display(result.RawCropName)</td><td>@(result.IsPropertyMapped ? result.PropertyName : "Not mapped")</td><td>@(result.IsBlockMapped ? $"{result.BlockName} · {result.BlockType}" : "Not mapped")</td><td>@Display(result.LabTestName ?? result.LabTestCode)</td><td>@if (result.IsMapped) { <span class="row-ready">Ready</span> } else { <span class="row-needs-mapping">Needs mapping</span> }</td></tr>
+        }
+        </tbody></table></div>
+    </div>;
+
+    private async Task OpenMappingAsync(HistoricalSoilResultGroupDto group)
+    {
+        CaptureExpandedRows();
+        _expandedGroupKeys.Add(group.GroupKey);
+        _mappingGroup = group;
+        _mappingRows = GetDistinctUnmappedResults(group)
+            .Select((item, index) => new MappingRow
+            {
+                ControlId = $"mapping-block-{index}",
+                RawCustomerName = item.RawCustomerName,
+                RawFieldReference = item.RawFieldReference,
+                RawCropName = item.RawCropName,
+                ExpectedRowCount = CountMatchingRawRows(item)
+            })
+            .ToList();
+
+        var mappedPropertyIds = group.Results
+            .Where(item => item.IsPropertyMapped && item.PropertyId > 0)
+            .Select(item => item.PropertyId)
+            .Distinct()
+            .ToList();
+        _mappingPropertyLocked = mappedPropertyIds.Count == 1;
+        var suggestedProperty = mappedPropertyIds.Count == 0
+            ? Similarity.FindBestMatchingProperty(group.RawCustomerName, _properties)
+            : null;
+        _mappingPropertyId = _mappingPropertyLocked ? mappedPropertyIds[0] : suggestedProperty?.PropertyId ?? 0;
+        _mappingWasSuggested = suggestedProperty is not null;
+        _mappingBlocks = [];
+        _dialogError = null;
+        _mappingVisible = true;
+        if (_mappingPropertyId > 0) await LoadBlocksAsync(_mappingPropertyId);
+    }
+
+    private async Task MappingPropertyChangedAsync(int propertyId)
+    {
+        _mappingPropertyId = propertyId;
+        _mappingWasSuggested = false;
+        foreach (var row in _mappingRows)
+        {
+            row.BlockKey = string.Empty;
+            row.WasSuggested = false;
+        }
+        await LoadBlocksAsync(propertyId);
+    }
+
+    private async Task LoadBlocksAsync(int propertyId)
+    {
+        _mappingBlocks = [];
+        if (propertyId <= 0) return;
+        _loadingBlocks = true;
+        _dialogError = null;
+        try
+        {
+            var bananaTask = TgsApi.GetBananaBlocksForProperty(propertyId);
+            var multiCropTask = TgsApi.GetMultiCropBlocksForProperty(propertyId);
+            await Task.WhenAll(bananaTask, multiCropTask);
+            _mappingBlocks = (await multiCropTask ?? []).Where(block => block.IsActive).Select(block => new BlockChoice($"MULTICROP:{block.BlockId}", block.BlockId, $"Multi-crop · {block.BlockName}", "MULTICROP", block))
+                .Concat((await bananaTask ?? []).Where(block => block.IsActive).Select(block => new BlockChoice($"BANANA:{block.BlockId}", block.BlockId, $"Banana · {block.BlockName}", "BANANA", block)))
+                .OrderBy(block => block.Label).ToList();
+            if (_mappingBlocks.Count == 0) _dialogError = "This property has no active banana or multi-crop blocks.";
+            else ApplyBlockSuggestions();
+        }
+        finally { _loadingBlocks = false; }
+    }
+
+    private void ApplyBlockSuggestions()
+    {
+        foreach (var row in _mappingRows)
+        {
+            var rawBlockName = !string.IsNullOrWhiteSpace(row.RawFieldReference)
+                ? row.RawFieldReference
+                : row.RawCropName;
+            var suggestedBlock = Similarity.FindBestMatchingBlock(rawBlockName, _mappingBlocks.Select(block => block.MatchBlock));
+            var choice = suggestedBlock is null
+                ? null
+                : _mappingBlocks.FirstOrDefault(block => ReferenceEquals(block.MatchBlock, suggestedBlock));
+            row.BlockKey = choice?.Key ?? string.Empty;
+            row.WasSuggested = choice is not null;
+        }
+    }
+
+    private static void MappingBlockChanged(MappingRow row, string value)
+    {
+        row.BlockKey = value ?? string.Empty;
+        row.WasSuggested = false;
+    }
+
+    private async Task SaveMappingsAsync()
+    {
+        if (_mappingGroup is null) return;
+        if (!_allDates)
+        {
+            _dialogError = "Search all dates before applying reusable mappings so MetaGrow can verify every matching row count.";
+            return;
+        }
+        if (_mappingRows.Any(row => _mappingBlocks.All(block => block.Key != row.BlockKey)))
+        {
+            _dialogError = "Select a valid block for every raw field.";
+            return;
+        }
+        var accessToken = await GetAccessTokenAsync();
+        if (accessToken is null) return;
+
+        _mappingBusy = _busy = true;
+        _dialogError = null;
+        try
+        {
+            var request = new HistoricalSoilMappingBatchRequest
+            {
+                Mappings = _mappingRows.Select(row =>
+                {
+                    var block = _mappingBlocks.First(item => item.Key == row.BlockKey);
+                    return new HistoricalSoilMappingRequest
+                    {
+                        RawCustomerName = row.RawCustomerName,
+                        RawFieldReference = row.RawFieldReference,
+                        RawCropName = row.RawCropName,
+                        PropertyId = _mappingPropertyId,
+                        BlockId = block.BlockId,
+                        BlockType = block.BlockType,
+                        ExpectedRowCount = row.ExpectedRowCount
+                    };
+                }).ToList()
+            };
+            var result = await TgsApi.ApplyHistoricalSoilMappings(request, accessToken);
+            if (result is null) { _dialogError = TgsApi.ErrorMessage ?? "The mappings could not be applied."; return; }
+
+            _mappingVisible = false;
+            _restoreExpandedRows = true;
+            await LoadGroupsCoreAsync();
+            SetMessage($"{result.MappingCount} mapping{(result.MappingCount == 1 ? string.Empty : "s")} applied to {result.MatchedRows} matching result{(result.MatchedRows == 1 ? string.Empty : "s")}; {result.UpdatedRows} row{(result.UpdatedRows == 1 ? string.Empty : "s")} changed.");
+        }
+        finally { _mappingBusy = _busy = false; }
+    }
+
+    private void OpenGeneration(HistoricalSoilResultGroupDto group)
+    {
+        _generationGroup = group;
+        _generationDate = group.EffectiveSurveyDate?.Date ?? DateTime.Today;
+        var standardTestName = StandardLabTestName(SoilLabTestCategoryId);
+        _generationLabTestTypeId = GetGenerationLabTestOptions(group)
+            .Where(test => string.Equals(test.TestName, standardTestName, StringComparison.OrdinalIgnoreCase))
+            .Select(test => test.Id)
+            .FirstOrDefault();
+        _dialogError = null;
+        _generationVisible = true;
+    }
+
+    private static string EffectiveSurveyDateError(HistoricalSoilResultGroupDto group)
+    {
+        if (group.MissingEffectiveSurveyDateCount > 0)
+        {
+            return "One or more results has neither a linked visit date nor a received date, so the survey date cannot be determined.";
+        }
+
+        return "This batch resolves to more than one survey date and cannot be generated as one survey.";
+    }
+
+    private IReadOnlyList<LabTestOption> GetGenerationLabTestOptions(HistoricalSoilResultGroupDto? group)
+    {
+        if (group is null) return [];
+
+        return _labTestTypes
+            .Where(test => test.LabId == group.LabId && test.TestTypeId == SoilLabTestCategoryId)
+            .OrderBy(test => test.TestName)
+            .ThenBy(test => test.TestCode)
+            .ThenBy(test => test.LabTestTypeId)
+            .Select(test => new LabTestOption(
+                test.LabTestTypeId,
+                test.TestName?.Trim() ?? string.Empty,
+                LabTestLabel(test)))
+            .ToList();
+    }
+
+    private static IReadOnlyList<GenerationBlockSummary> GetGenerationBlocks(HistoricalSoilResultGroupDto? group)
+    {
+        if (group is null) return [];
+
+        return group.Results
+            .Where(result => result.BlockId > 0 && result.IsBlockMapped)
+            .GroupBy(result => new
+            {
+                result.BlockId,
+                BlockType = result.BlockType?.Trim().ToUpperInvariant() ?? string.Empty,
+                Name = result.BlockName?.Trim() ?? string.Empty
+            })
+            .Select(results => new GenerationBlockSummary(
+                results.Key.BlockId,
+                results.Key.BlockType,
+                string.IsNullOrWhiteSpace(results.Key.Name) ? $"Block {results.Key.BlockId}" : results.Key.Name,
+                BlockTypeLabel(results.Key.BlockType),
+                results.Count()))
+            .OrderBy(block => block.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(block => block.TypeLabel)
+            .ToList();
+    }
+
+    private static string LabTestLabel(LabTestType test)
+    {
+        var name = string.IsNullOrWhiteSpace(test.TestName) ? "Unnamed test" : test.TestName.Trim();
+        var code = test.TestCode?.Trim();
+        return string.IsNullOrWhiteSpace(code) || string.Equals(code, name, StringComparison.OrdinalIgnoreCase)
+            ? name
+            : $"{name} ({code})";
+    }
+
+    private static string StandardLabTestName(int testTypeId) => testTypeId switch
+    {
+        10 => "Soil",
+        20 => "Tissue",
+        30 => "Quick Soil",
+        40 => "Sap",
+        _ => string.Empty
+    };
+
+    private static string BlockTypeLabel(string blockType) => blockType switch
+    {
+        "BANANA" => "Banana block",
+        "MULTICROP" => "Multi-crop block",
+        _ => "Block"
+    };
+
+    private async Task GenerateSurveyAsync()
+    {
+        if (_generationGroup is null) return;
+        var accessToken = await GetAccessTokenAsync();
+        if (accessToken is null) return;
+        _generationBusy = _busy = true;
+        _dialogError = null;
+        try
+        {
+            var result = await TgsApi.GenerateSampleSurveyFromHistoricalSoil(new HistoricalSoilSurveyGenerationRequest
+            {
+                LabSoilIds = _generationGroup.Results.Select(item => item.LabSoilId).ToList(),
+                PropertyId = _generationGroup.PropertyId,
+                AgronomistId = _generationAgronomistId,
+                SurveyDate = _generationDate,
+                LabTestTypeId = _generationLabTestTypeId
+            }, accessToken);
+            if (result is null) { _dialogError = TgsApi.ErrorMessage ?? "The Sample survey could not be generated."; return; }
+
+            _generationVisible = false;
+            Navigation.NavigateTo($"/surveys/samples/{result.SurveyId}/edit");
+        }
+        finally { _generationBusy = _busy = false; }
+    }
+
+    private async Task OpenBulkGenerationAsync()
+    {
+        if (!_canBulkGenerate) return;
+        _bulkVisible = true;
+        await RefreshBulkPreviewAsync();
+    }
+
+    private async Task RefreshBulkPreviewAsync()
+    {
+        if (_bulkRunning) return;
+        _bulkLoading = true;
+        _bulkError = null;
+        _bulkPreview = [];
+        _bulkQueue = [];
+        _bulkProcessedKeys.Clear();
+        _bulkRunResults.Clear();
+        _bulkCurrentItem = null;
+        _bulkHasStarted = false;
+        try
+        {
+            var accessToken = await GetBulkAccessTokenAsync();
+            if (accessToken is null) return;
+            var preview = await TgsApi.PreviewReadyHistoricalSoilSurveyGeneration(accessToken);
+            if (preview is null)
+            {
+                _bulkError = TgsApi.ErrorMessage ?? "The bulk generation preview could not be loaded.";
+                return;
+            }
+
+            _bulkPreview = preview;
+            _bulkQueue = preview
+                .Where(item => item.IsEligible && item.SurveyDate.HasValue)
+                .OrderByDescending(item => item.SurveyDate)
+                .ThenBy(item => item.PropertyName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        finally
+        {
+            _bulkLoading = false;
+        }
+    }
+
+    private async Task GenerateReadySurveysAsync()
+    {
+        if (_bulkRunning || _bulkAgronomistId <= 0 || BulkPendingCount == 0) return;
+        var accessToken = await GetBulkAccessTokenAsync();
+        if (accessToken is null) return;
+
+        CaptureExpandedRows();
+        _bulkError = null;
+        _bulkHasStarted = true;
+        _bulkRunning = true;
+        _bulkStopRequested = false;
+        _busy = true;
+        try
+        {
+            foreach (var item in _bulkQueue.Where(item => !_bulkProcessedKeys.Contains(item.DestinationKey)).ToList())
+            {
+                if (_bulkStopRequested) break;
+                _bulkCurrentItem = item;
+                await InvokeAsync(StateHasChanged);
+
+                var result = await TgsApi.GenerateReadyHistoricalSoilSurvey(new HistoricalSoilBulkGenerationRequest
+                {
+                    PropertyId = item.PropertyId,
+                    SurveyDate = item.SurveyDate!.Value,
+                    AgronomistId = _bulkAgronomistId,
+                    ExpectedRowCount = item.ResultCount
+                }, accessToken);
+
+                if (result is null)
+                {
+                    _bulkError = TgsApi.ErrorMessage ?? $"Generation stopped while processing {item.PropertyName}. The remaining destinations can be resumed safely.";
+                    break;
+                }
+
+                _bulkRunResults.RemoveAll(receipt => string.Equals(
+                    receipt.Item.DestinationKey,
+                    item.DestinationKey,
+                    StringComparison.OrdinalIgnoreCase));
+                _bulkRunResults.Add(new BulkRunReceipt(item, result));
+                var agronomistValidationFailed =
+                    string.Equals(result.OutcomeCode, "ValidationFailed", StringComparison.OrdinalIgnoreCase) &&
+                    result.Message.Contains("agronomist", StringComparison.OrdinalIgnoreCase);
+                if (agronomistValidationFailed)
+                {
+                    _bulkError = result.Message;
+                    break;
+                }
+
+                _bulkProcessedKeys.Add(item.DestinationKey);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        finally
+        {
+            _bulkCurrentItem = null;
+            _bulkRunning = false;
+            _bulkStopRequested = false;
+            _busy = false;
+
+            if (_bulkProcessedKeys.Count > 0)
+            {
+                _restoreExpandedRows = true;
+                await LoadGroupsCoreAsync();
+                SetMessage($"Bulk generation checked {BulkCompletedCount:N0} destination{(BulkCompletedCount == 1 ? string.Empty : "s")}: {BulkCreatedCount:N0} created, {BulkSkippedCount:N0} skipped safely and {BulkReviewCount:N0} requiring review.", BulkReviewCount > 0);
+            }
+        }
+    }
+
+    private async Task<string?> GetBulkAccessTokenAsync()
+    {
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var token = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+        if (!string.IsNullOrWhiteSpace(token)) return token;
+        _bulkError = "Your session has expired. Sign in again before bulk-generating historical surveys.";
+        return null;
+    }
+
+    private void RequestBulkStop() => _bulkStopRequested = true;
+    private void CloseBulkGeneration() { if (!_bulkRunning) _bulkVisible = false; }
+
+    private static string BulkStatusLabel(string statusCode) => statusCode switch
+    {
+        "Ready" => "Ready",
+        "ExistingSurvey" => "Existing survey",
+        "MultipleExistingSurveys" => "Multiple surveys",
+        "InactiveProperty" => "Inactive property",
+        "MissingSurveyDate" => "Missing date",
+        "MissingBillingEntity" => "Missing billing",
+        "MissingStandardSoilTest" => "Missing Soil test",
+        "ConflictingLabTest" => "Review test",
+        _ => statusCode
+    };
+
+    private static string BulkStatusCss(string statusCode) => statusCode switch
+    {
+        "Ready" => "ready",
+        "ExistingSurvey" or "MultipleExistingSurveys" => "existing",
+        _ => "blocked"
+    };
+
+    private static string BulkOutcomeLabel(string outcomeCode) => outcomeCode switch
+    {
+        "Created" => "Created",
+        "SkippedExisting" => "Existing survey",
+        "MultipleExistingSurveys" => "Multiple surveys",
+        "ChangedSincePreview" => "Changed",
+        "RequiresReview" => "Review",
+        "ValidationFailed" => "Not created",
+        _ => outcomeCode
+    };
+
+    private static string BulkOutcomeCss(string outcomeCode) => outcomeCode switch
+    {
+        "Created" => "ready",
+        "SkippedExisting" or "MultipleExistingSurveys" => "existing",
+        _ => "blocked"
+    };
+
+    private async Task<string?> GetAccessTokenAsync()
+    {
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var token = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+        if (!string.IsNullOrWhiteSpace(token)) return token;
+        _dialogError = "Your session has expired. Sign in again before changing historical Soil data.";
+        return null;
+    }
+
+    private void CaptureExpandedRows()
+    {
+        _expandedGroupKeys.Clear();
+        if (_historicalGrid is null) return;
+
+        for (var visibleIndex = 0; visibleIndex < _historicalGrid.GetVisibleRowCount(); visibleIndex++)
+        {
+            if (_historicalGrid.IsDetailRowExpanded(visibleIndex) &&
+                _historicalGrid.GetDataItem(visibleIndex) is HistoricalSoilResultGroupDto group)
+            {
+                _expandedGroupKeys.Add(group.GroupKey);
+            }
+        }
+    }
+
+    private void CloseMapping() { if (!_mappingBusy) _mappingVisible = false; }
+    private void CloseGeneration() { if (!_generationBusy) _generationVisible = false; }
+    private void SetMessage(string message, bool error = false) { _message = message; _messageIsError = error; }
+    private static bool Contains(string? source, string? value) => !string.IsNullOrWhiteSpace(source) && !string.IsNullOrWhiteSpace(value) && source.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase);
+    private static List<HistoricalSoilResultItemDto> GetDistinctUnmappedResults(HistoricalSoilResultGroupDto group) => group.Results
+        .Where(item => !item.IsMapped)
+        .GroupBy(RawMappingKey, StringComparer.OrdinalIgnoreCase)
+        .Select(items => items.First())
+        .OrderBy(item => item.RawFieldReference)
+        .ThenBy(item => item.RawCropName)
+        .ToList();
+    private static string RawMappingKey(HistoricalSoilResultItemDto item) =>
+        string.Join("\u001f", item.RawCustomerName?.Trim() ?? string.Empty, item.RawFieldReference?.Trim() ?? string.Empty, item.RawCropName?.Trim() ?? string.Empty);
+    private int CountMatchingRawRows(HistoricalSoilResultItemDto selected) => _groups
+        .SelectMany(group => group.Results)
+        .Count(item => SameRawValue(item.RawCustomerName, selected.RawCustomerName) &&
+                       SameRawValue(item.RawFieldReference, selected.RawFieldReference) &&
+                       SameRawValue(item.RawCropName, selected.RawCropName));
+    private static bool SameRawValue(string? left, string? right) => string.Equals(left?.Trim() ?? string.Empty, right?.Trim() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value.Trim();
+}

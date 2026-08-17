@@ -27,7 +27,10 @@
             <div class="toolbar-left">
                 <DxButton Text="Back to Sample surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
                 <DxButton Text="Lab data" RenderStyle="ButtonRenderStyle.Secondary" Click="ViewLabData" />
-                <DxButton Text="Import results" RenderStyle="ButtonRenderStyle.Secondary" Click="ImportResults" />
+                @if (CanImportResults)
+                {
+                    <DxButton Text="Import results" RenderStyle="ButtonRenderStyle.Secondary" Click="ImportResults" />
+                }
             </div>
             @if (_canEditOperations || _canEditFinance)
             {
@@ -152,7 +155,12 @@
                             </DxGridDataColumn>
                             <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.LabName)" Caption="Laboratory" MinWidth="130" />
                             <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.LabStatusName)" Caption="Lab status" MinWidth="130" />
-                            <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.BarcodeId)" Caption="Barcode" Width="95px" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.BarcodeId)" Caption="Barcode" Width="95px">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var item = (SampleSurveyItem)cell.DataItem; }
+                                    <span class="barcode-value">@item.BarcodeId.ToString("0")</span>
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
                             <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.BlockName)" Caption="Block" MinWidth="140" />
                             <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.TestName)" Caption="Test" MinWidth="140" />
                             <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.CropTypeName)" Caption="Crop" MinWidth="120" />
@@ -209,6 +217,8 @@
     private bool _canEditFinance;
     private bool _canMoveStatuses;
     private string? _message;
+    private bool CanImportResults => _editor is not null &&
+        (_editor.Samples.Count == 0 || _editor.Samples.Any(item => item.LabStatusId < 100));
 
     protected override async Task OnParametersSetAsync()
     {

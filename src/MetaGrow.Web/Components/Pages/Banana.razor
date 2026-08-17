@@ -39,7 +39,7 @@
             </div>
             <div class="filter-field property-filter">
                 <label for="banana-property">Property</label>
-                <DxTextBox Id="banana-property" @bind-Text="_propertySearch" @bind-Text:after="SaveFiltersAsync"
+                <DxTextBox Id="banana-property" @bind-Text="_propertySearch" @bind-Text:after="PropertySearchChangedAsync"
                            NullText="Type a property name" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="300"
                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
             </div>
@@ -168,6 +168,12 @@
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "property")]
+    public string? RequestedProperty { get; set; }
+
+    [SupplyParameterFromQuery(Name = "propertyId")]
+    public int? RequestedPropertyId { get; set; }
+
     private IGrid? _grid;
     private const string FilterCookieName = "metagrow.banana.filters";
     private readonly DateTime _today = DateTime.Today;
@@ -188,7 +194,9 @@
         .ToList();
 
     private IReadOnlyList<BananaSurveySummaryDto> FilteredSurveys =>
-        BananaSurveyFilter.Apply(_surveys, _propertySearch, _statusId);
+        BananaSurveyFilter.Apply(_surveys, _propertySearch, _statusId)
+            .Where(survey => RequestedPropertyId is null || survey.PropertyId == RequestedPropertyId)
+            .ToList();
 
     private string ResultSummary => FilteredSurveys.Count == _surveys.Count
         ? $"{_surveys.Count} survey{(_surveys.Count == 1 ? string.Empty : "s")}"
@@ -201,8 +209,19 @@
     {
         if (!firstRender) return;
         await RestoreFiltersAsync();
+        ApplyLinkedPropertyFilter();
         await LoadSurveysAsync();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyLinkedPropertyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(RequestedProperty)) return;
+
+        _startDate = new DateTime(1990, 1, 1);
+        _endDate = _today;
+        _propertySearch = RequestedProperty.Trim();
+        _statusId = null;
     }
 
     private async Task LoadSurveysAsync()
@@ -243,9 +262,16 @@
 
     private async Task ClearFiltersAsync()
     {
+        RequestedPropertyId = null;
         ApplyFilters(BananaSurveyFilterPreferences.CreateDefault(_today));
         await SaveFiltersAsync();
         await LoadSurveysAsync();
+    }
+
+    private async Task PropertySearchChangedAsync()
+    {
+        RequestedPropertyId = null;
+        await SaveFiltersAsync();
     }
 
     private async Task RestoreFiltersAsync()

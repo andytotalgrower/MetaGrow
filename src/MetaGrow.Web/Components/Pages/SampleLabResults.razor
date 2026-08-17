@@ -2,93 +2,155 @@
 @page "/surveys/samples/{SurveyId:int}/lab-results"
 @using ApiModels
 @using ApiModels.MetaGrow
-@using MetaGrow.Shared
+@using MetaGrow.Web.Services
 @using Metagen.Shared.Services
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist + "," + MetaGrowRoles.Accountant)]
 @inject ITgsApiService TgsApi
 
-<PageTitle>Sample lab results | MetaGrow</PageTitle>
+<PageTitle>Lab results | MetaGrow</PageTitle>
 
 <div class="lab-results-page">
     <div class="title">
         <div class="title-header-text">Lab results</div>
-        <div class="title-content-text">Returned Soil data grouped by survey, laboratory and received date.</div>
+        <div class="title-content-text">Review Soil, Tissue, Quick Soil and Sap data in one place.</div>
     </div>
-    <nav class="sample-nav" aria-label="Sample survey area"><a href="/surveys/samples">Surveys</a><a class="active" href="/surveys/samples/lab-results">Lab results</a><span class="disabled">Import activity</span></nav>
+    <nav class="sample-nav" aria-label="Sample survey area"><a href="/surveys/samples">Surveys</a><a class="active" href="/surveys/samples/lab-results">Lab results</a><a href="/surveys/samples/lab-results/historical">Historical data</a><span class="disabled">Import activity</span></nav>
 
     @if (SurveyId.HasValue)
     {
-        <div class="survey-context"><div><span>Survey</span><strong>#@SurveyId</strong>@if (_groups.Count > 0) { <span>· @_groups[0].PropertyName · @_groups[0].SurveyDate.ToString("dd MMM yyyy")</span> }</div><a href="/surveys/samples">Back to all surveys</a></div>
+        <div class="survey-context"><div><span>Survey</span><strong>#@SurveyId</strong></div><a href="/surveys/samples">Back to all surveys</a></div>
+    }
+    else if (RequestedPropertyId.HasValue)
+    {
+        <div class="survey-context linked-property-context"><div><span>Linked farm data</span><strong>@(RequestedProperty ?? $"Farm {RequestedPropertyId}")</strong></div><span>Farm @RequestedPropertyId</span></div>
     }
 
+    <div class="result-type-tabs" role="tablist" aria-label="Lab result type">
+        @foreach (var type in UnifiedLabResultPresentation.ResultTypes)
+        {
+            <button type="button" role="tab" aria-selected="@(type == _selectedType)" class="@(type == _selectedType ? "active" : null)" @onclick="@(() => SelectTypeAsync(type))">@UnifiedLabResultPresentation.TypeLabel(type)</button>
+        }
+    </div>
+
     <section class="filter-panel" aria-labelledby="lab-search-heading">
-        <div class="filter-heading"><div><h2 id="lab-search-heading">Find returned data</h2><p>Soil is available first; Tissue, Quick Soil and Sap will follow this interaction.</p></div><div class="filter-actions"><DxButton Text="Clear" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearFiltersAsync" Enabled="@(!_loading)" /><DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="LoadGroupsAsync" Enabled="@(!_loading)" /></div></div>
+        <div class="filter-heading"><div><h2 id="lab-search-heading">Find @SelectedTypeLabel results</h2><p>Filter returned laboratory data by date, farm, crop or reference.</p></div><div class="filter-actions"><DxButton Text="Clear" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearFiltersAsync" Enabled="@(!_loading)" /><DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="LoadResultsAsync" Enabled="@(!_loading)" /></div></div>
         <div class="filter-grid">
             @if (!SurveyId.HasValue)
             {
-                <div class="filter-field"><label for="soil-start-date">Received from</label><DxDateEdit Id="soil-start-date" @bind-Date="_startDate" DisplayFormat="dd/MM/yyyy" /></div>
-                <div class="filter-field"><label for="soil-end-date">Received to</label><DxDateEdit Id="soil-end-date" @bind-Date="_endDate" DisplayFormat="dd/MM/yyyy" /></div>
+                <div class="filter-field"><label for="lab-start-date">From</label><DxDateEdit Id="lab-start-date" @bind-Date="_startDate" DisplayFormat="dd/MM/yyyy" /></div>
+                <div class="filter-field"><label for="lab-end-date">To</label><DxDateEdit Id="lab-end-date" @bind-Date="_endDate" DisplayFormat="dd/MM/yyyy" /></div>
             }
-            <div class="filter-field"><label for="soil-property">Property</label><DxTextBox Id="soil-property" @bind-Text="_propertySearch" NullText="Canonical property" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="300" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
-            <div class="filter-field"><label for="soil-customer">Lab customer</label><DxTextBox Id="soil-customer" @bind-Text="_rawCustomerSearch" NullText="Raw CSV customer" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="300" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
-            <div class="filter-field"><label for="soil-agronomist">Agronomist</label><DxComboBox Id="soil-agronomist" Data="@AgronomistOptions" @bind-Value="_agronomistId" TextFieldName="@nameof(FilterOption.Name)" ValueFieldName="@nameof(FilterOption.Id)" NullText="All agronomists" AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
-            <div class="filter-field"><label for="soil-lab">Laboratory</label><DxComboBox Id="soil-lab" Data="@LabOptions" @bind-Value="_labId" TextFieldName="@nameof(FilterOption.Name)" ValueFieldName="@nameof(FilterOption.Id)" NullText="All laboratories" AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
-            <div class="filter-field"><label for="soil-reference">Order or field reference</label><DxTextBox Id="soil-reference" @bind-Text="_referenceSearch" NullText="Type an order or block" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="300" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
-            <div class="filter-field"><label for="soil-mapping">Mapping</label><DxComboBox Id="soil-mapping" Data="@MappingOptions" @bind-Value="_mappingState" TextFieldName="@nameof(MappingOption.Name)" ValueFieldName="@nameof(MappingOption.Value)" NullText="All results" AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
+            <div class="filter-field"><label for="lab-property">Property</label><DxTextBox Id="lab-property" @bind-Text="_propertySearch" Enabled="@(!RequestedPropertyId.HasValue)" NullText="Type a property" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
+            <div class="filter-field"><label for="lab-crop">Crop</label><DxTextBox Id="lab-crop" @bind-Text="_cropSearch" NullText="Type a crop" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
+            <div class="filter-field"><label for="lab-reference">Order, sample or field reference</label><DxTextBox Id="lab-reference" @bind-Text="_referenceSearch" NullText="Type a reference" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
         </div>
     </section>
 
-    @if (_loading) { <div class="loading-state"><div class="spinner-border spinner-border-sm"></div><span>Loading returned Soil data…</span></div> }
-    else if (_errorMessage is not null) { <div class="alert alert-danger"><strong>Lab data could not be loaded.</strong> @_errorMessage</div> }
-    else if (FilteredGroups.Count == 0) { <div class="empty-state"><strong>No returned Soil data was found.</strong><span>Try a wider received-date range or clear a filter.</span></div> }
+    @if (_loading)
+    {
+        <div class="loading-state"><div class="spinner-border spinner-border-sm"></div><span>Loading @SelectedTypeLabel results…</span></div>
+    }
+    else if (_errorMessage is not null)
+    {
+        <div class="alert alert-danger"><strong>Lab data could not be loaded.</strong> @_errorMessage</div>
+    }
+    else if (FilteredRows.Count == 0)
+    {
+        <div class="empty-state"><strong>No @SelectedTypeLabel results were found.</strong><span>Try a wider received-date range or clear a filter.</span></div>
+    }
     else
     {
-        <div class="result-heading"><div><h2>Soil results</h2><span>@FilteredGroups.Count batch@(FilteredGroups.Count == 1 ? string.Empty : "es"), @FilteredGroups.Sum(group => group.ResultCount) results</span></div></div>
+        <div class="result-heading"><div><h2>@SelectedTypeLabel results</h2><span>@FilteredRows.Count record@(FilteredRows.Count == 1 ? string.Empty : "s")</span></div></div>
         <div class="desktop-results">
-            <DxGrid Data="@FilteredGroups" PageSize="20" TextWrapEnabled="false" HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn">
+            <DxGrid Data="@FilteredRows" PageSize="20" TextWrapEnabled="false" HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn">
                 <Columns>
-                    <DxGridDataColumn FieldName="@nameof(SampleSoilResultGroupDto.DateReceived)" Caption="Received" Width="110px" DisplayFormat="dd/MM/yyyy" />
-                    <DxGridDataColumn FieldName="@nameof(SampleSoilResultGroupDto.PropertyName)" Caption="Property" MinWidth="170" />
-                    <DxGridDataColumn FieldName="@nameof(SampleSoilResultGroupDto.RawCustomerName)" Caption="Lab customer" MinWidth="160" />
-                    <DxGridDataColumn FieldName="@nameof(SampleSoilResultGroupDto.LabName)" Caption="Laboratory" MinWidth="170" />
-                    <DxGridDataColumn FieldName="@nameof(SampleSoilResultGroupDto.RawCropNames)" Caption="Crop" MinWidth="120" />
-                    <DxGridDataColumn FieldName="@nameof(SampleSoilResultGroupDto.ResultCount)" Caption="Results" Width="75px" />
-                    <DxGridDataColumn FieldName="@nameof(SampleSoilResultGroupDto.OrderCount)" Caption="Orders" Width="75px" />
-                    <DxGridDataColumn Caption="Mapping" Width="105px"><CellDisplayTemplate Context="cell">@{ var group = (SampleSoilResultGroupDto)cell.DataItem; }<span class="mapping-badge @(group.IsFullyMapped ? "mapped" : "attention")">@(group.IsFullyMapped ? "Mapped" : $"{group.MappedResultCount}/{group.ResultCount}")</span></CellDisplayTemplate></DxGridDataColumn>
-                    <DxGridDataColumn Caption="Action" Width="105px" AllowSort="false"><CellDisplayTemplate Context="cell"><a href="@($"/surveys/samples/{((SampleSoilResultGroupDto)cell.DataItem).SurveyId}/edit")">Open survey</a></CellDisplayTemplate></DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.DateReceived)" Caption="Received" Width="110px" DisplayFormat="dd/MM/yyyy" />
+                    <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.PropertyName)" Caption="Property" MinWidth="170" />
+                    <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.BlockName)" Caption="Block" MinWidth="135" />
+                    <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.CropName)" Caption="Crop" MinWidth="110" />
+                    <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.Reference)" Caption="Field reference" MinWidth="140" />
+                    <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.OrderNumber)" Caption="Order / sample" MinWidth="130" />
+                    <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.KeyResults)" Caption="Key results" MinWidth="230" />
+                    <DxGridDataColumn Caption="Survey" Width="115px" AllowSort="false"><CellDisplayTemplate Context="cell">@{ var row = (UnifiedLabResultRow)cell.DataItem; }@if (row.SurveyUrl is not null) { <a href="@row.SurveyUrl" target="_blank" rel="noopener">@row.SurveyLabel</a> } else { <span class="not-linked">Not linked</span> }</CellDisplayTemplate></DxGridDataColumn>
                 </Columns>
-                <DetailRowTemplate Context="detail">
-                    @{ var group = (SampleSoilResultGroupDto)detail.DataItem; }
-                    <div class="result-detail"><div class="detail-heading"><strong>Survey #@group.SurveyId</strong><span>@group.AgronomistName · @group.SurveyDate.ToString("dd MMM yyyy")</span></div><table><thead><tr><th>Order</th><th>Lab field reference</th><th>Canonical block</th><th>Type</th><th>Raw crop</th></tr></thead><tbody>@foreach (var result in group.Results) { <tr><td>@result.OrderNo</td><td>@result.RawFieldReference</td><td>@(result.BlockName ?? "Not mapped")</td><td>@result.BlockType</td><td>@result.RawCropName</td></tr> }</tbody></table></div>
-                </DetailRowTemplate>
             </DxGrid>
         </div>
-        <div class="mobile-results">@foreach (var group in FilteredGroups) { <article class="result-card"><header><div><strong>@group.PropertyName</strong><span>@group.DateReceived?.ToString("dd MMM yyyy") · @group.LabName</span></div><span class="mapping-badge @(group.IsFullyMapped ? "mapped" : "attention")">@(group.IsFullyMapped ? "Mapped" : "Check mapping")</span></header><dl><div><dt>Lab customer</dt><dd>@group.RawCustomerName</dd></div><div><dt>Crop</dt><dd>@group.RawCropNames</dd></div><div><dt>Results</dt><dd>@group.ResultCount across @group.OrderCount orders</dd></div></dl><a class="btn btn-primary" href="@($"/surveys/samples/{group.SurveyId}/edit")">Open survey</a></article> }</div>
+        <div class="mobile-results">
+            @foreach (var row in FilteredRows)
+            {
+                <article class="result-card"><header><div><strong>@row.PropertyName</strong><span>@row.DateReceived?.ToString("dd MMM yyyy") · @row.ResultType</span></div><span class="record-id">#@row.RecordId</span></header><dl><div><dt>Block</dt><dd>@row.BlockName</dd></div><div><dt>Crop</dt><dd>@row.CropName</dd></div><div><dt>Reference</dt><dd>@row.Reference</dd></div><div><dt>Results</dt><dd>@row.KeyResults</dd></div></dl>@if (row.SurveyUrl is not null) { <a class="btn btn-primary" href="@row.SurveyUrl" target="_blank" rel="noopener">Open @row.SurveyLabel</a> }</article>
+            }
+        </div>
     }
 </div>
 
 @code {
     [Parameter] public int? SurveyId { get; set; }
-    private DateTime _startDate = DateTime.Today.AddMonths(-3), _endDate = DateTime.Today;
-    private string? _propertySearch, _rawCustomerSearch, _referenceSearch;
-    private int? _agronomistId, _labId;
-    private bool? _mappingState;
+    [SupplyParameterFromQuery(Name = "type")] public string? RequestedType { get; set; }
+    [SupplyParameterFromQuery(Name = "propertyId")] public int? RequestedPropertyId { get; set; }
+    [SupplyParameterFromQuery(Name = "property")] public string? RequestedProperty { get; set; }
+
+    private DateTime _startDate = DateTime.Today.AddMonths(-3);
+    private DateTime _endDate = DateTime.Today;
+    private string _selectedType = UnifiedLabResultPresentation.Soil;
+    private string? _propertySearch;
+    private string? _cropSearch;
+    private string? _referenceSearch;
     private bool _loading = true;
+    private bool _parametersApplied;
     private string? _errorMessage;
-    private List<SampleSoilResultGroupDto> _groups = [];
-    private sealed record FilterOption(int Id, string Name);
-    private sealed record MappingOption(bool Value, string Name);
-    private static readonly MappingOption[] MappingOptions = [new(true, "Fully mapped"), new(false, "Needs attention")];
-    private IReadOnlyList<FilterOption> AgronomistOptions => _groups.GroupBy(group => new { group.AgronomistId, group.AgronomistName }).Select(group => new FilterOption(group.Key.AgronomistId, group.Key.AgronomistName)).OrderBy(item => item.Name).ToList();
-    private IReadOnlyList<FilterOption> LabOptions => _groups.GroupBy(group => new { group.LabId, group.LabName }).Select(group => new FilterOption(group.Key.LabId, group.Key.LabName)).OrderBy(item => item.Name).ToList();
-    private IReadOnlyList<SampleSoilResultGroupDto> FilteredGroups => SampleSoilResultFilter.Apply(_groups, _propertySearch, _rawCustomerSearch, _agronomistId, _labId, _referenceSearch, _mappingState);
-    protected override async Task OnParametersSetAsync() => await LoadGroupsAsync();
-    private async Task LoadGroupsAsync()
+    private List<UnifiedLabResultRow> _rows = [];
+
+    private string SelectedTypeLabel => UnifiedLabResultPresentation.TypeLabel(_selectedType);
+    private IReadOnlyList<UnifiedLabResultRow> FilteredRows => _rows.Where(row => Contains(row.PropertyName, _propertySearch)).Where(row => Contains(row.CropName, _cropSearch)).Where(row => string.IsNullOrWhiteSpace(_referenceSearch) || Contains(row.Reference, _referenceSearch) || Contains(row.OrderNumber, _referenceSearch)).OrderByDescending(row => row.DateReceived ?? row.SurveyDate).ThenBy(row => row.PropertyName).ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_parametersApplied) return;
+        _parametersApplied = true;
+        _selectedType = UnifiedLabResultPresentation.NormalizeType(RequestedType);
+        _propertySearch = RequestedProperty;
+        if (RequestedPropertyId.HasValue) { _startDate = new DateTime(1990, 1, 1); _endDate = DateTime.Today; }
+        await LoadResultsAsync();
+    }
+
+    private async Task SelectTypeAsync(string type) { _selectedType = UnifiedLabResultPresentation.NormalizeType(type); await LoadResultsAsync(); }
+
+    private async Task LoadResultsAsync()
     {
         if (!SurveyId.HasValue && _endDate.Date < _startDate.Date) { _errorMessage = "The end date must be on or after the start date."; return; }
         _loading = true; _errorMessage = null;
-        try { var groups = await TgsApi.GetSampleSoilResultGroups(SurveyId.HasValue ? null : _startDate, SurveyId.HasValue ? null : _endDate, SurveyId); _groups = groups ?? []; _errorMessage = groups is null ? TgsApi.ErrorMessage ?? "Returned Soil data could not be loaded." : null; }
+        try
+        {
+            DateTime? startDate = SurveyId.HasValue ? null : _startDate;
+            DateTime? endDate = SurveyId.HasValue ? null : _endDate;
+            IReadOnlyList<UnifiedLabResultRow> results;
+            switch (_selectedType)
+            {
+                case UnifiedLabResultPresentation.Tissue:
+                    results = UnifiedLabResultPresentation.FromTissue(await TgsApi.GetUnifiedLabTissue(startDate, endDate, SurveyId, RequestedPropertyId) ?? []);
+                    break;
+                case UnifiedLabResultPresentation.QuickSoil:
+                    results = UnifiedLabResultPresentation.FromQuickSoil(await TgsApi.GetUnifiedLabQuickSoil(startDate, endDate, SurveyId, RequestedPropertyId) ?? []);
+                    break;
+                case UnifiedLabResultPresentation.Sap:
+                    results = UnifiedLabResultPresentation.FromSap(await TgsApi.GetUnifiedLabSap(startDate, endDate, SurveyId, RequestedPropertyId) ?? []);
+                    break;
+                default:
+                    results = UnifiedLabResultPresentation.FromSoil(await TgsApi.GetUnifiedLabSoil(startDate, endDate, SurveyId, RequestedPropertyId) ?? []);
+                    break;
+            }
+            _rows = results.ToList();
+            if (_rows.Count == 0 && !string.IsNullOrWhiteSpace(TgsApi.ErrorMessage) && !TgsApi.ErrorMessage.Contains("No lab", StringComparison.OrdinalIgnoreCase)) _errorMessage = TgsApi.ErrorMessage;
+        }
+        catch (Exception exception) { _errorMessage = $"{SelectedTypeLabel} results could not be loaded. {exception.Message}"; }
         finally { _loading = false; }
     }
-    private async Task ClearFiltersAsync() { _startDate = DateTime.Today.AddMonths(-3); _endDate = DateTime.Today; _propertySearch = _rawCustomerSearch = _referenceSearch = null; _agronomistId = _labId = null; _mappingState = null; await LoadGroupsAsync(); }
+
+    private async Task ClearFiltersAsync()
+    {
+        RequestedPropertyId = null; RequestedProperty = null; _startDate = DateTime.Today.AddMonths(-3); _endDate = DateTime.Today; _propertySearch = _cropSearch = _referenceSearch = null; await LoadResultsAsync();
+    }
+
+    private static bool Contains(string source, string? value) => string.IsNullOrWhiteSpace(value) || source.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase);
 }

@@ -6,6 +6,11 @@
 .sample-nav .disabled { color: var(--dxds-color-content-neutral-subdued-rest); cursor: not-allowed; }
 .survey-context { align-items: center; background: var(--dxds-color-surface-neutral-subdued-rest); border-left: 3px solid var(--mg-blue, #007cba); display: flex; justify-content: space-between; padding: .65rem .85rem; }
 .survey-context div { display: flex; gap: .4rem; }
+.linked-property-context > span { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .8rem; }
+.result-type-tabs { display: grid; gap: .5rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.result-type-tabs button { background: var(--dxds-color-surface-neutral-rest, #fff); border: 1px solid var(--dxds-color-border-neutral-subdued-rest); border-radius: .45rem; color: inherit; cursor: pointer; font-weight: 650; padding: .7rem .85rem; }
+.result-type-tabs button:hover { background: var(--dxds-color-surface-neutral-subdued-rest); }
+.result-type-tabs button.active { background: var(--mg-blue-0, #e7f5fb); border-color: var(--mg-blue, #007cba); color: var(--mg-blue, #007cba); }
 .filter-panel { background: var(--dxds-color-surface-neutral-subdued-rest); border: 1px solid var(--dxds-color-border-neutral-subdued-rest); border-radius: .5rem; padding: 1rem; }
 .filter-heading, .result-heading { align-items: center; display: flex; gap: 1rem; justify-content: space-between; }
 .filter-heading h2, .result-heading h2 { font-size: 1.125rem; margin: 0; }
@@ -35,6 +40,7 @@
 .result-card dl > div { display: grid; grid-template-columns: 7rem 1fr; padding: .2rem 0; }
 .result-card dt { color: var(--dxds-color-content-neutral-subdued-rest); font-weight: 500; }
 .result-card dd { margin: 0; }
+.record-id, .not-linked { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .75rem; }
 @media (max-width: 70rem) { .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 48rem) { .desktop-results { display: none; } .mobile-results { display: grid; gap: .75rem; } }
-@media (max-width: 34rem) { .filter-heading, .survey-context { align-items: stretch; flex-direction: column; } .filter-actions { display: grid; grid-template-columns: 1fr 1fr; } .filter-grid { grid-template-columns: 1fr; } .sample-nav { overflow-x: auto; } }
+@media (max-width: 34rem) { .filter-heading, .survey-context { align-items: stretch; flex-direction: column; } .filter-actions { display: grid; grid-template-columns: 1fr 1fr; } .filter-grid, .result-type-tabs { grid-template-columns: 1fr; } .sample-nav { overflow-x: auto; } }
