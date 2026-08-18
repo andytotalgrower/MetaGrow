@@ -52,7 +52,12 @@ public static class UnifiedLabResultPresentation
             Display(item.FieldReference),
             Display(item.OrderNo),
             item.SurveyDate,
-            Metrics(("pH", item.PhH2o), ("EC", item.EcDsm), ("NO₃-N", item.No3nPpm), ("K", item.PotassiumPpm)),
+            Metrics(
+                ("pH CaCl₂", item.PhCaCl2),
+                ("CEC", item.CecMeq),
+                ("NO₃-N", item.No3nPpm),
+                ("Ca", item.CalciumPpm),
+                ("Mg", item.MagnesiumPpm)),
             SurveyUrl(item.SampleSurveyId, item.VisitId),
             SurveyLabel(item.SampleSurveyId, item.VisitId)))
         .ToList();

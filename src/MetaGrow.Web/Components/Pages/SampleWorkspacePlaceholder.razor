@@ -8,6 +8,7 @@
 @inject ApiTokenService ApiTokens
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
+@inject SampleSurveyDeletionApiClient Deletions
 
 <PageTitle>Sample survey @SurveyId | MetaGrow</PageTitle>
 
@@ -26,16 +27,21 @@
         <div class="editor-toolbar" role="toolbar" aria-label="Sample survey actions">
             <div class="toolbar-left">
                 <DxButton Text="Back to Sample surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
-                <DxButton Text="Lab data" RenderStyle="ButtonRenderStyle.Secondary" Click="ViewLabData" />
+                <DxButton Text="View imported results" RenderStyle="ButtonRenderStyle.Secondary" Click="ViewLabData" />
                 @if (CanImportResults)
                 {
-                    <DxButton Text="Import results" RenderStyle="ButtonRenderStyle.Secondary" Click="ImportResults" />
+                    <DxButton Text="@ImportResultsButtonText" RenderStyle="ButtonRenderStyle.Secondary" Click="ImportResults" />
                 }
             </div>
-            @if (_canEditOperations || _canEditFinance)
-            {
-                <DxButton Text="Save changes" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="SaveAsync" />
-            }
+            <div class="toolbar-actions">
+                @if (_canEditOperations || _canEditFinance)
+                {
+                    <DxButton Text="Save changes" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="SaveAsync" />
+                }
+                <DxButton Text="@(_pendingDeletion is null ? "Request deletion" : "Deletion awaiting approval")"
+                          RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!_busy && _pendingDeletion is null)" Click="OpenDeletionPreviewAsync" />
+            </div>
         </div>
 
         <header class="editor-hero">
@@ -46,7 +52,7 @@
             </div>
             <div class="type-summary">
                 @if (_editor.Metagen is not null) { <span class="type-badge metagen">Metagen</span> }
-                @if (_editor.Nutrition is not null) { <span class="type-badge nutrition">Nutrition</span> }
+                @if (_editor.Nutrition is not null) { <span class="type-badge nutrition">Chemistry</span> }
             </div>
         </header>
 
@@ -59,7 +65,7 @@
             <div class="section-heading">
                 <span class="editor-kicker">Independent status tracks</span>
                 <h2 id="workflow-heading">Laboratory and report workflow</h2>
-                <p>Metagen and nutrition samples move independently. Report QA only opens after every sample in that lane is lab-complete.</p>
+                <p>Metagen and chemistry samples move independently. Report QA only opens after every sample in that lane is lab-complete.</p>
             </div>
             <div class="workflow-lanes">
                 @if (_editor.Metagen is not null)
@@ -147,10 +153,16 @@
                     <DxGrid Data="@_editor.Samples" PageSize="20" HighlightRowOnHover="true" TextWrapEnabled="false"
                             ColumnResizeMode="GridColumnResizeMode.NextColumn" CssClass="editor-sample-grid">
                         <Columns>
+                            <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.ItemId)" Caption="Item ID" Width="82px">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var item = (SampleSurveyItem)cell.DataItem; }
+                                    <span class="item-id-value">@item.ItemId.ToString("0")</span>
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
                             <DxGridDataColumn Caption="Type" Width="92px" AllowSort="false">
                                 <CellDisplayTemplate Context="cell">
                                     @{ var item = (SampleSurveyItem)cell.DataItem; }
-                                    <span class="type-badge @(item.LabId == 6 ? "metagen" : "nutrition")">@(item.LabId == 6 ? "Metagen" : "Nutrition")</span>
+                                    <span class="type-badge @(item.LabId == 6 ? "metagen" : "nutrition")">@(item.LabId == 6 ? "Metagen" : "Chemistry")</span>
                                 </CellDisplayTemplate>
                             </DxGridDataColumn>
                             <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.LabName)" Caption="Laboratory" MinWidth="130" />
@@ -165,9 +177,99 @@
                             <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.TestName)" Caption="Test" MinWidth="140" />
                             <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.CropTypeName)" Caption="Crop" MinWidth="120" />
                             <DxGridDataColumn FieldName="@nameof(SampleSurveyItem.IsBillable)" Caption="Billable" Width="80px" />
+                            <DxGridDataColumn Caption="Actions" Width="82px" AllowSort="false">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var item = (SampleSurveyItem)cell.DataItem; }
+                                    @if (_canEditOperations && item.LabId != 6)
+                                    {
+                                        <DxButton Text="Edit" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => OpenItemEditor(item))" />
+                                    }
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
                         </Columns>
                     </DxGrid>
                 </div>
+            </section>
+
+            <section class="editor-card full-width imported-results-card" aria-labelledby="imported-results-heading">
+                <div class="section-heading split-heading">
+                    <div>
+                        <span class="editor-kicker">Laboratory data</span>
+                        <h2 id="imported-results-heading">Imported lab results</h2>
+                        <p>Results linked to this survey across Soil, Tissue, Quick Soil and Sap.</p>
+                    </div>
+                    @if (!_labResultsLoading)
+                    {
+                        <span>@_importedLabResults.Count result@(_importedLabResults.Count == 1 ? string.Empty : "s")</span>
+                    }
+                </div>
+
+                @if (_labResultsLoading)
+                {
+                    <div class="imported-results-state"><DxWaitIndicator Visible="true" /><span>Loading imported results…</span></div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_labResultsError))
+                {
+                    <div class="imported-results-error" role="alert">
+                        <div><strong>Imported results could not be loaded.</strong><span>@_labResultsError</span></div>
+                        <DxButton Text="Try again" RenderStyle="ButtonRenderStyle.Secondary" Click="LoadImportedLabResultsAsync" />
+                    </div>
+                }
+                else if (_importedLabResults.Count == 0)
+                {
+                    <div class="imported-results-empty">
+                        <div><strong>No imported lab results are linked to this survey.</strong><span>Import the laboratory CSV when it becomes available.</span></div>
+                        @if (CanImportResults)
+                        {
+                            <DxButton Text="Import results" RenderStyle="ButtonRenderStyle.Primary" Click="ImportResults" />
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="imported-result-types" aria-label="Imported result types">
+                        @foreach (var summary in ImportedResultSummaries)
+                        {
+                            <div class="imported-result-type">
+                                <span>@summary.ResultType</span>
+                                <strong>@summary.Count</strong>
+                                <small>result@(summary.Count == 1 ? string.Empty : "s")</small>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="imported-results-grid-wrap">
+                        <DxGrid Data="@SortedImportedLabResults" PageSize="10" HighlightRowOnHover="true" TextWrapEnabled="false"
+                                ColumnResizeMode="GridColumnResizeMode.NextColumn" CssClass="imported-results-grid">
+                            <Columns>
+                                <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.DateReceived)" Caption="Received" Width="105px" DisplayFormat="dd/MM/yyyy" />
+                                @if (ImportedResultSummaries.Count > 1)
+                                {
+                                    <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.ResultType)" Caption="Type" Width="92px" />
+                                }
+                                <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.PropertyName)" Caption="Property" MinWidth="155" />
+                                <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.BlockName)" Caption="Block" MinWidth="130" />
+                                <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.CropName)" Caption="Crop" MinWidth="110" />
+                                <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.Reference)" Caption="Field reference" MinWidth="135" />
+                                <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.OrderNumber)" Caption="Order / sample" MinWidth="125" />
+                                <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.KeyResults)" Caption="Key results" MinWidth="300">
+                                    <CellDisplayTemplate Context="cell">
+                                        @{ var result = (UnifiedLabResultRow)cell.DataItem; }
+                                        <span class="key-results-value">@result.KeyResults</span>
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                            </Columns>
+                        </DxGrid>
+                    </div>
+
+                    <div class="imported-results-actions">
+                        <DxButton Text="View full results" RenderStyle="ButtonRenderStyle.Secondary" Click="ViewLabData" />
+                        @if (CanImportResults)
+                        {
+                            <DxButton Text="@ImportResultsButtonText" RenderStyle="ButtonRenderStyle.Primary" Click="ImportResults" />
+                        }
+                    </div>
+                }
             </section>
 
             <section class="editor-card full-width" aria-labelledby="invoice-heading">
@@ -206,6 +308,147 @@
     }
 </div>
 
+<DxPopup @bind-Visible="_itemEditorVisible" ShowFooter="true" HeaderText="@ItemEditorTitle"
+         AllowDrag="true" ShowCloseButton="@(!_itemBusy)" CloseOnEscape="@(!_itemBusy)"
+         CloseOnOutsideClick="false" Width="min(760px, calc(100vw - 2rem))">
+    <BodyContentTemplate>
+        @if (_editingItem is not null && _itemEdit is not null)
+        {
+            <div class="sample-item-dialog">
+                <div class="sample-item-summary">
+                    <div><span>Item ID</span><strong>@_editingItem.ItemId</strong></div>
+                    <div><span>Barcode</span><strong>@_editingItem.BarcodeId.ToString("0")</strong></div>
+                    <div><span>Lab status</span><strong>@(_editingItem.LabStatusName ?? "Sent by agronomist")</strong></div>
+                    <div><span>Sample</span><strong>@_editingItem.SequenceNo</strong></div>
+                </div>
+
+                @if (_editingItem.LabStatusId >= 100)
+                {
+                    <div class="sample-item-warning">Lab results are already loaded for this sample. Changes here do not rewrite the raw laboratory result rows.</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_itemError))
+                {
+                    <div class="dialog-error" role="alert">@_itemError</div>
+                }
+
+                <div class="sample-item-fields">
+                    <div class="field wide block-mode-field">
+                        <DxCheckBox @bind-Checked="_useTypedBlockName" Enabled="@(!_itemBusy)">Use a typed block name</DxCheckBox>
+                    </div>
+                    @if (_useTypedBlockName)
+                    {
+                        <div class="field wide">
+                            <label for="sample-item-block-name">Block name</label>
+                            <DxTextBox Id="sample-item-block-name" @bind-Text="_itemEdit.BlockName" Enabled="@(!_itemBusy)"
+                                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="field wide">
+                            <label for="sample-item-block">Property block</label>
+                            <DxComboBox Id="sample-item-block" Data="@BlockChoices" @bind-Value="_itemBlockKey"
+                                        TextFieldName="@nameof(SampleBlockChoice.Label)" ValueFieldName="@nameof(SampleBlockChoice.Key)"
+                                        NullText="Select a banana or multi-crop block" AllowUserInput="false"
+                                        SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                        Enabled="@(!_itemBusy)" />
+                        </div>
+                    }
+                    <div class="field wide">
+                        <label for="sample-item-crop">Crop</label>
+                        <DxComboBox Id="sample-item-crop" Data="@_editor?.Crops" @bind-Value="_itemEdit.CropTypeId"
+                                    TextFieldName="@nameof(CropType.CropTypeName)" ValueFieldName="@nameof(CropType.CropTypeId)"
+                                    NullText="Select a crop" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_itemBusy)" />
+                    </div>
+                    <div class="field">
+                        <label for="sample-item-lab">Laboratory</label>
+                        <DxComboBox Id="sample-item-lab" Data="@ExternalLaboratories" Value="@_itemEdit.LabId"
+                                    ValueChanged="@((int value) => ItemLaboratoryChanged(value))"
+                                    TextFieldName="@nameof(Lab.LabDisplayName)" ValueFieldName="@nameof(Lab.LabId)"
+                                    NullText="Select a laboratory" AllowUserInput="false" Enabled="@(!_itemBusy)" />
+                    </div>
+                    <div class="field">
+                        <label for="sample-item-test">Lab test</label>
+                        <DxComboBox Id="sample-item-test" Data="@AvailableLabTests" @bind-Value="_itemEdit.TestTypeId"
+                                    TextFieldName="@nameof(LabTestType.TestName)" ValueFieldName="@nameof(LabTestType.LabTestTypeId)"
+                                    NullText="Select a lab test" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_itemBusy)" />
+                    </div>
+                    <div class="field wide">
+                        <label for="sample-item-reference">Laboratory reference</label>
+                        <DxTextBox Id="sample-item-reference" @bind-Text="_itemEdit.LabReference" Enabled="@(!_itemBusy)"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </div>
+                    <div class="field wide billable-field">
+                        <DxCheckBox @bind-Checked="_itemEdit.IsBillable" Enabled="@(!_itemBusy)">Billable sample</DxCheckBox>
+                    </div>
+                    <div class="field wide">
+                        <label for="sample-item-comments">Comments</label>
+                        <DxMemo Id="sample-item-comments" @bind-Text="_itemEdit.Comments" Rows="4" Enabled="@(!_itemBusy)" />
+                    </div>
+                </div>
+            </div>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="dialog-footer">
+            <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseItemEditor" Enabled="@(!_itemBusy)" />
+            @if (_itemBusy)
+            {
+                <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Saving collected sample…</span></div>
+            }
+            <DxButton Text="Save sample" RenderStyle="ButtonRenderStyle.Primary" Click="SaveItemAsync" Enabled="@CanSaveItem" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="_deletionPopupVisible" ShowFooter="true" HeaderText="Request Sample survey deletion"
+         AllowDrag="true" ShowCloseButton="@(!_deletionBusy)" CloseOnEscape="@(!_deletionBusy)"
+         CloseOnOutsideClick="false" Width="min(650px, calc(100vw - 2rem))">
+    <BodyContentTemplate>
+        @if (_deletionBusy && _deletionPreview is null)
+        {
+            <div class="editor-loading"><DxWaitIndicator Visible="true" /><span>Running live deletion safety checks…</span></div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_deletionError))
+        {
+            <div class="alert alert-danger" role="alert">@_deletionError</div>
+        }
+        else if (_deletionPreview is not null)
+        {
+            <div class="deletion-review">
+                <p><strong>@_deletionPreview.PropertyName</strong> · survey @_deletionPreview.SurveyId · @_deletionPreview.SurveyDate.ToString("dd MMM yyyy")</p>
+                <div class="deletion-impact-grid">
+                    <div><strong>@_deletionPreview.SampleCount</strong><span>Collected samples</span></div>
+                    <div><strong>@_deletionPreview.PhotoCount</strong><span>Photo records</span></div>
+                    <div><strong>@_deletionPreview.ActionCount</strong><span>Actions</span></div>
+                    <div><strong>@_deletionPreview.ReportCount</strong><span>Reports</span></div>
+                </div>
+                @if (_deletionPreview.CanDelete)
+                {
+                    <div class="sample-item-warning">This permanently removes the survey and its operational child records. A different admin, agriculture manager or accountant must approve it.</div>
+                }
+                else
+                {
+                    <div class="dialog-error" role="alert">@_deletionPreview.BlockReason</div>
+                }
+            </div>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="dialog-footer">
+            <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseDeletionPopup" Enabled="@(!_deletionBusy)" />
+            @if (_deletionBusy && _deletionPreview is not null)
+            {
+                <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Submitting request…</span></div>
+            }
+            <DxButton Text="Request deletion" RenderStyle="ButtonRenderStyle.Danger" Click="RequestDeletionAsync"
+                      Enabled="@(!_deletionBusy && _deletionPreview?.CanDelete == true)" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
 @code {
     [Parameter] public int SurveyId { get; set; }
 
@@ -216,9 +459,50 @@
     private bool _canEditOperations;
     private bool _canEditFinance;
     private bool _canMoveStatuses;
+    private bool _itemEditorVisible;
+    private bool _itemBusy;
+    private bool _useTypedBlockName;
+    private bool _labResultsLoading;
     private string? _message;
-    private bool CanImportResults => _editor is not null &&
-        (_editor.Samples.Count == 0 || _editor.Samples.Any(item => item.LabStatusId < 100));
+    private string? _itemError;
+    private string? _labResultsError;
+    private string? _itemBlockKey;
+    private List<UnifiedLabResultRow> _importedLabResults = [];
+    private SampleSurveyItem? _editingItem;
+    private SampleSurveyItemEditorUpdateRequest? _itemEdit;
+    private bool _deletionPopupVisible;
+    private bool _deletionBusy;
+    private string? _deletionError;
+    private SampleSurveyDeletionPreviewDto? _deletionPreview;
+    private MetaGrowSampleSurveyDeletionDto? _pendingDeletion;
+    private bool HasImportedResults => _importedLabResults.Count > 0;
+    private bool CanImportResults => _editor?.Samples.Any(item => item.LabId != 6 && item.LabStatusId < 100) == true;
+    private string ImportResultsButtonText => HasImportedResults ? "Import more results" : "Import results";
+    private IReadOnlyList<UnifiedLabResultRow> SortedImportedLabResults => _importedLabResults
+        .OrderByDescending(result => result.DateReceived ?? result.SurveyDate)
+        .ThenBy(result => ResultTypeOrder(result.ResultType))
+        .ThenBy(result => result.OrderNumber)
+        .ToList();
+    private IReadOnlyList<ImportedResultSummary> ImportedResultSummaries => _importedLabResults
+        .GroupBy(result => result.ResultType)
+        .Select(group => new ImportedResultSummary(group.Key, group.Count()))
+        .OrderBy(summary => ResultTypeOrder(summary.ResultType))
+        .ToList();
+    private string ItemEditorTitle => _editingItem is null ? "Edit collected sample" : $"Edit collected sample {_editingItem.ItemId}";
+    private IReadOnlyList<Lab> ExternalLaboratories => _editor?.Laboratories
+        .Where(lab => lab.LabId != 6)
+        .ToList() ?? [];
+    private IReadOnlyList<LabTestType> AvailableLabTests => _editor?.LabTestTypes
+        .Where(test => _itemEdit is not null && test.LabId == _itemEdit.LabId)
+        .ToList() ?? [];
+    private IReadOnlyList<SampleBlockChoice> BlockChoices => _editor?.Blocks
+        .Select(block => new SampleBlockChoice(
+            $"{block.BlockType?.ToLowerInvariant()}:{block.BlockId}",
+            $"{block.BlockName} · {(string.Equals(block.BlockType, "banana", StringComparison.OrdinalIgnoreCase) ? "Banana" : "Multi-crop")}{(block.IsActive ? string.Empty : " · Inactive")}"))
+        .ToList() ?? [];
+    private bool CanSaveItem => !_itemBusy && _itemEdit is not null &&
+        _itemEdit.CropTypeId > 0 && _itemEdit.LabId > 0 && _itemEdit.TestTypeId > 0 &&
+        (_useTypedBlockName ? !string.IsNullOrWhiteSpace(_itemEdit.BlockName) : !string.IsNullOrWhiteSpace(_itemBlockKey));
 
     protected override async Task OnParametersSetAsync()
     {
@@ -232,7 +516,99 @@
 
         _editor = await TgsApi.GetSampleSurveyEditor(SurveyId);
         if (_editor is null) _message = TgsApi.ErrorMessage ?? "The Sample survey could not be loaded.";
+        _labResultsLoading = _editor is not null;
         _loading = false;
+        await InvokeAsync(StateHasChanged);
+
+        if (_editor is not null)
+            await LoadImportedLabResultsAsync();
+
+        var (pending, _) = await Deletions.GetPendingAsync();
+        _pendingDeletion = pending?.FirstOrDefault(item => item.SurveyId == SurveyId);
+    }
+
+    private async Task LoadImportedLabResultsAsync()
+    {
+        _labResultsLoading = true;
+        _labResultsError = null;
+        try
+        {
+            var soilTask = TgsApi.GetUnifiedLabSoil(null, null, SurveyId);
+            var tissueTask = TgsApi.GetUnifiedLabTissue(null, null, SurveyId);
+            var quickSoilTask = TgsApi.GetUnifiedLabQuickSoil(null, null, SurveyId);
+            var sapTask = TgsApi.GetUnifiedLabSap(null, null, SurveyId);
+
+            await Task.WhenAll((Task)soilTask, tissueTask, quickSoilTask, sapTask);
+
+            _importedLabResults =
+            [
+                .. UnifiedLabResultPresentation.FromSoil(await soilTask ?? []),
+                .. UnifiedLabResultPresentation.FromTissue(await tissueTask ?? []),
+                .. UnifiedLabResultPresentation.FromQuickSoil(await quickSoilTask ?? []),
+                .. UnifiedLabResultPresentation.FromSap(await sapTask ?? [])
+            ];
+        }
+        catch (Exception exception)
+        {
+            _labResultsError = exception.Message;
+            _importedLabResults = [];
+        }
+        finally
+        {
+            _labResultsLoading = false;
+        }
+    }
+
+    private async Task OpenDeletionPreviewAsync()
+    {
+        if (_pendingDeletion is not null) return;
+        _deletionPopupVisible = true;
+        _deletionBusy = true;
+        _deletionError = null;
+        _deletionPreview = null;
+        try
+        {
+            var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var accessToken = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                _deletionError = "Your session has expired. Sign in again before requesting deletion.";
+                return;
+            }
+            _deletionPreview = await TgsApi.GetSampleSurveyDeletionPreview(SurveyId, accessToken);
+            if (_deletionPreview is null)
+                _deletionError = TgsApi.ErrorMessage ?? "The deletion safety check could not be completed.";
+        }
+        finally { _deletionBusy = false; }
+    }
+
+    private async Task RequestDeletionAsync()
+    {
+        if (_deletionPreview?.CanDelete != true || _deletionBusy) return;
+        _deletionBusy = true;
+        _deletionError = null;
+        try
+        {
+            var (request, error) = await Deletions.RequestAsync(SurveyId);
+            if (request is null)
+            {
+                _deletionError = error ?? "The deletion request could not be submitted.";
+                return;
+            }
+            _pendingDeletion = request;
+            _deletionPopupVisible = false;
+            _success = true;
+            _message = "Deletion is awaiting approval from another admin, agriculture manager or accountant.";
+        }
+        finally { _deletionBusy = false; }
+    }
+
+    private void CloseDeletionPopup()
+    {
+        if (_deletionBusy) return;
+        _deletionPopupVisible = false;
+        _deletionPreview = null;
+        _deletionError = null;
     }
 
     private async Task SaveAsync() => await SaveAsync(showSuccess: true);
@@ -326,9 +702,129 @@
             _editor = updated;
             var lane = category == SampleSurveyCategory.Metagen ? updated.Metagen : updated.Nutrition;
             _success = true;
-            _message = $"{category} moved to {lane?.WorkflowName.ToLowerInvariant() ?? "the next stage"}.";
+            _message = $"{SampleSurveyCategoryNames.DisplayName(category)} moved to {lane?.WorkflowName.ToLowerInvariant() ?? "the next stage"}.";
         }
         finally { _busy = false; }
+    }
+
+    private void OpenItemEditor(SampleSurveyItem item)
+    {
+        if (_editor is null || item.LabId == 6) return;
+
+        var crop = _editor.Crops.FirstOrDefault(candidate => candidate.CropTypeId == item.CropTypeId);
+        var expectedBlockType = crop is not null && (crop.CropTypeId == 1 || crop.ParentCropTypeId == 1)
+            ? "banana"
+            : "mcs";
+        var block = _editor.Blocks.FirstOrDefault(candidate =>
+                        candidate.BlockId == item.BlockId &&
+                        string.Equals(candidate.BlockType, expectedBlockType, StringComparison.OrdinalIgnoreCase))
+                    ?? _editor.Blocks.FirstOrDefault(candidate => candidate.BlockId == item.BlockId);
+
+        _editingItem = item;
+        _itemEdit = new SampleSurveyItemEditorUpdateRequest
+        {
+            BlockId = block?.BlockId ?? 0,
+            BlockType = block?.BlockType,
+            BlockName = block is null ? item.BlockName : null,
+            CropTypeId = item.CropTypeId,
+            LabId = item.LabId,
+            TestTypeId = item.TestTypeId,
+            IsBillable = item.IsBillable,
+            Comments = item.Comments,
+            LabReference = item.LabRefNo,
+            ExpectedModificationDate = item.ModificationDate
+        };
+        _useTypedBlockName = block is null;
+        _itemBlockKey = block is null ? null : $"{block.BlockType?.ToLowerInvariant()}:{block.BlockId}";
+        _itemError = null;
+        _itemEditorVisible = true;
+    }
+
+    private void ItemLaboratoryChanged(int labId)
+    {
+        if (_itemEdit is null) return;
+        _itemEdit.LabId = labId;
+        if (_editor?.LabTestTypes.Any(test => test.LabId == labId && test.LabTestTypeId == _itemEdit.TestTypeId) != true)
+        {
+            _itemEdit.TestTypeId = _editor?.LabTestTypes
+                .Where(test => test.LabId == labId)
+                .OrderBy(test => test.TestName)
+                .Select(test => test.LabTestTypeId)
+                .FirstOrDefault() ?? 0;
+        }
+    }
+
+    private void CloseItemEditor()
+    {
+        if (_itemBusy) return;
+        _itemEditorVisible = false;
+        _editingItem = null;
+        _itemEdit = null;
+        _itemBlockKey = null;
+        _itemError = null;
+    }
+
+    private async Task SaveItemAsync()
+    {
+        if (_editor is null || _editingItem is null || _itemEdit is null || !CanSaveItem) return;
+
+        if (_useTypedBlockName)
+        {
+            _itemEdit.BlockId = 0;
+            _itemEdit.BlockType = null;
+            _itemEdit.BlockName = _itemEdit.BlockName?.Trim();
+        }
+        else
+        {
+            var keyParts = _itemBlockKey?.Split(':', 2);
+            if (keyParts is null || keyParts.Length != 2 || !int.TryParse(keyParts[1], out var blockId))
+            {
+                _itemError = "Select a valid property block.";
+                return;
+            }
+            _itemEdit.BlockId = blockId;
+            _itemEdit.BlockType = keyParts[0];
+            _itemEdit.BlockName = null;
+        }
+
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var accessToken = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            _itemError = "Your session has expired. Sign in again before saving the sample.";
+            return;
+        }
+
+        _itemEdit.ModifiedBy = authenticationState.User.Identity?.Name ?? "MetaGrow";
+        _itemBusy = true;
+        _itemError = null;
+        try
+        {
+            var itemId = _editingItem.ItemId;
+            var updated = await TgsApi.UpdateSampleSurveyItem(SurveyId, itemId, _itemEdit, accessToken);
+            if (updated is null)
+            {
+                _itemError = TgsApi.ErrorMessage ?? "The collected sample could not be saved.";
+                return;
+            }
+
+            _editor.Samples = updated.Samples;
+            _editor.Metagen = updated.Metagen;
+            _editor.Nutrition = updated.Nutrition;
+            _editor.Blocks = updated.Blocks;
+            _editor.Crops = updated.Crops;
+            _editor.Laboratories = updated.Laboratories;
+            _editor.LabTestTypes = updated.LabTestTypes;
+            _editor.ModificationDate = updated.ModificationDate;
+            _editor.ModifiedBy = updated.ModifiedBy;
+            _success = true;
+            _message = $"Collected sample {itemId} saved.";
+            _itemEditorVisible = false;
+            _editingItem = null;
+            _itemEdit = null;
+            _itemBlockKey = null;
+        }
+        finally { _itemBusy = false; }
     }
 
     private bool ValidateEditor()
@@ -355,4 +851,15 @@
     private void BackToSurveys() => Navigation.NavigateTo("/surveys/samples");
     private void ViewLabData() => Navigation.NavigateTo($"/surveys/samples/{SurveyId}/lab-results");
     private void ImportResults() => Navigation.NavigateTo($"/surveys/samples/{SurveyId}/import");
+    private static int ResultTypeOrder(string resultType) => resultType switch
+    {
+        "Soil" => 0,
+        "Tissue" => 1,
+        "Quick Soil" => 2,
+        "Sap" => 3,
+        _ => 4
+    };
+
+    private sealed record ImportedResultSummary(string ResultType, int Count);
+    private sealed record SampleBlockChoice(string Key, string Label);
 }

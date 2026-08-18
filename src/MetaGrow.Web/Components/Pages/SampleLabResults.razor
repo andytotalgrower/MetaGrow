@@ -4,8 +4,10 @@
 @using ApiModels.MetaGrow
 @using MetaGrow.Web.Services
 @using Metagen.Shared.Services
+@using System.Text.Json
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist + "," + MetaGrowRoles.Accountant)]
 @inject ITgsApiService TgsApi
+@inject IJSRuntime JS
 
 <PageTitle>Lab results | MetaGrow</PageTitle>
 
@@ -25,24 +27,39 @@
         <div class="survey-context linked-property-context"><div><span>Linked farm data</span><strong>@(RequestedProperty ?? $"Farm {RequestedPropertyId}")</strong></div><span>Farm @RequestedPropertyId</span></div>
     }
 
-    <div class="result-type-tabs" role="tablist" aria-label="Lab result type">
-        @foreach (var type in UnifiedLabResultPresentation.ResultTypes)
+    @if (DisplayedResultTypes.Count > 0)
+    {
+        <div class="result-type-tabs" role="tablist" aria-label="Lab result type">
+        @foreach (var type in DisplayedResultTypes)
         {
             <button type="button" role="tab" aria-selected="@(type == _selectedType)" class="@(type == _selectedType ? "active" : null)" @onclick="@(() => SelectTypeAsync(type))">@UnifiedLabResultPresentation.TypeLabel(type)</button>
         }
-    </div>
+        </div>
+    }
 
-    <section class="filter-panel" aria-labelledby="lab-search-heading">
-        <div class="filter-heading"><div><h2 id="lab-search-heading">Find @SelectedTypeLabel results</h2><p>Filter returned laboratory data by date, farm, crop or reference.</p></div><div class="filter-actions"><DxButton Text="Clear" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearFiltersAsync" Enabled="@(!_loading)" /><DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="LoadResultsAsync" Enabled="@(!_loading)" /></div></div>
+    @if (!SurveyId.HasValue)
+    {
+        <section class="filter-panel search-panel" aria-labelledby="lab-search-heading">
+            <div class="filter-heading">
+                <div><h2 id="lab-search-heading">Search</h2><p>Load @SelectedTypeLabel results for a received-date range. Date changes take effect when you press Search.</p></div>
+                <div class="filter-actions"><DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="SearchResultsAsync" Enabled="@(!_loading)" /></div>
+            </div>
+            <div class="search-grid">
+                <div class="filter-field"><label for="lab-start-date">Received from</label><DxDateEdit Id="lab-start-date" @bind-Date="_startDate" DisplayFormat="dd/MM/yyyy" /></div>
+                <div class="filter-field"><label for="lab-end-date">Received to</label><DxDateEdit Id="lab-end-date" @bind-Date="_endDate" DisplayFormat="dd/MM/yyyy" /></div>
+            </div>
+        </section>
+    }
+
+    <section class="filter-panel live-filter-panel" aria-labelledby="lab-filter-heading">
+        <div class="filter-heading">
+            <div><h2 id="lab-filter-heading">Filter results</h2><p>Narrow the loaded @SelectedTypeLabel results instantly without running another database search.</p></div>
+            <div class="filter-actions"><DxButton Text="Clear filters" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearResultFiltersAsync" Enabled="@(!_loading)" /></div>
+        </div>
         <div class="filter-grid">
-            @if (!SurveyId.HasValue)
-            {
-                <div class="filter-field"><label for="lab-start-date">From</label><DxDateEdit Id="lab-start-date" @bind-Date="_startDate" DisplayFormat="dd/MM/yyyy" /></div>
-                <div class="filter-field"><label for="lab-end-date">To</label><DxDateEdit Id="lab-end-date" @bind-Date="_endDate" DisplayFormat="dd/MM/yyyy" /></div>
-            }
-            <div class="filter-field"><label for="lab-property">Property</label><DxTextBox Id="lab-property" @bind-Text="_propertySearch" Enabled="@(!RequestedPropertyId.HasValue)" NullText="Type a property" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
-            <div class="filter-field"><label for="lab-crop">Crop</label><DxTextBox Id="lab-crop" @bind-Text="_cropSearch" NullText="Type a crop" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
-            <div class="filter-field"><label for="lab-reference">Order, sample or field reference</label><DxTextBox Id="lab-reference" @bind-Text="_referenceSearch" NullText="Type a reference" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
+            <div class="filter-field"><label for="lab-property">Property</label><DxTextBox Id="lab-property" @bind-Text="_propertySearch" @bind-Text:after="SaveFiltersAsync" Enabled="@(!RequestedPropertyId.HasValue)" NullText="Type a property" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
+            <div class="filter-field"><label for="lab-crop">Crop</label><DxTextBox Id="lab-crop" @bind-Text="_cropSearch" @bind-Text:after="SaveFiltersAsync" NullText="Type a crop" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
+            <div class="filter-field"><label for="lab-reference">Order, sample or field reference</label><DxTextBox Id="lab-reference" @bind-Text="_referenceSearch" @bind-Text:after="SaveFiltersAsync" NullText="Type a reference" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
         </div>
     </section>
 
@@ -85,6 +102,7 @@
 </div>
 
 @code {
+    private const string FilterCookieName = "metagrow.sample-lab-results.filters";
     [Parameter] public int? SurveyId { get; set; }
     [SupplyParameterFromQuery(Name = "type")] public string? RequestedType { get; set; }
     [SupplyParameterFromQuery(Name = "propertyId")] public int? RequestedPropertyId { get; set; }
@@ -92,16 +110,27 @@
 
     private DateTime _startDate = DateTime.Today.AddMonths(-3);
     private DateTime _endDate = DateTime.Today;
+    private DateTime _appliedStartDate = DateTime.Today.AddMonths(-3);
+    private DateTime _appliedEndDate = DateTime.Today;
     private string _selectedType = UnifiedLabResultPresentation.Soil;
     private string? _propertySearch;
     private string? _cropSearch;
     private string? _referenceSearch;
     private bool _loading = true;
     private bool _parametersApplied;
+    private bool _restoreCookieOnFirstRender;
+    private bool _surveyResultTypesLoaded;
     private string? _errorMessage;
     private List<UnifiedLabResultRow> _rows = [];
+    private readonly Dictionary<string, List<UnifiedLabResultRow>> _surveyResultsByType = [];
 
+    private bool CanUseFilterCookie => !SurveyId.HasValue && !RequestedPropertyId.HasValue && string.IsNullOrWhiteSpace(RequestedProperty);
     private string SelectedTypeLabel => UnifiedLabResultPresentation.TypeLabel(_selectedType);
+    private IReadOnlyList<string> DisplayedResultTypes => SurveyId.HasValue
+        ? UnifiedLabResultPresentation.ResultTypes
+            .Where(type => _surveyResultsByType.TryGetValue(type, out var rows) && rows.Count > 0)
+            .ToList()
+        : UnifiedLabResultPresentation.ResultTypes;
     private IReadOnlyList<UnifiedLabResultRow> FilteredRows => _rows.Where(row => Contains(row.PropertyName, _propertySearch)).Where(row => Contains(row.CropName, _cropSearch)).Where(row => string.IsNullOrWhiteSpace(_referenceSearch) || Contains(row.Reference, _referenceSearch) || Contains(row.OrderNumber, _referenceSearch)).OrderByDescending(row => row.DateReceived ?? row.SurveyDate).ThenBy(row => row.PropertyName).ToList();
 
     protected override async Task OnParametersSetAsync()
@@ -110,20 +139,57 @@
         _parametersApplied = true;
         _selectedType = UnifiedLabResultPresentation.NormalizeType(RequestedType);
         _propertySearch = RequestedProperty;
-        if (RequestedPropertyId.HasValue) { _startDate = new DateTime(1990, 1, 1); _endDate = DateTime.Today; }
+        if (RequestedPropertyId.HasValue)
+        {
+            _startDate = _appliedStartDate = new DateTime(1990, 1, 1);
+            _endDate = _appliedEndDate = DateTime.Today;
+        }
+
+        if (CanUseFilterCookie)
+        {
+            _restoreCookieOnFirstRender = true;
+            return;
+        }
+
         await LoadResultsAsync();
     }
 
-    private async Task SelectTypeAsync(string type) { _selectedType = UnifiedLabResultPresentation.NormalizeType(type); await LoadResultsAsync(); }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !_restoreCookieOnFirstRender) return;
+
+        _restoreCookieOnFirstRender = false;
+        await RestoreFiltersAsync();
+        await LoadResultsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SelectTypeAsync(string type)
+    {
+        _selectedType = UnifiedLabResultPresentation.NormalizeType(type);
+        await SaveFiltersAsync();
+        await LoadResultsAsync();
+    }
 
     private async Task LoadResultsAsync()
     {
-        if (!SurveyId.HasValue && _endDate.Date < _startDate.Date) { _errorMessage = "The end date must be on or after the start date."; return; }
+        if (!SurveyId.HasValue && _appliedEndDate.Date < _appliedStartDate.Date) { _errorMessage = "The end date must be on or after the start date."; return; }
         _loading = true; _errorMessage = null;
         try
         {
-            DateTime? startDate = SurveyId.HasValue ? null : _startDate;
-            DateTime? endDate = SurveyId.HasValue ? null : _endDate;
+            if (SurveyId.HasValue)
+            {
+                await EnsureSurveyResultTypesLoadedAsync();
+                var availableTypes = DisplayedResultTypes;
+                if (availableTypes.Count > 0 && !availableTypes.Contains(_selectedType))
+                    _selectedType = availableTypes[0];
+
+                _rows = _surveyResultsByType.GetValueOrDefault(_selectedType) ?? [];
+                return;
+            }
+
+            DateTime? startDate = SurveyId.HasValue ? null : _appliedStartDate;
+            DateTime? endDate = SurveyId.HasValue ? null : _appliedEndDate;
             IReadOnlyList<UnifiedLabResultRow> results;
             switch (_selectedType)
             {
@@ -147,9 +213,102 @@
         finally { _loading = false; }
     }
 
-    private async Task ClearFiltersAsync()
+    private async Task EnsureSurveyResultTypesLoadedAsync()
     {
-        RequestedPropertyId = null; RequestedProperty = null; _startDate = DateTime.Today.AddMonths(-3); _endDate = DateTime.Today; _propertySearch = _cropSearch = _referenceSearch = null; await LoadResultsAsync();
+        if (_surveyResultTypesLoaded || !SurveyId.HasValue) return;
+
+        var soilTask = TgsApi.GetUnifiedLabSoil(null, null, SurveyId);
+        var tissueTask = TgsApi.GetUnifiedLabTissue(null, null, SurveyId);
+        var quickSoilTask = TgsApi.GetUnifiedLabQuickSoil(null, null, SurveyId);
+        var sapTask = TgsApi.GetUnifiedLabSap(null, null, SurveyId);
+
+        await Task.WhenAll((Task)soilTask, tissueTask, quickSoilTask, sapTask);
+
+        _surveyResultsByType[UnifiedLabResultPresentation.Soil] = UnifiedLabResultPresentation
+            .FromSoil(await soilTask ?? []).ToList();
+        _surveyResultsByType[UnifiedLabResultPresentation.Tissue] = UnifiedLabResultPresentation
+            .FromTissue(await tissueTask ?? []).ToList();
+        _surveyResultsByType[UnifiedLabResultPresentation.QuickSoil] = UnifiedLabResultPresentation
+            .FromQuickSoil(await quickSoilTask ?? []).ToList();
+        _surveyResultsByType[UnifiedLabResultPresentation.Sap] = UnifiedLabResultPresentation
+            .FromSap(await sapTask ?? []).ToList();
+        _surveyResultTypesLoaded = true;
+    }
+
+    private async Task SearchResultsAsync()
+    {
+        if (_endDate.Date < _startDate.Date)
+        {
+            _errorMessage = "The end date must be on or after the start date.";
+            return;
+        }
+
+        _appliedStartDate = _startDate.Date;
+        _appliedEndDate = _endDate.Date;
+        await SaveFiltersAsync();
+        await LoadResultsAsync();
+    }
+
+    private async Task ClearResultFiltersAsync()
+    {
+        _propertySearch = RequestedPropertyId.HasValue ? RequestedProperty : null;
+        _cropSearch = null;
+        _referenceSearch = null;
+        await SaveFiltersAsync();
+    }
+
+    private async Task RestoreFiltersAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("metaGrowFilterPreferences.get", FilterCookieName);
+            if (string.IsNullOrWhiteSpace(json)) return;
+
+            var filters = JsonSerializer.Deserialize<LabResultFilterPreferences>(json);
+            if (filters?.HasValidDateRange == true) ApplyFilters(filters);
+        }
+        catch (JsonException)
+        {
+            // Ignore an obsolete or malformed preference cookie and retain the defaults.
+        }
+    }
+
+    private async Task SaveFiltersAsync()
+    {
+        if (!CanUseFilterCookie) return;
+
+        var filters = new LabResultFilterPreferences(
+            _appliedStartDate.Date,
+            _appliedEndDate.Date,
+            _selectedType,
+            _propertySearch,
+            _cropSearch,
+            _referenceSearch);
+        await JS.InvokeVoidAsync("metaGrowFilterPreferences.set", FilterCookieName, JsonSerializer.Serialize(filters));
+    }
+
+    private void ApplyFilters(LabResultFilterPreferences filters)
+    {
+        _startDate = filters.StartDate.Date;
+        _endDate = filters.EndDate.Date;
+        _appliedStartDate = _startDate;
+        _appliedEndDate = _endDate;
+        if (string.IsNullOrWhiteSpace(RequestedType))
+            _selectedType = UnifiedLabResultPresentation.NormalizeType(filters.SelectedType);
+        _propertySearch = filters.PropertySearch;
+        _cropSearch = filters.CropSearch;
+        _referenceSearch = filters.ReferenceSearch;
+    }
+
+    private sealed record LabResultFilterPreferences(
+        DateTime StartDate,
+        DateTime EndDate,
+        string SelectedType,
+        string? PropertySearch,
+        string? CropSearch,
+        string? ReferenceSearch)
+    {
+        public bool HasValidDateRange => StartDate != default && EndDate != default && EndDate.Date >= StartDate.Date;
     }
 
     private static bool Contains(string source, string? value) => string.IsNullOrWhiteSpace(value) || source.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase);

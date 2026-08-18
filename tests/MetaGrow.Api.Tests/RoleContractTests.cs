@@ -71,6 +71,25 @@ public sealed class RoleContractTests
             [MetaGrowRoles.Admin, MetaGrowRoles.AgricultureManager, MetaGrowRoles.Agronomist]);
     }
 
+    [Theory]
+    [InlineData(nameof(SampleSurveyDeletionsController.GetPending))]
+    [InlineData(nameof(SampleSurveyDeletionsController.Create))]
+    public void All_sample_workflow_roles_can_view_or_request_deletion(string methodName)
+    {
+        AssertRoles<SampleSurveyDeletionsController>(methodName,
+            [MetaGrowRoles.Admin, MetaGrowRoles.AgricultureManager, MetaGrowRoles.Agronomist, MetaGrowRoles.Accountant]);
+    }
+
+    [Theory]
+    [InlineData(nameof(SampleSurveyDeletionsController.Approve))]
+    [InlineData(nameof(SampleSurveyDeletionsController.Reject))]
+    [InlineData(nameof(SampleSurveyDeletionsController.GetExecutionGrant))]
+    public void Only_sample_deletion_reviewers_can_review_or_receive_execution_grants(string methodName)
+    {
+        AssertRoles<SampleSurveyDeletionsController>(methodName,
+            [MetaGrowRoles.Admin, MetaGrowRoles.AgricultureManager, MetaGrowRoles.Accountant]);
+    }
+
     private static void AssertRoles(string methodName, string[] expected)
     {
         var method = typeof(PropertyDeletionsController).GetMethod(methodName)!;

@@ -4,14 +4,23 @@
 @using Metagen.Shared.Services
 @using MetaGrow.Shared
 @using MetaGrow.Web.Services
+@using System.Text.Json
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist + "," + MetaGrowRoles.Accountant)]
 @inject ITgsApiService TgsApi
 @inject IStringSimilarityService Similarity
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ApiTokenService ApiTokens
-@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject IToastNotificationService ToastService
 
 <PageTitle>Historical soil data | MetaGrow</PageTitle>
+
+<DxToastProvider Name="HistoricalSoilMessages" MaxToastCount="4"
+                 AnimationType="ToastAnimationType.Slide"
+                 HorizontalAlignment="HorizontalAlignment.Right"
+                 StickToViewport="true"
+                 DisplayTime="TimeSpan.FromSeconds(5)"
+                 Width="400px" />
 
 <div class="historical-soil-page">
     <div class="title">
@@ -25,16 +34,11 @@
         <span class="disabled">Import activity</span>
     </nav>
 
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="workflow-message @(_messageIsError ? "error" : "success")" role="status">@_message</div>
-    }
-
-    <section class="filter-panel" aria-labelledby="historical-search-heading">
+    <section class="filter-panel search-panel" aria-labelledby="historical-search-heading">
         <div class="filter-heading">
             <div>
-                <h2 id="historical-search-heading">Find unlinked results</h2>
-                <p>Rows are grouped by laboratory, received date and the customer name supplied by the lab.</p>
+                <h2 id="historical-search-heading">Search</h2>
+                <p>Load unlinked batches for a received-date range. Date changes take effect when you press Search.</p>
             </div>
             <div class="filter-actions">
                 @if (_canBulkGenerate)
@@ -42,11 +46,10 @@
                     <DxButton Text="Generate all ready" RenderStyle="ButtonRenderStyle.Secondary"
                               Click="OpenBulkGenerationAsync" Enabled="@(!_loading && !_busy)" />
                 }
-                <DxButton Text="Clear" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearFiltersAsync" Enabled="@(!_loading && !_busy)" />
-                <DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="LoadGroupsAsync" Enabled="@(!_loading && !_busy)" />
+                <DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="SearchGroupsAsync" Enabled="@(!_loading && !_busy)" />
             </div>
         </div>
-        <div class="filter-grid">
+        <div class="search-grid">
             <div class="filter-field">
                 <label for="historical-start-date">Received from</label>
                 <DxDateEdit Id="historical-start-date" @bind-Date="_startDate" DisplayFormat="dd/MM/yyyy" Enabled="@(!_allDates)" />
@@ -59,28 +62,42 @@
                 <label>Date range</label>
                 <DxCheckBox @bind-Checked="_allDates">Search all dates</DxCheckBox>
             </div>
+        </div>
+    </section>
+
+    <section class="filter-panel live-filter-panel" aria-labelledby="historical-filter-heading">
+        <div class="filter-heading">
+            <div>
+                <h2 id="historical-filter-heading">Filter results</h2>
+                <p>Narrow the loaded batches instantly. These fields do not run another database search.</p>
+            </div>
+            <div class="filter-actions">
+                <DxButton Text="Clear filters" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearResultFiltersAsync" Enabled="@(!_busy)" />
+            </div>
+        </div>
+        <div class="filter-grid">
             <div class="filter-field">
                 <label for="historical-customer">Lab customer or property</label>
-                <DxTextBox Id="historical-customer" @bind-Text="_customerSearch" NullText="Type a farm name"
+                <DxTextBox Id="historical-customer" @bind-Text="_customerSearch" @bind-Text:after="SaveFiltersAsync" NullText="Type a farm name"
                            BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250"
                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
             </div>
             <div class="filter-field">
                 <label for="historical-reference">Order, field or crop</label>
-                <DxTextBox Id="historical-reference" @bind-Text="_referenceSearch" NullText="Type an order or field"
+                <DxTextBox Id="historical-reference" @bind-Text="_referenceSearch" @bind-Text:after="SaveFiltersAsync" NullText="Type an order or field"
                            BindValueMode="BindValueMode.OnDelayedInput" InputDelay="250"
                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
             </div>
             <div class="filter-field">
                 <label for="historical-lab">Laboratory</label>
-                <DxComboBox Id="historical-lab" Data="@LabOptions" @bind-Value="_labId"
+                <DxComboBox Id="historical-lab" Data="@LabOptions" @bind-Value="_labId" @bind-Value:after="SaveFiltersAsync"
                             TextFieldName="@nameof(FilterOption.Name)" ValueFieldName="@nameof(FilterOption.Id)"
                             NullText="All laboratories" AllowUserInput="false"
                             ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
             </div>
             <div class="filter-field">
                 <label for="historical-mapping">Workflow state</label>
-                <DxComboBox Id="historical-mapping" Data="@MappingOptions" @bind-Value="_mappingFilter"
+                <DxComboBox Id="historical-mapping" Data="@MappingOptions" @bind-Value="_mappingFilter" @bind-Value:after="SaveFiltersAsync"
                             TextFieldName="@nameof(MappingOption.Name)" ValueFieldName="@nameof(MappingOption.Value)"
                             AllowUserInput="false" />
             </div>
@@ -103,7 +120,7 @@
     {
         <div class="result-heading">
             <div><h2>Unlinked batches</h2><span>@FilteredGroups.Count batch@(FilteredGroups.Count == 1 ? string.Empty : "es"), @FilteredGroups.Sum(group => group.ResultCount) results</span></div>
-            <span class="result-help">Expand a batch to map its raw field names.</span>
+            <span class="result-help">Expand a batch to map fields or correct its crop.</span>
         </div>
         <div class="desktop-results">
             <DxGrid @ref="_historicalGrid" Data="@FilteredGroups" KeyFieldName="@nameof(HistoricalSoilResultGroupDto.GroupKey)"
@@ -279,7 +296,9 @@
         <div class="dialog-footer">
             <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseGeneration" Enabled="@(!_generationBusy)" />
             @if (_generationBusy) { <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Generating survey…</span></div> }
-            <DxButton Text="Generate and open" RenderStyle="ButtonRenderStyle.Primary" Click="GenerateSurveyAsync" Enabled="@CanGenerateSurvey" />
+            <span onclick="window.metaGrowNewTabNavigation.reserve('historical-sample-survey')">
+                <DxButton Text="Generate and open" RenderStyle="ButtonRenderStyle.Primary" Click="GenerateSurveyAsync" Enabled="@CanGenerateSurvey" />
+            </span>
         </div>
     </FooterContentTemplate>
 </DxPopup>
@@ -308,7 +327,7 @@
 
                 @if (!_bulkHasStarted)
                 {
-                    <p class="bulk-explanation">MetaGrow will create one <strong>Complete</strong> Sample survey for each ready farm and survey date, using the same selected agronomist throughout. Existing surveys and blocked rows are never changed.</p>
+                    <p class="bulk-explanation">MetaGrow will create one <strong>Complete</strong> Sample survey for each selected ready farm and survey date, using the same agronomist throughout. Existing surveys and blocked rows are never changed.</p>
                 }
 
                 <div class="bulk-controls">
@@ -359,10 +378,28 @@
                 }
                 else
                 {
+                    <div class="bulk-selection-toolbar">
+                        <div>
+                            <strong>@BulkSelectedCount.ToString("N0") of @BulkReadyCount.ToString("N0") ready surveys selected</strong>
+                            <span>@BulkSelectedResultCount.ToString("N0") Soil results</span>
+                        </div>
+                        <DxButton Text="@BulkSelectionToggleText" RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="ToggleBulkReadySelection" Enabled="@(_bulkQueue.Count > 0)" />
+                    </div>
                     <div class="bulk-preview-grid">
                         <DxGrid Data="@_bulkPreview" PageSize="10" ShowAllRows="false" TextWrapEnabled="false"
                                 HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn">
                             <Columns>
+                                <DxGridDataColumn Caption="Select" Width="64px" AllowSort="false">
+                                    <CellDisplayTemplate Context="cell">
+                                        @{ var item = (HistoricalSoilBulkPreviewItemDto)cell.DataItem; }
+                                        @if (item.IsEligible && item.SurveyDate.HasValue)
+                                        {
+                                            <DxCheckBox Checked="@IsBulkSelected(item)"
+                                                        CheckedChanged="@((bool selected) => SetBulkSelection(item, selected))" />
+                                        }
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
                                 <DxGridDataColumn FieldName="@nameof(HistoricalSoilBulkPreviewItemDto.SurveyDate)" Caption="Survey date" Width="112px" DisplayFormat="dd/MM/yyyy" />
                                 <DxGridDataColumn FieldName="@nameof(HistoricalSoilBulkPreviewItemDto.PropertyName)" Caption="Property" MinWidth="190" />
                                 <DxGridDataColumn FieldName="@nameof(HistoricalSoilBulkPreviewItemDto.LabNames)" Caption="Laboratory" MinWidth="185" />
@@ -412,9 +449,13 @@
 </DxPopup>
 
 @code {
+    private const string FilterCookieName = "metagrow.historical-soil.filters";
     private DateTime _startDate = DateTime.Today.AddMonths(-3);
     private DateTime _endDate = DateTime.Today;
-    private bool _allDates = true;
+    private bool _allDates;
+    private DateTime _appliedStartDate = DateTime.Today.AddMonths(-3);
+    private DateTime _appliedEndDate = DateTime.Today;
+    private bool _appliedAllDates;
     private string? _customerSearch;
     private string? _referenceSearch;
     private int? _labId;
@@ -422,12 +463,15 @@
     private bool _loading = true;
     private bool _busy;
     private string? _loadError;
-    private string? _message;
-    private bool _messageIsError;
+    private int _loadRequestVersion;
     private List<HistoricalSoilResultGroupDto> _groups = [];
     private List<ApiModels.Property> _properties = [];
     private List<Staff> _agronomists = [];
     private List<LabTestType> _labTestTypes = [];
+    private List<CropType> _crops = [];
+    private readonly Dictionary<string, int> _cropTypeSelections = [];
+    private string? _cropTypeBusyGroupKey;
+    private bool _canEditLabData;
     private IGrid? _historicalGrid;
     private HashSet<string> _expandedGroupKeys = [];
     private bool _restoreExpandedRows;
@@ -460,6 +504,7 @@
     private int _bulkAgronomistId;
     private List<HistoricalSoilBulkPreviewItemDto> _bulkPreview = [];
     private List<HistoricalSoilBulkPreviewItemDto> _bulkQueue = [];
+    private HashSet<string> _bulkSelectedKeys = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _bulkProcessedKeys = [];
     private List<BulkRunReceipt> _bulkRunResults = [];
     private HistoricalSoilBulkPreviewItemDto? _bulkCurrentItem;
@@ -474,6 +519,17 @@
     private sealed record LabTestOption(int Id, string TestName, string Label);
     private sealed record GenerationBlockSummary(int BlockId, string BlockType, string Name, string TypeLabel, int ResultCount);
     private sealed record BulkRunReceipt(HistoricalSoilBulkPreviewItemDto Item, HistoricalSoilBulkGenerationResultDto Result);
+    private sealed record HistoricalSoilFilterPreferences(
+        DateTime StartDate,
+        DateTime EndDate,
+        bool AllDates,
+        string? CustomerSearch,
+        string? ReferenceSearch,
+        int? LabId,
+        string MappingFilter)
+    {
+        public bool HasValidDateRange => StartDate != default && EndDate != default && EndDate.Date >= StartDate.Date;
+    }
     private sealed class MappingRow
     {
         public string ControlId { get; init; } = string.Empty;
@@ -524,12 +580,18 @@
         GenerationLabTestOptions.Any(option => option.Id == _generationLabTestTypeId);
     private int BulkReadyCount => _bulkPreview.Count(item => item.IsEligible);
     private int BulkReadyResultCount => _bulkPreview.Where(item => item.IsEligible).Sum(item => item.ResultCount);
+    private int BulkSelectedCount => _bulkQueue.Count(item => _bulkSelectedKeys.Contains(item.DestinationKey));
+    private int BulkSelectedResultCount => _bulkQueue.Where(item => _bulkSelectedKeys.Contains(item.DestinationKey)).Sum(item => item.ResultCount);
+    private bool AllBulkReadySelected => _bulkQueue.Count > 0 && BulkSelectedCount == _bulkQueue.Count;
+    private string BulkSelectionToggleText => AllBulkReadySelected ? "Clear selection" : "Select all ready";
     private int BulkExistingCount => _bulkPreview.Count(item =>
         string.Equals(item.StatusCode, "ExistingSurvey", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(item.StatusCode, "MultipleExistingSurveys", StringComparison.OrdinalIgnoreCase));
     private int BulkBlockedCount => _bulkPreview.Count - BulkReadyCount - BulkExistingCount;
-    private int BulkPendingCount => _bulkQueue.Count(item => !_bulkProcessedKeys.Contains(item.DestinationKey));
-    private int BulkCompletedCount => _bulkQueue.Count - BulkPendingCount;
+    private int BulkPendingCount => _bulkQueue.Count(item =>
+        _bulkSelectedKeys.Contains(item.DestinationKey) &&
+        !_bulkProcessedKeys.Contains(item.DestinationKey));
+    private int BulkCompletedCount => BulkSelectedCount - BulkPendingCount;
     private int BulkCreatedCount => _bulkRunResults.Count(receipt => string.Equals(receipt.Result.OutcomeCode, "Created", StringComparison.OrdinalIgnoreCase));
     private int BulkSkippedCount => _bulkRunResults.Count(receipt =>
         string.Equals(receipt.Result.OutcomeCode, "SkippedExisting", StringComparison.OrdinalIgnoreCase) ||
@@ -539,14 +601,14 @@
         !string.Equals(receipt.Result.OutcomeCode, "Created", StringComparison.OrdinalIgnoreCase) &&
         !string.Equals(receipt.Result.OutcomeCode, "SkippedExisting", StringComparison.OrdinalIgnoreCase) &&
         !string.Equals(receipt.Result.OutcomeCode, "MultipleExistingSurveys", StringComparison.OrdinalIgnoreCase));
-    private int BulkProgressPercent => _bulkQueue.Count == 0 ? 0 : (int)Math.Round(BulkCompletedCount * 100d / _bulkQueue.Count);
+    private int BulkProgressPercent => BulkSelectedCount == 0 ? 0 : (int)Math.Round(BulkCompletedCount * 100d / BulkSelectedCount);
     private string BulkRunHeading => _bulkRunning
         ? "Generating historical Sample surveys"
         : BulkPendingCount == 0
             ? "Generation run complete"
             : "Generation run paused";
     private string BulkRunDetail => _bulkRunning
-        ? $"{BulkCompletedCount:N0} of {_bulkQueue.Count:N0} destinations completed"
+        ? $"{BulkCompletedCount:N0} of {BulkSelectedCount:N0} selected destinations completed"
         : BulkPendingCount == 0
             ? $"{BulkCompletedCount:N0} destinations were checked"
             : $"{BulkPendingCount:N0} destinations remain and can be resumed safely";
@@ -560,24 +622,35 @@
         var userEmail = authState.User.Identity?.Name;
         _canBulkGenerate = authState.User.IsInRole(MetaGrowRoles.Admin) ||
             authState.User.IsInRole(MetaGrowRoles.AgricultureManager);
+        _canEditLabData = _canBulkGenerate || authState.User.IsInRole(MetaGrowRoles.Accountant);
         var propertiesTask = TgsApi.GetProperties();
         var agronomistsTask = TgsApi.GetActiveTgsStaff();
         var labTestTypesTask = TgsApi.GetLabTestTypes();
-        var groupsTask = LoadGroupsCoreAsync();
-        await Task.WhenAll(propertiesTask, agronomistsTask, labTestTypesTask, groupsTask);
+        var cropsTask = TgsApi.GetCrops();
+        await Task.WhenAll(propertiesTask, agronomistsTask, labTestTypesTask, cropsTask);
 
         _properties = (await propertiesTask ?? []).Where(property => property.IsActive).OrderBy(property => property.PropertyName).ToList();
         _agronomists = (await agronomistsTask ?? []).OrderBy(staff => staff.StaffName).ToList();
         _labTestTypes = (await labTestTypesTask ?? []).ToList();
+        _crops = (await cropsTask ?? [])
+            .Where(crop => !string.IsNullOrWhiteSpace(crop.CropTypeName))
+            .OrderBy(crop => crop.CropTypeName)
+            .ToList();
         _generationAgronomistId = _agronomists.FirstOrDefault(staff => !string.IsNullOrWhiteSpace(userEmail) && string.Equals(staff.Email, userEmail, StringComparison.OrdinalIgnoreCase))?.StaffId ?? 0;
         _bulkAgronomistId = _generationAgronomistId;
-        _loading = false;
     }
 
-    protected override Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            await RestoreFiltersAsync();
+            await LoadGroupsAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+
         if (!_restoreExpandedRows || _historicalGrid is null)
-            return Task.CompletedTask;
+            return;
 
         _restoreExpandedRows = false;
         for (var visibleIndex = 0; visibleIndex < _historicalGrid.GetVisibleRowCount(); visibleIndex++)
@@ -590,40 +663,103 @@
             }
         }
 
-        return Task.CompletedTask;
     }
 
     private async Task LoadGroupsAsync()
     {
         _loading = true;
-        await LoadGroupsCoreAsync();
-        _loading = false;
+        var isCurrentRequest = await LoadGroupsCoreAsync();
+        if (isCurrentRequest) _loading = false;
     }
 
-    private async Task LoadGroupsCoreAsync()
+    private async Task<bool> LoadGroupsCoreAsync()
     {
+        var requestVersion = ++_loadRequestVersion;
+        var allDates = _appliedAllDates;
+        var startDate = _appliedStartDate;
+        var endDate = _appliedEndDate;
         _loadError = null;
-        _message = null;
+        if (!allDates && endDate.Date < startDate.Date)
+        {
+            _loadError = "The end date must be on or after the start date.";
+            return requestVersion == _loadRequestVersion;
+        }
+
+        var groups = await TgsApi.GetUnlinkedSampleSoilResultGroups(allDates ? null : startDate, allDates ? null : endDate);
+        if (requestVersion != _loadRequestVersion) return false;
+
+        _groups = groups ?? [];
+        SyncCropTypeSelections();
+        if (groups is null) _loadError = TgsApi.ErrorMessage ?? "Historical Soil data could not be loaded.";
+        return true;
+    }
+
+    private async Task SearchGroupsAsync()
+    {
         if (!_allDates && _endDate.Date < _startDate.Date)
         {
             _loadError = "The end date must be on or after the start date.";
             return;
         }
 
-        var groups = await TgsApi.GetUnlinkedSampleSoilResultGroups(_allDates ? null : _startDate, _allDates ? null : _endDate);
-        _groups = groups ?? [];
-        if (groups is null) _loadError = TgsApi.ErrorMessage ?? "Historical Soil data could not be loaded.";
+        _appliedStartDate = _startDate.Date;
+        _appliedEndDate = _endDate.Date;
+        _appliedAllDates = _allDates;
+        await SaveFiltersAsync();
+        await LoadGroupsAsync();
     }
 
-    private async Task ClearFiltersAsync()
+    private async Task ClearResultFiltersAsync()
     {
-        _startDate = DateTime.Today.AddMonths(-3);
-        _endDate = DateTime.Today;
-        _allDates = true;
         _customerSearch = _referenceSearch = null;
         _labId = null;
         _mappingFilter = MappingAll;
-        await LoadGroupsAsync();
+        await SaveFiltersAsync();
+    }
+
+    private async Task RestoreFiltersAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("metaGrowFilterPreferences.get", FilterCookieName);
+            if (string.IsNullOrWhiteSpace(json)) return;
+
+            var filters = JsonSerializer.Deserialize<HistoricalSoilFilterPreferences>(json);
+            if (filters?.HasValidDateRange == true) ApplyFilters(filters);
+        }
+        catch (JsonException)
+        {
+            // Ignore an obsolete or malformed preference cookie and retain the defaults.
+        }
+    }
+
+    private async Task SaveFiltersAsync()
+    {
+        var filters = new HistoricalSoilFilterPreferences(
+            _appliedStartDate.Date,
+            _appliedEndDate.Date,
+            _appliedAllDates,
+            _customerSearch,
+            _referenceSearch,
+            _labId,
+            _mappingFilter);
+        await JS.InvokeVoidAsync("metaGrowFilterPreferences.set", FilterCookieName, JsonSerializer.Serialize(filters));
+    }
+
+    private void ApplyFilters(HistoricalSoilFilterPreferences filters)
+    {
+        _startDate = filters.StartDate.Date;
+        _endDate = filters.EndDate.Date;
+        _allDates = filters.AllDates;
+        _appliedStartDate = _startDate;
+        _appliedEndDate = _endDate;
+        _appliedAllDates = _allDates;
+        _customerSearch = filters.CustomerSearch;
+        _referenceSearch = filters.ReferenceSearch;
+        _labId = filters.LabId;
+        _mappingFilter = MappingOptions.Any(option => option.Value == filters.MappingFilter)
+            ? filters.MappingFilter
+            : MappingAll;
     }
 
     private RenderFragment BatchDetail(HistoricalSoilResultGroupDto group) => @<div class="result-detail">
@@ -639,6 +775,41 @@
                 }
             }
         </div>
+        @if (_canEditLabData)
+        {
+            <div class="batch-crop-editor">
+                <div class="batch-crop-source">
+                    <span>Current crop in lab data</span>
+                    <strong>@Display(group.RawCropNames)</strong>
+                </div>
+                <div class="filter-field batch-crop-field">
+                    <label>Actual crop</label>
+                    <DxComboBox Data="@_crops" Value="@GetCropTypeSelection(group)"
+                                ValueChanged="@((int value) => SetCropTypeSelection(group, value))"
+                                TextFieldName="@nameof(CropType.CropTypeName)" ValueFieldName="@nameof(CropType.CropTypeId)"
+                                NullText="Select the actual crop" AllowUserInput="false"
+                                SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                Enabled="@(!_busy && _crops.Count > 0)" />
+                </div>
+                <div class="batch-crop-action">
+                    <DxButton SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Secondary"
+                              Enabled="@(GetCropTypeSelection(group) > 0 && !_busy)"
+                              Click="@(() => ApplyCropTypeAsync(group))">
+                        <span class="batch-crop-button-content">
+                            @if (IsCropTypeBusy(group))
+                            {
+                                <DxWaitIndicator Visible="true" />
+                                <span>Updating @group.ResultCount result@(group.ResultCount == 1 ? string.Empty : "s")…</span>
+                            }
+                            else
+                            {
+                                <span>Apply to @group.ResultCount result@(group.ResultCount == 1 ? string.Empty : "s")</span>
+                            }
+                        </span>
+                    </DxButton>
+                </div>
+            </div>
+        }
         @if (group.HasMixedProperties) { <div class="batch-warning">This batch currently resolves to more than one property. It cannot be generated as one survey; review its mappings first.</div> }
         @if (!group.HasSingleEffectiveSurveyDate) { <div class="batch-warning">@EffectiveSurveyDateError(group)</div> }
         <div class="detail-table-wrap"><table><thead><tr><th>Order</th><th>Lab field</th><th>Raw crop</th><th>Property</th><th>Canonical block</th><th>Test</th><th>Status</th></tr></thead><tbody>
@@ -648,6 +819,73 @@
         }
         </tbody></table></div>
     </div>;
+
+    private void SyncCropTypeSelections()
+    {
+        var currentKeys = _groups.Select(group => group.GroupKey).ToHashSet(StringComparer.Ordinal);
+        foreach (var staleKey in _cropTypeSelections.Keys.Where(key => !currentKeys.Contains(key)).ToList())
+            _cropTypeSelections.Remove(staleKey);
+
+        foreach (var group in _groups)
+            _cropTypeSelections[group.GroupKey] = group.CropTypeId ?? 0;
+    }
+
+    private int GetCropTypeSelection(HistoricalSoilResultGroupDto group) =>
+        _cropTypeSelections.TryGetValue(group.GroupKey, out var cropTypeId) ? cropTypeId : group.CropTypeId ?? 0;
+
+    private void SetCropTypeSelection(HistoricalSoilResultGroupDto group, int cropTypeId) =>
+        _cropTypeSelections[group.GroupKey] = cropTypeId;
+
+    private bool IsCropTypeBusy(HistoricalSoilResultGroupDto group) =>
+        string.Equals(_cropTypeBusyGroupKey, group.GroupKey, StringComparison.Ordinal);
+
+    private async Task ApplyCropTypeAsync(HistoricalSoilResultGroupDto group)
+    {
+        var cropTypeId = GetCropTypeSelection(group);
+        var crop = _crops.FirstOrDefault(item => item.CropTypeId == cropTypeId);
+        if (crop is null)
+        {
+            ShowToast("Crop required", "Select a valid actual crop type.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var accessToken = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            ShowToast("Session expired", "Sign in again before changing historical Soil data.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        CaptureExpandedRows();
+        _expandedGroupKeys.Add(group.GroupKey);
+        _busy = true;
+        _cropTypeBusyGroupKey = group.GroupKey;
+        try
+        {
+            var result = await TgsApi.ApplyHistoricalSoilCropType(new HistoricalSoilCropTypeUpdateRequest
+            {
+                LabSoilIds = group.Results.Select(item => item.LabSoilId).ToList(),
+                CropTypeId = cropTypeId,
+                ExpectedRowCount = group.ResultCount
+            }, accessToken);
+
+            if (result is null)
+            {
+                ShowToast("Crop update failed", TgsApi.ErrorMessage ?? "The historical Soil crop type could not be changed.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            _restoreExpandedRows = true;
+            await LoadGroupsCoreAsync();
+            ShowToast("Crop updated", $"{result.UpdatedRows:N0} result{(result.UpdatedRows == 1 ? string.Empty : "s")} changed to {crop.CropTypeName}. The original value is retained in the workflow audit.", ToastRenderStyle.Success);
+        }
+        finally
+        {
+            _cropTypeBusyGroupKey = null;
+            _busy = false;
+        }
+    }
 
     private async Task OpenMappingAsync(HistoricalSoilResultGroupDto group)
     {
@@ -739,7 +977,7 @@
     private async Task SaveMappingsAsync()
     {
         if (_mappingGroup is null) return;
-        if (!_allDates)
+        if (!_appliedAllDates)
         {
             _dialogError = "Search all dates before applying reusable mappings so MetaGrow can verify every matching row count.";
             return;
@@ -779,7 +1017,7 @@
             _mappingVisible = false;
             _restoreExpandedRows = true;
             await LoadGroupsCoreAsync();
-            SetMessage($"{result.MappingCount} mapping{(result.MappingCount == 1 ? string.Empty : "s")} applied to {result.MatchedRows} matching result{(result.MatchedRows == 1 ? string.Empty : "s")}; {result.UpdatedRows} row{(result.UpdatedRows == 1 ? string.Empty : "s")} changed.");
+            ShowToast("Mappings applied", $"{result.MappingCount} mapping{(result.MappingCount == 1 ? string.Empty : "s")} applied to {result.MatchedRows} matching result{(result.MatchedRows == 1 ? string.Empty : "s")}; {result.UpdatedRows} row{(result.UpdatedRows == 1 ? string.Empty : "s")} changed.", ToastRenderStyle.Success);
         }
         finally { _mappingBusy = _busy = false; }
     }
@@ -875,7 +1113,11 @@
     {
         if (_generationGroup is null) return;
         var accessToken = await GetAccessTokenAsync();
-        if (accessToken is null) return;
+        if (accessToken is null)
+        {
+            await JS.InvokeVoidAsync("metaGrowNewTabNavigation.close", "historical-sample-survey");
+            return;
+        }
         _generationBusy = _busy = true;
         _dialogError = null;
         try
@@ -888,10 +1130,20 @@
                 SurveyDate = _generationDate,
                 LabTestTypeId = _generationLabTestTypeId
             }, accessToken);
-            if (result is null) { _dialogError = TgsApi.ErrorMessage ?? "The Sample survey could not be generated."; return; }
+            if (result is null)
+            {
+                _dialogError = TgsApi.ErrorMessage ?? "The Sample survey could not be generated.";
+                await JS.InvokeVoidAsync("metaGrowNewTabNavigation.close", "historical-sample-survey");
+                return;
+            }
 
             _generationVisible = false;
-            Navigation.NavigateTo($"/surveys/samples/{result.SurveyId}/edit");
+            await JS.InvokeVoidAsync(
+                "metaGrowNewTabNavigation.navigate",
+                "historical-sample-survey",
+                $"/surveys/samples/{result.SurveyId}/edit");
+            await LoadGroupsAsync();
+            ShowToast("Survey generated", $"Sample survey {result.SurveyId} was generated and opened in a new tab.", ToastRenderStyle.Success);
         }
         finally { _generationBusy = _busy = false; }
     }
@@ -910,6 +1162,7 @@
         _bulkError = null;
         _bulkPreview = [];
         _bulkQueue = [];
+        _bulkSelectedKeys.Clear();
         _bulkProcessedKeys.Clear();
         _bulkRunResults.Clear();
         _bulkCurrentItem = null;
@@ -952,7 +1205,9 @@
         _busy = true;
         try
         {
-            foreach (var item in _bulkQueue.Where(item => !_bulkProcessedKeys.Contains(item.DestinationKey)).ToList())
+            foreach (var item in _bulkQueue.Where(item =>
+                         _bulkSelectedKeys.Contains(item.DestinationKey) &&
+                         !_bulkProcessedKeys.Contains(item.DestinationKey)).ToList())
             {
                 if (_bulkStopRequested) break;
                 _bulkCurrentItem = item;
@@ -1001,7 +1256,10 @@
             {
                 _restoreExpandedRows = true;
                 await LoadGroupsCoreAsync();
-                SetMessage($"Bulk generation checked {BulkCompletedCount:N0} destination{(BulkCompletedCount == 1 ? string.Empty : "s")}: {BulkCreatedCount:N0} created, {BulkSkippedCount:N0} skipped safely and {BulkReviewCount:N0} requiring review.", BulkReviewCount > 0);
+                ShowToast(
+                    BulkReviewCount > 0 ? "Bulk generation needs review" : "Bulk generation complete",
+                    $"Checked {BulkCompletedCount:N0} destination{(BulkCompletedCount == 1 ? string.Empty : "s")}: {BulkCreatedCount:N0} created, {BulkSkippedCount:N0} skipped safely and {BulkReviewCount:N0} requiring review.",
+                    BulkReviewCount > 0 ? ToastRenderStyle.Warning : ToastRenderStyle.Success);
             }
         }
     }
@@ -1016,6 +1274,28 @@
     }
 
     private void RequestBulkStop() => _bulkStopRequested = true;
+    private bool IsBulkSelected(HistoricalSoilBulkPreviewItemDto item) =>
+        _bulkSelectedKeys.Contains(item.DestinationKey);
+
+    private void SetBulkSelection(HistoricalSoilBulkPreviewItemDto item, bool selected)
+    {
+        if (!item.IsEligible || !item.SurveyDate.HasValue) return;
+        if (selected) _bulkSelectedKeys.Add(item.DestinationKey);
+        else _bulkSelectedKeys.Remove(item.DestinationKey);
+    }
+
+    private void ToggleBulkReadySelection()
+    {
+        if (AllBulkReadySelected)
+        {
+            _bulkSelectedKeys.Clear();
+            return;
+        }
+
+        foreach (var item in _bulkQueue)
+            _bulkSelectedKeys.Add(item.DestinationKey);
+    }
+
     private void CloseBulkGeneration() { if (!_bulkRunning) _bulkVisible = false; }
 
     private static string BulkStatusLabel(string statusCode) => statusCode switch
@@ -1082,7 +1362,17 @@
 
     private void CloseMapping() { if (!_mappingBusy) _mappingVisible = false; }
     private void CloseGeneration() { if (!_generationBusy) _generationVisible = false; }
-    private void SetMessage(string message, bool error = false) { _message = message; _messageIsError = error; }
+    private void ShowToast(string title, string message, ToastRenderStyle renderStyle)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "HistoricalSoilMessages",
+            Title = title,
+            Text = message,
+            RenderStyle = renderStyle,
+            DisplayTime = TimeSpan.FromSeconds(5)
+        });
+    }
     private static bool Contains(string? source, string? value) => !string.IsNullOrWhiteSpace(source) && !string.IsNullOrWhiteSpace(value) && source.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase);
     private static List<HistoricalSoilResultItemDto> GetDistinctUnmappedResults(HistoricalSoilResultGroupDto group) => group.Results
         .Where(item => !item.IsMapped)

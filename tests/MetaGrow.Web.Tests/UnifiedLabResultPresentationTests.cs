@@ -45,4 +45,24 @@ public class UnifiedLabResultPresentationTests
         Assert.Equal("/surveys/banana/72/edit", row.SurveyUrl);
         Assert.Equal("Banana #72", row.SurveyLabel);
     }
+
+    [Fact]
+    public void SoilKeyResultsUseTheOperationalSummaryFields()
+    {
+        var row = Assert.Single(UnifiedLabResultPresentation.FromSoil(
+        [
+            new LabSoilDto
+            {
+                PhCaCl2 = 5.6,
+                CecMeq = 12.3,
+                No3nPpm = 8.4,
+                CalciumPpm = 1250,
+                MagnesiumPpm = 390
+            }
+        ]));
+
+        Assert.Equal(
+            "pH CaCl₂ 5.60 · CEC 12.30 · NO₃-N 8.40 · Ca 1,250.00 · Mg 390.00",
+            row.KeyResults);
+    }
 }

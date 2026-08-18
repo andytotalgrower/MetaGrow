@@ -2,7 +2,7 @@
 
 <span class="type-badges" aria-label="Sample categories">
     @if (Survey.HasMetagenSamples) { <span class="type-badge metagen">Metagen</span> }
-    @if (Survey.HasNutritionSamples) { <span class="type-badge nutrition">Nutrition</span> }
+    @if (Survey.HasNutritionSamples) { <span class="type-badge nutrition">Chemistry</span> }
 </span>
 
 @code { [Parameter, EditorRequired] public SampleSurveySummaryDto Survey { get; set; } = default!; }

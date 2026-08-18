@@ -122,6 +122,33 @@ public sealed class ApplicationDbContextTests
         }
     }
 
+    [Fact]
+    public async Task Only_one_open_sample_survey_deletion_request_is_allowed_per_survey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options;
+
+        await using (var setup = new ApplicationDbContext(options))
+        {
+            await setup.Database.EnsureCreatedAsync();
+            setup.SampleSurveyDeletionRequests.Add(SampleDeletionRequest(MetaGrowSampleSurveyDeletionStatus.Pending));
+            await setup.SaveChangesAsync();
+        }
+
+        await using (var duplicate = new ApplicationDbContext(options))
+        {
+            duplicate.SampleSurveyDeletionRequests.Add(SampleDeletionRequest(MetaGrowSampleSurveyDeletionStatus.Processing));
+            await Assert.ThrowsAsync<DbUpdateException>(() => duplicate.SaveChangesAsync());
+        }
+
+        await using (var historical = new ApplicationDbContext(options))
+        {
+            historical.SampleSurveyDeletionRequests.Add(SampleDeletionRequest(MetaGrowSampleSurveyDeletionStatus.Rejected));
+            await historical.SaveChangesAsync();
+        }
+    }
+
     private static PropertyDeletionRequest DeletionRequest(MetaGrowPropertyDeletionStatus status) => new()
     {
         Id = Guid.NewGuid(),
@@ -142,6 +169,20 @@ public sealed class ApplicationDbContextTests
         TargetPropertyName = "Surviving farm",
         PlanJson = "{}",
         PlanHash = new string('A', 64),
+        Status = status,
+        RequestedByUserId = "user",
+        RequestedByEmail = "user@example.com",
+        RequestedUtc = DateTime.UtcNow
+    };
+
+    private static SampleSurveyDeletionRequest SampleDeletionRequest(MetaGrowSampleSurveyDeletionStatus status) => new()
+    {
+        Id = Guid.NewGuid(),
+        SurveyId = 7187,
+        PropertyId = 123,
+        PropertyName = "Example farm",
+        SurveyDate = new DateTime(2025, 11, 13),
+        SampleCount = 4,
         Status = status,
         RequestedByUserId = "user",
         RequestedByEmail = "user@example.com",

@@ -1,0 +1,7 @@
+.material-badges { display: inline-flex; flex-wrap: wrap; gap: .3rem; }
+.material-badge { border-radius: 999px; display: inline-block; font-size: .72rem; font-weight: 700; padding: .2rem .55rem; white-space: nowrap; }
+.soil { background: #f3e5d0; color: #684315; }
+.tissue { background: #dff3e3; color: #225b2b; }
+.quick-soil { background: #dceff8; color: #00577f; }
+.sap { background: #eadff5; color: #5a2d82; }
+.other, .unclassified { background: var(--dxds-color-surface-neutral-subdued-rest); color: var(--dxds-color-content-neutral-subdued-rest); }

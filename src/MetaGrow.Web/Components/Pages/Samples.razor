@@ -10,6 +10,7 @@
 @inject IJSRuntime JS
 @inject ApiTokenService ApiTokens
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject SampleSurveyDeletionApiClient Deletions
 
 <PageTitle>Sample surveys | MetaGrow</PageTitle>
 
@@ -23,35 +24,100 @@
         <a class="active" href="/surveys/samples">Surveys</a>
         <a href="/surveys/samples/lab-results">Lab results</a>
         <a href="/surveys/samples/lab-results/historical">Historical data</a>
-        <span class="disabled" title="Available with the CSV importer phase">Import activity</span>
+        <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)">
+            <a href="/surveys/samples/generate-from-csv">Generate from CSV</a>
+        </AuthorizeView>
     </nav>
+
+    @if (_deletionRequests.Count > 0)
+    {
+        <section class="sample-deletion-queue" aria-labelledby="sample-deletion-heading">
+            <div class="deletion-queue-heading">
+                <div>
+                    <span>Deletion approval</span>
+                    <h2 id="sample-deletion-heading">@(_isDeletionReviewer ? "Requests awaiting review" : "Your pending requests")</h2>
+                </div>
+                <strong>@_deletionRequests.Count pending</strong>
+            </div>
+            <div class="deletion-queue-list">
+                @foreach (var request in _deletionRequests)
+                {
+                    <article class="deletion-queue-row">
+                        <div>
+                            <strong>@request.PropertyName · survey @request.SurveyId</strong>
+                            <span>@request.SurveyDate.ToString("dd MMM yyyy") · @request.SampleCount samples · requested by @request.RequestedByEmail</span>
+                            @if (!string.IsNullOrWhiteSpace(request.LastError))
+                            {
+                                <small>Last attempt: @request.LastError</small>
+                            }
+                        </div>
+                        <div class="deletion-queue-actions">
+                            <a href="@EditorUrl(request.SurveyId)">Open survey</a>
+                            @if (_isDeletionReviewer && !IsOwnRequest(request))
+                            {
+                                @if (_busyDeletionId == request.Id)
+                                {
+                                    <span class="queue-progress"><DxWaitIndicator Visible="true" /> Processing…</span>
+                                }
+                                else
+                                {
+                                    <DxButton Text="Reject" RenderStyle="ButtonRenderStyle.Secondary" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyDeletionId is null)" Click="@(() => RejectDeletionAsync(request))" />
+                                    <DxButton Text="Approve and delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyDeletionId is null)" Click="@(() => ApproveDeletionAsync(request))" />
+                                }
+                            }
+                            else
+                            {
+                                <span class="awaiting-review">Awaiting another reviewer</span>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        </section>
+    }
 
     @if (!string.IsNullOrWhiteSpace(_workflowMessage))
     {
         <div class="alert @(_workflowSuccess ? "alert-success" : "alert-danger")" role="alert">@_workflowMessage</div>
     }
 
-    <section class="filter-panel" aria-labelledby="sample-search-heading">
+    <section class="filter-panel search-panel" aria-labelledby="sample-search-heading">
         <div class="filter-heading">
             <div>
-                <h2 id="sample-search-heading">Find surveys</h2>
-                <p>Each survey appears once, including surveys containing both Metagen and nutrition samples.</p>
+                <h2 id="sample-search-heading">Search</h2>
+                <p>Load Sample surveys for a survey-date range. Date changes take effect when you press Search.</p>
             </div>
             <div class="filter-actions">
-                <DxButton Text="Clear" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearFiltersAsync" Enabled="@(!_loading)" />
                 <DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="SearchAsync" Enabled="@(!_loading)" />
             </div>
         </div>
 
-        <div class="filter-grid">
+        <div class="search-grid">
             <div class="filter-field">
                 <label for="sample-start-date">From</label>
-                <DxDateEdit Id="sample-start-date" @bind-Date="_startDate" @bind-Date:after="DateRangeChangedAsync" DisplayFormat="dd/MM/yyyy" />
+                <DxDateEdit Id="sample-start-date" @bind-Date="_startDate" DisplayFormat="dd/MM/yyyy" />
             </div>
             <div class="filter-field">
                 <label for="sample-end-date">To</label>
-                <DxDateEdit Id="sample-end-date" @bind-Date="_endDate" @bind-Date:after="DateRangeChangedAsync" DisplayFormat="dd/MM/yyyy" />
+                <DxDateEdit Id="sample-end-date" @bind-Date="_endDate" DisplayFormat="dd/MM/yyyy" />
             </div>
+        </div>
+    </section>
+
+    <section class="filter-panel live-filter-panel" aria-labelledby="sample-filter-heading">
+        <div class="filter-heading">
+            <div>
+                <h2 id="sample-filter-heading">Filter results</h2>
+                <p>Narrow the loaded surveys instantly without running another database search.</p>
+            </div>
+            <div class="filter-actions">
+                <DxButton Text="Clear filters" RenderStyle="ButtonRenderStyle.Secondary" Click="ClearResultFiltersAsync" Enabled="@(!_loading)" />
+            </div>
+        </div>
+
+        <div class="filter-grid">
             <div class="filter-field property-filter">
                 <label for="sample-property">Property</label>
                 <DxTextBox Id="sample-property" @bind-Text="_propertySearch" @bind-Text:after="SaveFiltersAsync"
@@ -81,10 +147,10 @@
                             NullText="All laboratories" AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
             </div>
             <div class="filter-field">
-                <label for="sample-test">Test type</label>
+                <label for="sample-test">Lab test</label>
                 <DxComboBox Id="sample-test" Data="@TestTypeOptions" @bind-Value="_testTypeId" @bind-Value:after="SaveFiltersAsync"
                             TextFieldName="@nameof(FilterOption.Name)" ValueFieldName="@nameof(FilterOption.Id)"
-                            NullText="All test types" AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                            NullText="All lab tests" AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
             </div>
         </div>
     </section>
@@ -126,10 +192,13 @@
                         <DxGridDataColumn Caption="Type" Width="155px" AllowSort="false">
                             <CellDisplayTemplate Context="cell"><SampleTypeBadges Survey="@((SampleSurveySummaryDto)cell.DataItem)" /></CellDisplayTemplate>
                         </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Sample type" Width="210px" AllowSort="false">
+                            <CellDisplayTemplate Context="cell"><SampleMaterialBadges Survey="@((SampleSurveySummaryDto)cell.DataItem)" /></CellDisplayTemplate>
+                        </DxGridDataColumn>
                         <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.CropNames)" Caption="Crop" MinWidth="135" />
                         <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.AgronomistName)" Caption="Agronomist" MinWidth="150" />
                         <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.SampleCount)" Caption="Samples" Width="82px" />
-                        <DxGridDataColumn Caption="Nutrition" MinWidth="170">
+                        <DxGridDataColumn Caption="Chemistry" MinWidth="170" Visible="false">
                             <CellDisplayTemplate Context="cell">
                                 @{
                                     var survey = (SampleSurveySummaryDto)cell.DataItem;
@@ -154,11 +223,18 @@
                                 </div>
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
-                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.NutritionSampleCount)" Caption="Nutrition samples" Width="125px" Visible="false" />
+                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.NutritionSampleCount)" Caption="Chemistry samples" Width="125px" Visible="false" />
                         <DxGridDataColumn Caption="Actions" Width="188px" AllowSort="false">
                             <CellDisplayTemplate Context="cell">
                                 @{ var survey = (SampleSurveySummaryDto)cell.DataItem; }
-                                <div class="survey-links"><a href="@EditorUrl(survey)">Open survey</a><a href="@LabResultsUrl(survey)">Lab data</a><a href="@ImportUrl(survey)">Import</a></div>
+                                <div class="survey-links">
+                                    <a href="@EditorUrl(survey)">Open survey</a>
+                                    <a href="@LabResultsUrl(survey)">Lab data</a>
+                                    @if (SampleSurveyFilter.CanImportLabData(survey))
+                                    {
+                                        <a href="@ImportUrl(survey)">Import</a>
+                                    }
+                                </div>
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
                     </Columns>
@@ -171,11 +247,19 @@
                     <article class="survey-card">
                         <div class="survey-card-heading"><div><strong>@survey.PropertyName</strong><span>@survey.SurveyDate.ToString("dd MMM yyyy") · @survey.SampleCount samples</span></div><SampleTypeBadges Survey="survey" /></div>
                         <dl>
+                            <div><dt>Sample type</dt><dd><SampleMaterialBadges Survey="survey" /></dd></div>
                             <div><dt>Crop</dt><dd>@survey.CropNames</dd></div>
                             <div><dt>Agronomist</dt><dd>@survey.AgronomistName</dd></div>
-                            <div><dt>Nutrition</dt><dd>@LaneMobileContent(survey, SampleSurveyCategory.Nutrition)</dd></div>
+                            <div><dt>Chemistry</dt><dd>@LaneMobileContent(survey, SampleSurveyCategory.Nutrition)</dd></div>
                         </dl>
-                        <div class="survey-card-actions"><a class="btn btn-primary" href="@EditorUrl(survey)">Open survey</a><a class="btn btn-outline-secondary" href="@LabResultsUrl(survey)">Lab data</a><a class="btn btn-outline-secondary" href="@ImportUrl(survey)">Import</a></div>
+                        <div class="survey-card-actions">
+                            <a class="btn btn-primary" href="@EditorUrl(survey)">Open survey</a>
+                            <a class="btn btn-outline-secondary" href="@LabResultsUrl(survey)">Lab data</a>
+                            @if (SampleSurveyFilter.CanImportLabData(survey))
+                            {
+                                <a class="btn btn-outline-secondary" href="@ImportUrl(survey)">Import</a>
+                            }
+                        </div>
                     </article>
                 }
             </div>
@@ -183,13 +267,17 @@
     }
 </div>
 
+<ConfirmDialog @ref="_confirm" />
+
 @code {
     private const string FilterCookieName = "metagrow.samples.filters";
-    private static readonly string[] CategoryOptions = [SampleSurveyFilter.MetagenCategory, SampleSurveyFilter.NutritionCategory];
+    private static readonly string[] CategoryOptions = [SampleSurveyFilter.MetagenCategory, SampleSurveyFilter.ChemistryCategory];
     private readonly DateTime _today = DateTime.Today;
     private IGrid? _grid;
     private DateTime _startDate;
     private DateTime _endDate;
+    private DateTime _appliedStartDate;
+    private DateTime _appliedEndDate;
     private string? _propertySearch;
     private int? _agronomistId;
     private string? _category;
@@ -199,10 +287,15 @@
     private bool _loading = true;
     private bool _canMoveStatuses;
     private bool _workflowSuccess;
+    private bool _isDeletionReviewer;
+    private string? _currentEmail;
     private string? _errorMessage;
     private string? _workflowMessage;
     private string? _busyLane;
     private List<SampleSurveySummaryDto> _surveys = [];
+    private List<MetaGrowSampleSurveyDeletionDto> _deletionRequests = [];
+    private Guid? _busyDeletionId;
+    private ConfirmDialog? _confirm;
 
     private sealed record FilterOption(int Id, string Name);
     private sealed record LaneAction(SampleSurveyWorkflowAction Action, string Label);
@@ -221,28 +314,123 @@
         _canMoveStatuses = authenticationState.User.IsInRole(MetaGrowRoles.Admin) ||
             authenticationState.User.IsInRole(MetaGrowRoles.AgricultureManager) ||
             authenticationState.User.IsInRole(MetaGrowRoles.Agronomist);
+        _isDeletionReviewer = authenticationState.User.IsInRole(MetaGrowRoles.Admin) ||
+            authenticationState.User.IsInRole(MetaGrowRoles.AgricultureManager) ||
+            authenticationState.User.IsInRole(MetaGrowRoles.Accountant);
+        _currentEmail = authenticationState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ??
+            authenticationState.User.Identity?.Name;
         await RestoreFiltersAsync();
-        await LoadSurveysAsync();
+        await Task.WhenAll(LoadSurveysAsync(), LoadDeletionRequestsAsync());
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadSurveysAsync()
     {
-        if (_endDate.Date < _startDate.Date) { _errorMessage = "The end date must be on or after the start date."; return; }
+        if (_appliedEndDate.Date < _appliedStartDate.Date) { _errorMessage = "The end date must be on or after the start date."; return; }
         _loading = true;
         _errorMessage = null;
         try
         {
-            var surveys = await TgsApi.GetSampleSurveySummaries(_startDate.Date, _endDate.Date);
-            _surveys = surveys ?? [];
+            var surveys = await TgsApi.GetSampleSurveySummaries(_appliedStartDate.Date, _appliedEndDate.Date);
+            _surveys = (surveys ?? [])
+                .Where(SampleSurveyFilter.IsVisibleOnFinder)
+                .ToList();
             _errorMessage = surveys is null ? TgsApi.ErrorMessage ?? "The Sample surveys could not be loaded from the TGS API." : null;
         }
         finally { _loading = false; }
     }
 
-    private async Task SearchAsync() { await SaveFiltersAsync(); await LoadSurveysAsync(); }
-    private async Task DateRangeChangedAsync() { await SaveFiltersAsync(); await LoadSurveysAsync(); }
-    private async Task ClearFiltersAsync() { ApplyFilters(SampleSurveyFilterPreferences.CreateDefault(_today)); await SaveFiltersAsync(); await LoadSurveysAsync(); }
+    private async Task SearchAsync()
+    {
+        if (_endDate.Date < _startDate.Date)
+        {
+            _errorMessage = "The end date must be on or after the start date.";
+            return;
+        }
+
+        _appliedStartDate = _startDate.Date;
+        _appliedEndDate = _endDate.Date;
+        await SaveFiltersAsync();
+        await LoadSurveysAsync();
+    }
+
+    private async Task LoadDeletionRequestsAsync()
+    {
+        var (requests, error) = await Deletions.GetPendingAsync();
+        if (requests is not null) _deletionRequests = requests.ToList();
+        else if (!string.IsNullOrWhiteSpace(error))
+        {
+            _workflowSuccess = false;
+            _workflowMessage = error;
+        }
+    }
+
+    private bool IsOwnRequest(MetaGrowSampleSurveyDeletionDto request) =>
+        !string.IsNullOrWhiteSpace(_currentEmail) &&
+        string.Equals(request.RequestedByEmail, _currentEmail, StringComparison.OrdinalIgnoreCase);
+
+    private async Task ApproveDeletionAsync(MetaGrowSampleSurveyDeletionDto request)
+    {
+        if (_confirm is null || _busyDeletionId is not null) return;
+        if (!await _confirm.ShowAsync(
+                $"Permanently delete Sample survey {request.SurveyId} for {request.PropertyName}? Live safety and concurrency checks will run again first.",
+                "Approve Sample survey deletion",
+                "Approve and delete",
+                true)) return;
+        _busyDeletionId = request.Id;
+        _workflowMessage = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var (completed, error) = await Deletions.ApproveAsync(request.Id);
+            if (completed is null)
+            {
+                _workflowSuccess = false;
+                _workflowMessage = error ?? "The Sample survey deletion could not be approved.";
+                await LoadDeletionRequestsAsync();
+                return;
+            }
+            _workflowSuccess = true;
+            _workflowMessage = $"Sample survey {completed.SurveyId} was deleted.";
+            await Task.WhenAll(LoadSurveysAsync(), LoadDeletionRequestsAsync());
+        }
+        finally { _busyDeletionId = null; }
+    }
+
+    private async Task RejectDeletionAsync(MetaGrowSampleSurveyDeletionDto request)
+    {
+        if (_confirm is null || _busyDeletionId is not null) return;
+        if (!await _confirm.ShowAsync(
+                $"Reject deletion of Sample survey {request.SurveyId}? No survey data will be changed.",
+                "Reject Sample survey deletion",
+                "Reject request")) return;
+        _busyDeletionId = request.Id;
+        _workflowMessage = null;
+        try
+        {
+            var (rejected, error) = await Deletions.RejectAsync(request.Id);
+            if (rejected is null)
+            {
+                _workflowSuccess = false;
+                _workflowMessage = error ?? "The Sample survey deletion request could not be rejected.";
+                return;
+            }
+            _deletionRequests.RemoveAll(item => item.Id == request.Id);
+            _workflowSuccess = true;
+            _workflowMessage = $"Deletion of Sample survey {rejected.SurveyId} was rejected.";
+        }
+        finally { _busyDeletionId = null; }
+    }
+    private async Task ClearResultFiltersAsync()
+    {
+        _propertySearch = null;
+        _agronomistId = null;
+        _category = null;
+        _workflow = null;
+        _labId = null;
+        _testTypeId = null;
+        await SaveFiltersAsync();
+    }
     private async Task RestoreFiltersAsync()
     {
         try
@@ -256,12 +444,12 @@
     }
     private async Task SaveFiltersAsync()
     {
-        var filters = new SampleSurveyFilterPreferences(_startDate.Date, _endDate.Date, _propertySearch, _agronomistId, _category, _workflow, _labId, _testTypeId);
+        var filters = new SampleSurveyFilterPreferences(_appliedStartDate.Date, _appliedEndDate.Date, _propertySearch, _agronomistId, _category, _workflow, _labId, _testTypeId);
         await JS.InvokeVoidAsync("metaGrowFilterPreferences.set", FilterCookieName, JsonSerializer.Serialize(filters));
     }
     private void ApplyFilters(SampleSurveyFilterPreferences filters)
     {
-        _startDate = filters.StartDate.Date; _endDate = filters.EndDate.Date; _propertySearch = filters.PropertySearch; _agronomistId = filters.AgronomistId; _category = filters.Category; _workflow = filters.Workflow; _labId = filters.LabId; _testTypeId = filters.TestTypeId;
+        _startDate = filters.StartDate.Date; _endDate = filters.EndDate.Date; _appliedStartDate = _startDate; _appliedEndDate = _endDate; _propertySearch = filters.PropertySearch; _agronomistId = filters.AgronomistId; _category = string.Equals(filters.Category, SampleSurveyFilter.NutritionCategory, StringComparison.OrdinalIgnoreCase) ? SampleSurveyFilter.ChemistryCategory : filters.Category; _workflow = filters.Workflow; _labId = filters.LabId; _testTypeId = filters.TestTypeId;
     }
     private void ShowColumnChooser() => _grid?.ShowColumnChooser();
     private static LaneAction? NextAction(SampleSurveySummaryDto survey, SampleSurveyCategory category)
@@ -340,7 +528,7 @@
             await LoadSurveysAsync();
             var lane = category == SampleSurveyCategory.Metagen ? updated.Metagen : updated.Nutrition;
             _workflowSuccess = true;
-            _workflowMessage = $"{category} moved to {lane?.WorkflowName.ToLowerInvariant() ?? "the next stage"}.";
+            _workflowMessage = $"{SampleSurveyCategoryNames.DisplayName(category)} moved to {lane?.WorkflowName.ToLowerInvariant() ?? "the next stage"}.";
         }
         finally
         {
@@ -352,6 +540,7 @@
         string.Equals(_busyLane, LaneKey(surveyId, category), StringComparison.Ordinal);
     private static string LaneKey(int surveyId, SampleSurveyCategory category) => $"{surveyId}:{category}";
     private static string EditorUrl(SampleSurveySummaryDto survey) => $"/surveys/samples/{survey.SurveyId}/edit";
+    private static string EditorUrl(int surveyId) => $"/surveys/samples/{surveyId}/edit";
     private static string LabResultsUrl(SampleSurveySummaryDto survey) => $"/surveys/samples/{survey.SurveyId}/lab-results";
     private static string ImportUrl(SampleSurveySummaryDto survey) => $"/surveys/samples/{survey.SurveyId}/import";
 }

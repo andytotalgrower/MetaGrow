@@ -36,9 +36,27 @@ public sealed class SampleSurveyFilterTests
     [Fact]
     public void Apply_FiltersOneSurveyRowByCategoryWorkflowLabAndTest()
     {
+        Assert.Equal([2], SampleSurveyFilter.Apply(Surveys, null, null, "Chemistry", null, null, null).Select(item => item.SurveyId));
         Assert.Equal([2], SampleSurveyFilter.Apply(Surveys, null, null, "Nutrition", null, null, null).Select(item => item.SurveyId));
         Assert.Equal([1], SampleSurveyFilter.Apply(Surveys, "river", 10, null, "At lab", 6, 101).Select(item => item.SurveyId));
         Assert.Empty(SampleSurveyFilter.Apply(Surveys, null, null, null, null, 2, 101));
+    }
+
+    [Fact]
+    public void FinderVisibility_HidesMetagenOnlyAndKeepsMixedSurveys()
+    {
+        Assert.False(SampleSurveyFilter.IsVisibleOnFinder(Surveys[0]));
+        Assert.True(SampleSurveyFilter.IsVisibleOnFinder(Surveys[1]));
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void CanImportLabData_HidesImportAfterResultsAreLoaded(bool hasImportedLabData, bool expected)
+    {
+        var survey = new SampleSurveySummaryDto { HasImportedLabData = hasImportedLabData };
+
+        Assert.Equal(expected, SampleSurveyFilter.CanImportLabData(survey));
     }
 
     [Fact]

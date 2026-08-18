@@ -5,7 +5,19 @@ namespace MetaGrow.Shared;
 public static class SampleSurveyFilter
 {
     public const string MetagenCategory = "Metagen";
+    public const string ChemistryCategory = "Chemistry";
+    // Accepted when restoring a filter cookie saved before the display-name change.
     public const string NutritionCategory = "Nutrition";
+
+    /// <summary>
+    /// The MetaGrow finder is for surveys sent to external laboratories. A mixed
+    /// survey remains visible because its non-Metagen samples still need this workflow.
+    /// </summary>
+    public static bool IsVisibleOnFinder(SampleSurveySummaryDto survey) =>
+        survey.HasNutritionSamples;
+
+    public static bool CanImportLabData(SampleSurveySummaryDto survey) =>
+        !survey.HasImportedLabData;
 
     public static IReadOnlyList<SampleSurveySummaryDto> Apply(
         IEnumerable<SampleSurveySummaryDto> surveys,
@@ -31,7 +43,8 @@ public static class SampleSurveyFilter
 
         if (string.Equals(category, MetagenCategory, StringComparison.OrdinalIgnoreCase))
             query = query.Where(survey => survey.HasMetagenSamples);
-        else if (string.Equals(category, NutritionCategory, StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(category, ChemistryCategory, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(category, NutritionCategory, StringComparison.OrdinalIgnoreCase))
             query = query.Where(survey => survey.HasNutritionSamples);
 
         if (!string.IsNullOrWhiteSpace(workflow))

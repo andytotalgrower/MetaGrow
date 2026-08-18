@@ -1,0 +1,596 @@
+@page "/surveys/samples/generate-from-csv"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using MetaGrow.Web.Services
+@using Metagen.Shared.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject ITgsApiService TgsApi
+@inject ApiTokenService ApiTokens
+@inject AccountApiClient AccountApi
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IStringSimilarityService Similarity
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Generate Sample surveys from CSV | MetaGrow</PageTitle>
+
+<DxToastProvider Name="SampleSurveyGenerationMessages" MaxToastCount="3"
+                 AnimationType="ToastAnimationType.Slide"
+                 HorizontalAlignment="HorizontalAlignment.Right"
+                 StickToViewport="true" DisplayTime="TimeSpan.FromSeconds(5)" Width="410px" />
+
+<div class="generation-page">
+    <div class="generation-toolbar">
+        <DxButton Text="Back to Sample surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSamples" />
+    </div>
+
+    <header class="generation-hero">
+        <div>
+            <span class="generation-kicker">Returned laboratory data</span>
+            <h1>Generate Sample surveys from CSV</h1>
+            <p>Create the surveys, collected samples and linked Soil results from one returned laboratory file.</p>
+        </div>
+        <div class="hero-safety">
+            <span>Preview first</span>
+            <strong>Then move on to final generation</strong>
+        </div>
+    </header>
+
+    @if (_loading)
+    {
+        <div class="generation-loading"><DxWaitIndicator Visible="true" /><span>Loading properties and agronomists…</span></div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <div class="alert alert-danger" role="alert">@_loadError</div>
+    }
+    else if (_receipt is not null)
+    {
+        <section class="receipt-card" aria-labelledby="generation-receipt-heading">
+            <div class="receipt-icon">✓</div>
+            <div class="receipt-copy">
+                <span class="generation-kicker">Generation complete</span>
+                <h2 id="generation-receipt-heading">@_receipt.Surveys.Count Sample survey@(_receipt.Surveys.Count == 1 ? string.Empty : "s") created</h2>
+                <p>@_receipt.ImportedRowCount Soil results from @_receipt.FileName · @_receipt.PropertyName</p>
+                <small>@_receipt.ImportedUtc.ToLocalTime().ToString("dd MMM yyyy h:mm tt") by @_receipt.ImportedBy</small>
+            </div>
+            <div class="generated-surveys">
+                @foreach (var survey in _receipt.Surveys.OrderBy(item => item.SurveyDate))
+                {
+                    <a href="@SurveyUrl(survey.SurveyId)" target="_blank" rel="noopener">
+                        Survey @survey.SurveyId <span>@survey.SurveyDate.ToString("dd MMM yyyy") · @survey.ImportedRowCount result@(survey.ImportedRowCount == 1 ? string.Empty : "s")</span>
+                    </a>
+                }
+                <DxButton Text="Generate another file" RenderStyle="ButtonRenderStyle.Primary" Click="ResetAll" />
+            </div>
+        </section>
+    }
+    else
+    {
+        <section class="setup-card" aria-labelledby="generation-setup-heading">
+            <div class="section-heading">
+                <span class="step-number">1</span>
+                <div>
+                    <h2 id="generation-setup-heading">Choose the destination</h2>
+                    <p>The selected farm and agronomist will be used for every survey generated from this file.</p>
+                </div>
+            </div>
+            <div class="setup-grid">
+                <div class="field property-field">
+                    <label for="generation-property">Farm</label>
+                    <DxComboBox Id="generation-property" Data="@_properties" @bind-Value="_propertyId" @bind-Value:after="PropertyChangedAsync"
+                                TextFieldName="@nameof(Property.PropertyName)" ValueFieldName="@nameof(Property.PropertyId)"
+                                NullText="Search for a farm" SearchMode="ListSearchMode.AutoSearch"
+                                SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" Enabled="@(!_uploading && !_committing)" />
+                </div>
+                <div class="field">
+                    <label for="generation-agronomist">Agronomist</label>
+                    <DxComboBox Id="generation-agronomist" Data="@_agronomists" @bind-Value="_agronomistId" @bind-Value:after="SelectionChanged"
+                                TextFieldName="@nameof(Staff.StaffName)" ValueFieldName="@nameof(Staff.StaffId)"
+                                NullText="Select an agronomist" SearchMode="ListSearchMode.AutoSearch"
+                                SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" Enabled="@(!_uploading && !_committing)" />
+                </div>
+            </div>
+
+            <div id="generation-csv-drop-zone" class="csv-drop-zone @(_uploading ? "busy" : string.Empty) @(!CanUpload ? "disabled" : string.Empty)">
+                <span class="drop-icon" aria-hidden="true">⇧</span>
+                <strong>Drag and drop one returned Soil CSV here</strong>
+                <span>@(CanUpload ? "or select it from your device" : "Select a farm and agronomist first")</span>
+                <DxButton Id="generationCsvSelectButton" Text="@(_uploading ? "Reading CSV…" : "Select CSV")"
+                          RenderStyle="ButtonRenderStyle.Primary" Enabled="@(CanUpload && !_uploading && !_committing)" />
+                @if (_uploading) { <DxWaitIndicator Visible="true" /> }
+                <small>Soil CSV only · maximum 20 MB · nothing is written during preview</small>
+            </div>
+            <DxFileInput @ref="_fileInput"
+                         ExternalDropZoneCssSelector="#generation-csv-drop-zone"
+                         ExternalSelectButtonCssSelector="button#generationCsvSelectButton"
+                         ExternalDropZoneDragOverCssClass="drop-zone-active"
+                         MaxFileSize="@MaxFileBytes" MaxFileCount="1"
+                         FilesUploading="PreviewFilesAsync"
+                         AcceptedFileTypes="@AcceptedFileTypes"
+                         AllowMultiFileUpload="false" />
+        </section>
+
+        @if (_preview is not null)
+        {
+            <section class="preview-card" aria-labelledby="generation-preview-heading">
+                <div class="section-heading split">
+                    <div>
+                        <span class="step-number">2</span>
+                        <div><h2 id="generation-preview-heading">Review what will be created</h2><p>Check the survey dates, destination blocks and test types before continuing.</p></div>
+                    </div>
+                    <div class="preview-file"><strong>@_preview.FileName</strong><span>@_preview.Rows.Count returned results</span></div>
+                </div>
+
+                <div class="preview-facts">
+                    <div><span>Farm</span><strong>@_preview.PropertyName</strong></div>
+                    <div><span>Agronomist</span><strong>@_preview.AgronomistName</strong></div>
+                    <div><span>Detected laboratory</span><strong>@_preview.LabName</strong></div>
+                    <div><span>Surveys to create</span><strong>@_preview.SurveyGroups.Count</strong></div>
+                </div>
+
+                @if (_preview.BlockingErrors.Count > 0)
+                {
+                    <div class="review-message danger" role="alert">
+                        <strong>Generation blocked</strong>
+                        <ul>@foreach (var error in _preview.BlockingErrors) { <li>@error</li> }</ul>
+                    </div>
+                }
+                @if (_preview.Warnings.Count > 0)
+                {
+                    <div class="review-message warning">
+                        <strong>Review these warnings</strong>
+                        <ul>@foreach (var warning in _preview.Warnings) { <li>@warning</li> }</ul>
+                    </div>
+                }
+
+                <div class="property-match-heading"><h3>Farm name check</h3><p>The grower name returned by the laboratory is compared with the selected MetaGrow farm.</p></div>
+                <div class="property-match-list">
+                    @foreach (var match in _preview.PropertyMatches)
+                    {
+                        <div class="property-match-row @(!match.IsCloseMatch ? "needs-override" : string.Empty)">
+                            <div><span>Farm/Grower (in file)</span><strong>@(string.IsNullOrWhiteSpace(match.LabPropertyName) ? "(blank)" : match.LabPropertyName)</strong></div>
+                            <span class="property-match-arrow" aria-hidden="true">→</span>
+                            <div><span>Selected Farm/Grower</span><strong>@match.SelectedPropertyName</strong></div>
+                            <span class="property-match-badge @(match.IsCloseMatch ? "matched" : "unmatched")">
+                                @(match.IsExactMatch ? "Exact match" : match.IsCloseMatch ? $"Close match · {match.SimilarityPercent}%" : $"Override required · {match.SimilarityPercent}%")
+                            </span>
+                        </div>
+                    }
+                </div>
+                @if (_preview.PropertyNameOverrideRequired)
+                {
+                    <div class="property-override" role="group" aria-label="Farm name override confirmation">
+                        <DxCheckBox @bind-Checked="_propertyOverrideAccepted" Enabled="@(!_committing)">
+                            I have checked the Lab Farm/Grower name and confirm these results belong to @_preview.PropertyName.
+                        </DxCheckBox>
+                        <small>This confirmation is required because at least one laboratory name is not a close match.</small>
+                    </div>
+                }
+
+                <div class="survey-date-heading"><h3>Surveys from this file</h3><p>Rows are grouped by the laboratory received date.</p></div>
+                <div class="survey-date-list">
+                    @foreach (var group in _preview.SurveyGroups)
+                    {
+                        <article class="survey-date-card @(group.ExistingSurveyIds.Count > 0 ? "has-existing" : string.Empty)">
+                            <div><span>Survey date</span><strong>@group.SurveyDate.ToString("dd MMMM yyyy")</strong></div>
+                            <div><span>Soil results</span><strong>@group.ResultCount</strong></div>
+                            @if (group.ExistingSurveyIds.Count > 0)
+                            {
+                                <div class="existing-surveys"><span>Existing on this date</span><strong>@string.Join(", ", group.ExistingSurveyIds.Select(id => $"#{id}"))</strong></div>
+                            }
+                            else
+                            {
+                                <span class="ready-badge">New survey</span>
+                            }
+                        </article>
+                    }
+                </div>
+
+                <div class="mapping-heading"><h3>Block and test reconciliation</h3><p>One selection applies to every result carrying the same lab block name. Suggested values remain editable.</p></div>
+                <div class="mapping-list">
+                    @foreach (var mapping in _mappingRows)
+                    {
+                        <div class="mapping-row">
+                            <div class="raw-block">
+                                <span>Block name in file</span>
+                                <strong>@(string.IsNullOrWhiteSpace(mapping.RawBlockName) ? "(blank)" : mapping.RawBlockName)</strong>
+                                <small>@mapping.ResultCount result@(mapping.ResultCount == 1 ? string.Empty : "s")</small>
+                            </div>
+                            <span class="mapping-arrow" aria-hidden="true">→</span>
+                            <div class="mapping-choice">
+                                <label for="@mapping.BlockControlId">Block</label>
+                                <DxComboBox Id="@mapping.BlockControlId" Data="@_blockChoices" @bind-Value="mapping.BlockKey"
+                                            TextFieldName="@nameof(BlockChoice.Label)" ValueFieldName="@nameof(BlockChoice.Key)"
+                                            NullText="Select a block" SearchMode="ListSearchMode.AutoSearch"
+                                            SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
+                                            Enabled="@(!_committing)" />
+                                @if (mapping.BlockWasSuggested && !string.IsNullOrWhiteSpace(mapping.BlockKey)) { <small class="suggestion">Suggested — please check</small> }
+                            </div>
+                            <div class="mapping-choice test-choice">
+                                <label for="@mapping.TestControlId">Test type</label>
+                                <DxComboBox Id="@mapping.TestControlId" Data="@_testTypeChoices" @bind-Value="mapping.LabTestTypeId"
+                                            TextFieldName="@nameof(TestTypeChoice.Label)" ValueFieldName="@nameof(TestTypeChoice.Id)"
+                                            NullText="Select a test type" SearchMode="ListSearchMode.AutoSearch"
+                                            SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
+                                            Enabled="@(!_committing)" />
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="result-heading"><h3>Returned result rows</h3><p>These rows will become collected sample items and linked Soil results.</p></div>
+                <div class="result-grid-wrap">
+                    <DxGrid Data="@_preview.Rows" PageSize="20" HighlightRowOnHover="true" TextWrapEnabled="false"
+                            ColumnResizeMode="GridColumnResizeMode.NextColumn" CssClass="generation-preview-grid">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.RowNumber)" Caption="CSV row" Width="82px" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.OrderNo)" Caption="Order no." Width="115px" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.DateReceived)" Caption="Received" Width="112px" DisplayFormat="dd/MM/yyyy" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.RawPropertyName)" Caption="Lab Grower" MinWidth="150" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.RawBlockName)" Caption="Block name in file" MinWidth="150" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.RawCropName)" Caption="Lab crop" MinWidth="120" />
+                            <DxGridDataColumn Caption="Checks" MinWidth="145" AllowSort="false">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var row = (SampleSoilSurveyGenerationRowDto)cell.DataItem; }
+                                    @if (row.Warnings.Count == 0) { <span class="row-ok">Ready</span> }
+                                    else { <span class="row-warning">@string.Join(" ", row.Warnings)</span> }
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                        </Columns>
+                    </DxGrid>
+                </div>
+
+                <div class="commit-bar">
+                    <div><strong>@CommitReadinessText</strong><span>Either every survey and result is written, or the transaction is rolled back.</span></div>
+                    <DxButton Text="Generate Sample surveys" RenderStyle="ButtonRenderStyle.Primary" Enabled="@CanCommit" Click="OpenConfirmation" />
+                </div>
+            </section>
+        }
+    }
+</div>
+
+<DxPopup @bind-Visible="_confirmVisible" ShowFooter="true" HeaderText="Confirm Sample survey generation"
+         AllowDrag="true" ShowCloseButton="@(!_committing)" CloseOnEscape="@(!_committing)"
+         Width="min(650px, 94vw)" CloseOnOutsideClick="@(!_committing)">
+    <BodyContentTemplate>
+        @if (_preview is not null)
+        {
+            <div class="confirm-content">
+                <p>You are about to create <strong>@_preview.SurveyGroups.Count Sample survey@(_preview.SurveyGroups.Count == 1 ? string.Empty : "s")</strong> for <strong>@_preview.PropertyName</strong>, containing <strong>@_preview.Rows.Count Soil results</strong>.</p>
+                <p>The surveys will be assigned to <strong>@_preview.AgronomistName</strong>. This operation is atomic and the same file cannot be generated twice for this farm.</p>
+                @if (_preview.SurveyGroups.Any(group => group.ExistingSurveyIds.Count > 0))
+                {
+                    <div class="review-message warning"><strong>Existing survey dates detected</strong><span>This will create separate surveys; the existing surveys will not be changed.</span></div>
+                }
+                @if (_preview.PropertyNameOverrideRequired)
+                {
+                    <div class="review-message warning"><strong>Farm override confirmed</strong><span>The Lab Grower name was not a close match for the selected farm.</span></div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_commitError))
+                {
+                    <div class="review-message danger" role="alert">
+                        <strong>Generation failed</strong>
+                        <span>@_commitError</span>
+                    </div>
+                }
+            </div>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate Context="footerContext">
+        <div class="popup-actions">
+            <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_committing)" Click="CloseConfirmation" />
+            <DxButton RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_committing)" Click="CommitAsync">
+                @if (_committing)
+                {
+                    <span class="button-progress"><DxWaitIndicator Visible="true" /> Generating…</span>
+                }
+                else
+                {
+                    <span>Confirm and generate</span>
+                }
+            </DxButton>
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    private const int MaxFileBytes = 20 * 1024 * 1024;
+    private static readonly List<string> AcceptedFileTypes = [".csv"];
+
+    private DxFileInput? _fileInput;
+    private List<Property> _properties = [];
+    private List<Staff> _agronomists = [];
+    private List<BlockChoice> _blockChoices = [];
+    private List<TestTypeChoice> _testTypeChoices = [];
+    private List<MappingRow> _mappingRows = [];
+    private SampleSoilSurveyGenerationPreviewDto? _preview;
+    private SampleSoilSurveyGenerationReceiptDto? _receipt;
+    private int _propertyId;
+    private int _agronomistId;
+    private bool _loading = true;
+    private bool _uploading;
+    private bool _committing;
+    private bool _confirmVisible;
+    private bool _propertyOverrideAccepted;
+    private string? _loadError;
+    private string? _commitError;
+
+    private bool CanUpload => _propertyId > 0 && _agronomistId > 0 && !_loading;
+    private bool CanCommit => _preview?.CanGenerate == true &&
+        (!_preview.PropertyNameOverrideRequired || _propertyOverrideAccepted) &&
+        !_uploading && !_committing &&
+        _mappingRows.Count > 0 && _mappingRows.All(row =>
+            !string.IsNullOrWhiteSpace(row.BlockKey) &&
+            _testTypeChoices.Any(test => test.Id == row.LabTestTypeId));
+    private string CommitReadinessText => _preview is null || !_preview.CanGenerate
+        ? "Resolve the blocked checks before generating"
+        : _preview.PropertyNameOverrideRequired && !_propertyOverrideAccepted
+            ? "Confirm the farm name override before generating"
+            : _mappingRows.Any(row => string.IsNullOrWhiteSpace(row.BlockKey) ||
+                                      !_testTypeChoices.Any(test => test.Id == row.LabTestTypeId))
+                ? "Complete every block and test-type mapping"
+                : "Ready for final confirmation";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var propertiesTask = TgsApi.GetProperties();
+            var staffTask = TgsApi.GetActiveTgsStaff();
+            await Task.WhenAll(propertiesTask, staffTask);
+            _properties = (await propertiesTask ?? []).Where(item => item.IsActive).OrderBy(item => item.PropertyName).ToList();
+            _agronomists = (await staffTask ?? []).OrderBy(item => item.StaffName).ToList();
+            await SelectCurrentAgronomistAsync();
+        }
+        catch (Exception exception)
+        {
+            _loadError = exception.Message;
+        }
+        finally { _loading = false; }
+    }
+
+    private async Task SelectCurrentAgronomistAsync()
+    {
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authenticationState.User;
+        var primaryEmail = user.Claims.FirstOrDefault(claim =>
+                               claim.Type.EndsWith("emailaddress", StringComparison.OrdinalIgnoreCase) ||
+                               claim.Type.Equals("email", StringComparison.OrdinalIgnoreCase))?.Value
+                           ?? user.Identity?.Name;
+        var accountEmails = new List<string>();
+        if (!string.IsNullOrWhiteSpace(primaryEmail)) accountEmails.Add(primaryEmail.Trim());
+
+        var (additionalEmails, _) = await AccountApi.GetEmailsAsync();
+        accountEmails.AddRange(additionalEmails?
+            .Where(address => address.IsConfirmed && !string.IsNullOrWhiteSpace(address.Email))
+            .Select(address => address.Email.Trim()) ?? []);
+
+        foreach (var email in accountEmails.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var matchingStaff = _agronomists.FirstOrDefault(item =>
+                !string.IsNullOrWhiteSpace(item.Email) &&
+                string.Equals(item.Email.Trim(), email, StringComparison.OrdinalIgnoreCase));
+            if (matchingStaff is null) continue;
+            _agronomistId = matchingStaff.StaffId;
+            return;
+        }
+    }
+
+    private async Task PropertyChangedAsync()
+    {
+        ClearPreview();
+        _blockChoices = [];
+        if (_propertyId <= 0) return;
+        try
+        {
+            var bananaTask = TgsApi.GetBananaBlocksForProperty(_propertyId);
+            var multiCropTask = TgsApi.GetMultiCropBlocksForProperty(_propertyId);
+            await Task.WhenAll(bananaTask, multiCropTask);
+            var blocks = (await bananaTask ?? []).Concat(await multiCropTask ?? [])
+                .GroupBy(block => $"{NormalizeBlockType(block.BlockType)}:{block.BlockId}", StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First());
+            _blockChoices = blocks.Select(block => new BlockChoice(
+                    $"{NormalizeBlockType(block.BlockType)}:{block.BlockId}",
+                    $"{(NormalizeBlockType(block.BlockType) == "banana" ? "Banana" : "Multi-crop")} · {block.BlockName}{(block.IsActive ? string.Empty : " · inactive")}",
+                    block))
+                .OrderBy(choice => choice.Label).ToList();
+        }
+        catch (Exception exception)
+        {
+            ShowToast("Blocks could not be loaded", exception.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void SelectionChanged() => ClearPreview();
+
+    private async Task PreviewFilesAsync(FilesUploadingEventArgs args)
+    {
+        if (!CanUpload || args.Files.Count != 1) return;
+        _uploading = true;
+        ClearPreview();
+        try
+        {
+            var file = args.Files[0];
+            if (!Path.GetExtension(file.Name).Equals(".csv", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowToast("CSV required", "Choose a file with a .csv extension.", ToastRenderStyle.Warning);
+                return;
+            }
+            var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var token = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                ShowToast("Session expired", "Sign in again before generating Sample surveys.", ToastRenderStyle.Danger);
+                return;
+            }
+            await using var stream = file.OpenReadStream(MaxFileBytes, file.CancellationTokenSource.Token);
+            _preview = await TgsApi.PreviewSampleSoilSurveyGeneration(_propertyId, _agronomistId, stream, file.Name, file.Type, token);
+            if (_preview is null)
+            {
+                ShowToast("Preview failed", TgsApi.ErrorMessage ?? "The Soil CSV could not be previewed.", ToastRenderStyle.Danger);
+                return;
+            }
+            BuildMappingRows();
+            ShowToast("Preview ready", $"{_preview.Rows.Count} Soil results across {_preview.SurveyGroups.Count} survey date(s) were read. No data was changed.",
+                _preview.BlockingErrors.Count == 0 ? ToastRenderStyle.Success : ToastRenderStyle.Warning);
+        }
+        catch (Exception exception)
+        {
+            ShowToast("Preview failed", exception.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            _fileInput?.RemoveAllFiles();
+            _uploading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void BuildMappingRows()
+    {
+        if (_preview is null) { _mappingRows = []; _testTypeChoices = []; return; }
+        _testTypeChoices = _preview.LabTestTypes
+            .Select(test => new TestTypeChoice(test.LabTestTypeId, TestTypeLabel(test)))
+            .OrderBy(test => test.Label, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _mappingRows = _preview.Mappings.Select((mapping, index) =>
+        {
+            var suggestedKey = mapping.SuggestedBlockId > 0
+                ? $"{NormalizeBlockType(mapping.SuggestedBlockType)}:{mapping.SuggestedBlockId}"
+                : string.Empty;
+            var choice = _blockChoices.FirstOrDefault(item => item.Key.Equals(suggestedKey, StringComparison.OrdinalIgnoreCase));
+            if (choice is null)
+            {
+                var best = Similarity.FindBestMatchingBlock(mapping.RawBlockName, _blockChoices.Select(item => item.MatchBlock));
+                choice = best is null ? null : _blockChoices.FirstOrDefault(item => ReferenceEquals(item.MatchBlock, best));
+            }
+            var testId = _preview.LabTestTypes.Any(test => test.LabTestTypeId == mapping.SuggestedLabTestTypeId)
+                ? mapping.SuggestedLabTestTypeId
+                : 0;
+            return new MappingRow
+            {
+                BlockControlId = $"generation-block-{index}",
+                TestControlId = $"generation-test-{index}",
+                MappingKey = mapping.MappingKey,
+                RawBlockName = mapping.RawBlockName,
+                ResultCount = mapping.ResultCount,
+                BlockKey = choice?.Key ?? string.Empty,
+                BlockWasSuggested = choice is not null,
+                LabTestTypeId = testId
+            };
+        }).ToList();
+    }
+
+    private void OpenConfirmation()
+    {
+        if (!CanCommit) return;
+        _commitError = null;
+        _confirmVisible = true;
+    }
+    private void CloseConfirmation() { if (!_committing) _confirmVisible = false; }
+
+    private async Task CommitAsync()
+    {
+        if (_preview is null || !CanCommit) return;
+        _committing = true;
+        _commitError = null;
+        try
+        {
+            var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var token = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                _commitError = "Your session has expired. Sign in again before generating Sample surveys.";
+                ShowToast("Session expired", _commitError, ToastRenderStyle.Danger);
+                return;
+            }
+            var mappings = new List<SampleSoilSurveyGenerationMappingSelectionDto>();
+            foreach (var row in _mappingRows)
+            {
+                var choice = _blockChoices.FirstOrDefault(item => item.Key == row.BlockKey)
+                    ?? throw new InvalidOperationException("Select a block for every block name in the file.");
+                mappings.Add(new SampleSoilSurveyGenerationMappingSelectionDto
+                {
+                    MappingKey = row.MappingKey,
+                    BlockId = choice.MatchBlock.BlockId,
+                    BlockType = choice.MatchBlock.BlockType ?? string.Empty,
+                    LabTestTypeId = row.LabTestTypeId
+                });
+            }
+            _receipt = await TgsApi.CommitSampleSoilSurveyGeneration(new SampleSoilSurveyGenerationCommitRequest
+            {
+                PreviewToken = _preview.PreviewToken,
+                ConfirmPropertyNameMismatch = _propertyOverrideAccepted,
+                Mappings = mappings
+            }, token);
+            if (_receipt is null)
+            {
+                _commitError = TgsApi.ErrorMessage ?? "No Sample surveys were generated.";
+                ShowToast("Generation failed", _commitError, ToastRenderStyle.Danger);
+                return;
+            }
+            _commitError = null;
+            _confirmVisible = false;
+            _preview = null;
+            _mappingRows = [];
+            ShowToast("Sample surveys generated", $"{_receipt.Surveys.Count} surveys and {_receipt.ImportedRowCount} Soil results were committed.", ToastRenderStyle.Success);
+        }
+        catch (Exception exception)
+        {
+            _commitError = exception.Message;
+            ShowToast("Generation failed", _commitError, ToastRenderStyle.Danger);
+        }
+        finally { _committing = false; }
+    }
+
+    private void ClearPreview()
+    {
+        _preview = null;
+        _receipt = null;
+        _mappingRows = [];
+        _testTypeChoices = [];
+        _confirmVisible = false;
+        _propertyOverrideAccepted = false;
+        _commitError = null;
+    }
+
+    private void ResetAll()
+    {
+        _propertyId = 0;
+        _blockChoices = [];
+        ClearPreview();
+    }
+
+    private void ShowToast(string title, string text, ToastRenderStyle style) => ToastService.ShowToast(new ToastOptions
+    {
+        ProviderName = "SampleSurveyGenerationMessages", Title = title, Text = text, RenderStyle = style, DisplayTime = TimeSpan.FromSeconds(5)
+    });
+    private void BackToSamples() => Navigation.NavigateTo("/surveys/samples");
+    private static string SurveyUrl(int surveyId) => $"/surveys/samples/{surveyId}/edit";
+    private static string NormalizeBlockType(string? value) => value?.StartsWith("ban", StringComparison.OrdinalIgnoreCase) == true ? "banana" : "mcs";
+    private static string TestTypeLabel(LabTestType test)
+    {
+        var name = string.IsNullOrWhiteSpace(test.TestName) ? "Unnamed test" : test.TestName.Trim();
+        var code = test.TestCode?.Trim();
+        return string.IsNullOrWhiteSpace(code) || string.Equals(code, name, StringComparison.OrdinalIgnoreCase)
+            ? name
+            : $"{name} ({code})";
+    }
+
+    private sealed record BlockChoice(string Key, string Label, Block MatchBlock);
+    private sealed record TestTypeChoice(int Id, string Label);
+    private sealed class MappingRow
+    {
+        public string BlockControlId { get; init; } = string.Empty;
+        public string TestControlId { get; init; } = string.Empty;
+        public string MappingKey { get; init; } = string.Empty;
+        public string RawBlockName { get; init; } = string.Empty;
+        public int ResultCount { get; init; }
+        public string BlockKey { get; set; } = string.Empty;
+        public bool BlockWasSuggested { get; init; }
+        public int LabTestTypeId { get; set; }
+    }
+}

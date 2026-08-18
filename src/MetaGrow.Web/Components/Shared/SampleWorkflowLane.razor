@@ -1,9 +1,9 @@
 @using ApiModels
 
-<section class="sample-lane @Lane.Category.ToString().ToLowerInvariant()" aria-label="@Lane.Category workflow">
+<section class="sample-lane @Lane.Category.ToString().ToLowerInvariant()" aria-label="@CategoryName workflow">
     <header>
         <div>
-            <span class="lane-kicker">@Lane.Category</span>
+            <span class="lane-kicker">@CategoryName</span>
             <h2>@Lane.SampleCount sample@(Lane.SampleCount == 1 ? string.Empty : "s")</h2>
         </div>
         <SampleWorkflowBadge Name="@Lane.WorkflowName" />
@@ -77,6 +77,7 @@
         new(MultiCropSurveyStatus.ReadyToSend, "Ready"),
         new(MultiCropSurveyStatus.Complete, "Sent")
     ];
+    private string CategoryName => SampleSurveyCategoryNames.DisplayName(Lane.Category);
 
     private WorkflowOption? ForwardAction
     {

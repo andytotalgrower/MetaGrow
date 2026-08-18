@@ -1,0 +1,47 @@
+@using ApiModels
+
+<span class="material-badges" aria-label="Sample types">
+    @if (Survey.SampleTypes.Count == 0)
+    {
+        <span class="material-badge unclassified">Not classified</span>
+    }
+    else
+    {
+        @foreach (var sampleType in Survey.SampleTypes.OrderBy(item => SortOrder(item.Id)).ThenBy(item => item.Name))
+        {
+            <span class="material-badge @CssClass(sampleType.Id)">@DisplayName(sampleType)</span>
+        }
+    }
+</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public SampleSurveySummaryDto Survey { get; set; } = default!;
+
+    private static int SortOrder(int id) => id switch
+    {
+        10 => 1,
+        20 => 2,
+        30 => 3,
+        40 => 4,
+        _ => 100 + id
+    };
+
+    private static string CssClass(int id) => id switch
+    {
+        10 => "soil",
+        20 => "tissue",
+        30 => "quick-soil",
+        40 => "sap",
+        _ => "other"
+    };
+
+    private static string DisplayName(SampleSurveyLookupDto sampleType) => sampleType.Id switch
+    {
+        10 => "Soil",
+        20 => "Tissue",
+        30 => "Quick Soil",
+        40 => "Sap",
+        _ => string.IsNullOrWhiteSpace(sampleType.Name) ? "Other" : sampleType.Name
+    };
+}
