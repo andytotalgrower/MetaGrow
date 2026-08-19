@@ -1,0 +1,501 @@
+@using ApiModels.MetaGrow
+@using MetaGrow.Web.Services
+@using Metagen.Shared.Services
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject PropertyDeletionApiClient PropertyDeletions
+@inject PropertyMergeApiClient PropertyMerges
+@inject SampleSurveyDeletionApiClient SampleSurveyDeletions
+@inject IToastNotificationService ToastService
+
+<DxToastProvider Name="DashboardApprovalMessages" MaxToastCount="4"
+                 AnimationType="ToastAnimationType.Slide"
+                 HorizontalAlignment="HorizontalAlignment.Right"
+                 StickToViewport="true" DisplayTime="TimeSpan.FromSeconds(10)" Width="410px" />
+
+<section class="approval-inbox" aria-labelledby="approval-inbox-heading">
+    <div class="approval-heading">
+        <div>
+            <span class="mg-eyebrow">Central review queue</span>
+            <h2 id="approval-inbox-heading">Approvals</h2>
+            <p>Requests awaiting your approval.</p>
+        </div>
+        <div class="approval-heading-actions">
+            @if (!_loading && _loadErrors.Count == 0 && PendingApprovals.Count > 0)
+            {
+                <span class="approval-count">@ApprovalCountText</span>
+            }
+            <DxButton Text="Refresh" RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                      Enabled="@(!_loading && _busyApprovalId is null)" Click="LoadApprovalsAsync" />
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="approval-state" role="status">
+            <DxWaitIndicator Visible="true" />
+            <span>Checking approval queues...</span>
+        </div>
+    }
+    else
+    {
+        @if (_loadErrors.Count > 0)
+        {
+            <div class="approval-load-warning" role="status">
+                <strong>Not every approval queue could be checked.</strong>
+                <span>Use Refresh to try the failed queue again. Any requests loaded successfully are shown below.</span>
+            </div>
+        }
+
+        @if (PendingApprovals.Count == 0)
+        {
+            <div class="approval-state approval-clear">
+                <span class="approval-clear-icon" aria-hidden="true">✓</span>
+                <div>
+                    <strong>No approvals waiting.</strong>
+                    <span>There are no requests that currently need action from you.</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="approval-list">
+                @foreach (var approval in PendingApprovals)
+                {
+                    <article class="approval-row">
+                        <div class="approval-description">
+                            <div class="approval-type-line">
+                                <span class="approval-type @approval.TypeCssClass">@approval.TypeLabel</span>
+                                <span>@approval.RequestedUtc.ToLocalTime().ToString("dd MMM yyyy h:mm tt")</span>
+                            </div>
+                            <strong>@approval.Title</strong>
+                            <span>@approval.Detail</span>
+                            <small>Requested by @approval.RequestedByEmail</small>
+                            @if (!string.IsNullOrWhiteSpace(approval.LastError))
+                            {
+                                <small class="approval-error">Last attempt: @approval.LastError</small>
+                            }
+                        </div>
+                        <div class="approval-actions">
+                            <a class="mg-grid-link" href="@approval.OpenUrl" target="_blank" rel="noopener">@approval.OpenLabel</a>
+                            @if (_busyApprovalId == approval.Id)
+                            {
+                                <span class="approval-progress" role="status" aria-live="polite">
+                                    <DxWaitIndicator Visible="true" />
+                                    <span>@_busyMessage</span>
+                                </span>
+                            }
+                            else
+                            {
+                                @if (approval.CanCancel)
+                                {
+                                    <DxButton Text="Cancel request" RenderStyle="ButtonRenderStyle.Secondary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyApprovalId is null)" Click="@(() => CancelAsync(approval))" />
+                                }
+                                else if (approval.CanReject)
+                                {
+                                    <DxButton Text="Reject" RenderStyle="ButtonRenderStyle.Secondary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyApprovalId is null)" Click="@(() => RejectAsync(approval))" />
+                                }
+
+                                @if (approval.Kind == ApprovalKind.PropertyMerge)
+                                {
+                                    <DxButton Text="Review merge" RenderStyle="ButtonRenderStyle.Primary" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyApprovalId is null)" Click="@(() => ReviewMergeAsync(approval))" />
+                                }
+                                else
+                                {
+                                    <DxButton Text="Approve and delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyApprovalId is null)" Click="@(() => ApproveDeletionAsync(approval))" />
+                                }
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    }
+</section>
+
+<ConfirmDialog @ref="_confirm" />
+<PropertyMergeReviewDialog @ref="_mergeDialog" IsReviewer="true" MergeCompleted="MergeCompletedAsync" />
+
+@code {
+    private readonly List<string> _loadErrors = [];
+    private List<MetaGrowPropertyDeletionDto> _propertyDeletionRequests = [];
+    private List<MetaGrowPropertyMergeRequestDto> _propertyMergeRequests = [];
+    private List<MetaGrowSampleSurveyDeletionDto> _sampleDeletionRequests = [];
+    private ConfirmDialog? _confirm;
+    private PropertyMergeReviewDialog? _mergeDialog;
+    private bool _loading = true;
+    private bool _canReviewProperties;
+    private bool _canReviewSamples;
+    private bool _canApproveOwnSampleDeletion;
+    private Guid? _busyApprovalId;
+    private string _busyMessage = "Processing...";
+
+    private enum ApprovalKind
+    {
+        PropertyDeletion,
+        PropertyMerge,
+        SampleSurveyDeletion
+    }
+
+    private sealed record PendingApproval(
+        Guid Id,
+        ApprovalKind Kind,
+        string TypeLabel,
+        string TypeCssClass,
+        string Title,
+        string Detail,
+        string RequestedByEmail,
+        DateTime RequestedUtc,
+        string OpenUrl,
+        string OpenLabel,
+        string? LastError,
+        bool CanReject,
+        bool CanCancel,
+        object Request);
+
+    private IReadOnlyList<PendingApproval> PendingApprovals => BuildPendingApprovals();
+    private string ApprovalCountText => $"{PendingApprovals.Count} waiting";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        _canReviewProperties = user.IsInRole(MetaGrowRoles.Admin) ||
+            user.IsInRole(MetaGrowRoles.AgricultureManager);
+        _canReviewSamples = _canReviewProperties || user.IsInRole(MetaGrowRoles.Accountant);
+        _canApproveOwnSampleDeletion = _canReviewProperties;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await LoadApprovalsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadApprovalsAsync()
+    {
+        _loading = true;
+        _loadErrors.Clear();
+        _propertyDeletionRequests = [];
+        _propertyMergeRequests = [];
+        _sampleDeletionRequests = [];
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            if (_canReviewProperties)
+            {
+                var deletionTask = PropertyDeletions.GetPendingAsync();
+                var mergeTask = PropertyMerges.GetPendingAsync();
+                await Task.WhenAll(deletionTask, mergeTask);
+
+                var (deletions, deletionError) = await deletionTask;
+                if (deletions is not null)
+                    _propertyDeletionRequests = deletions
+                        .Where(request => request.Status == MetaGrowPropertyDeletionStatus.Pending)
+                        .ToList();
+                else
+                    AddLoadError("Farm deletion approvals", deletionError);
+
+                var (merges, mergeError) = await mergeTask;
+                if (merges is not null)
+                    _propertyMergeRequests = merges
+                        .Where(request => request.Status == MetaGrowPropertyMergeStatus.Pending)
+                        .ToList();
+                else
+                    AddLoadError("Farm merge approvals", mergeError);
+            }
+
+            if (_canReviewSamples)
+            {
+                var (deletions, deletionError) = await SampleSurveyDeletions.GetPendingAsync();
+                if (deletions is not null)
+                {
+                    _sampleDeletionRequests = deletions
+                        .Where(request => request.Status == MetaGrowSampleSurveyDeletionStatus.Pending)
+                        .Where(request => _canApproveOwnSampleDeletion || !IsOwnSampleRequest(request))
+                        .ToList();
+                }
+                else
+                {
+                    AddLoadError("Sample survey deletion approvals", deletionError);
+                }
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private List<PendingApproval> BuildPendingApprovals()
+    {
+        var approvals = new List<PendingApproval>();
+        approvals.AddRange(_propertyMergeRequests.Select(request => new PendingApproval(
+            request.Id,
+            ApprovalKind.PropertyMerge,
+            "Farm merge",
+            "farm-merge",
+            $"{request.SourcePropertyName} → {request.TargetPropertyName}",
+            $"Farm {request.SourcePropertyId} into farm {request.TargetPropertyId}",
+            request.RequestedByEmail,
+            request.RequestedUtc,
+            "/farms/duplicates",
+            "Open duplicates",
+            request.LastError,
+            true,
+            false,
+            request)));
+        approvals.AddRange(_propertyDeletionRequests.Select(request => new PendingApproval(
+            request.Id,
+            ApprovalKind.PropertyDeletion,
+            "Farm deletion",
+            "farm-deletion",
+            $"Delete {request.PropertyName}",
+            $"Farm {request.PropertyId}",
+            request.RequestedByEmail,
+            request.RequestedUtc,
+            $"/farms?propertyId={request.PropertyId}",
+            "Open farm",
+            request.LastError,
+            true,
+            false,
+            request)));
+        approvals.AddRange(_sampleDeletionRequests.Select(request =>
+        {
+            var ownRequest = IsOwnSampleRequest(request);
+            return new PendingApproval(
+                request.Id,
+                ApprovalKind.SampleSurveyDeletion,
+                "Sample deletion",
+                "sample-deletion",
+                $"Delete {request.PropertyName} · survey {request.SurveyId}",
+                $"{request.SurveyDate:dd MMM yyyy} · {request.SampleCount} {(request.SampleCount == 1 ? "sample" : "samples")} · {LabResultQueueText(request)}",
+                request.RequestedByEmail,
+                request.RequestedUtc,
+                $"/surveys/samples/{request.SurveyId}/edit",
+                "Open survey",
+                request.LastError,
+                !ownRequest,
+                ownRequest,
+                request);
+        }));
+        return approvals.OrderBy(approval => approval.RequestedUtc).ToList();
+    }
+
+    private static bool IsOwnSampleRequest(MetaGrowSampleSurveyDeletionDto request) =>
+        request.IsRequestedByCurrentUser;
+
+    private Task ReviewMergeAsync(PendingApproval approval) =>
+        approval.Request is MetaGrowPropertyMergeRequestDto request
+            ? _mergeDialog?.OpenAsync(request) ?? Task.CompletedTask
+            : Task.CompletedTask;
+
+    private async Task MergeCompletedAsync()
+    {
+        await LoadApprovalsAsync();
+        ShowToast("Farm merge completed", "The farms were merged and the approval request was completed.", ToastRenderStyle.Success);
+    }
+
+    private async Task ApproveDeletionAsync(PendingApproval approval)
+    {
+        if (_confirm is null || _busyApprovalId is not null) return;
+
+        var confirmed = approval.Request switch
+        {
+            MetaGrowPropertyDeletionDto request => await _confirm.ShowAsync(
+                $"Approve the request from {request.RequestedByEmail} and permanently delete {request.PropertyName} (farm {request.PropertyId})? The live safety check will run again first.",
+                "Approve farm deletion",
+                "Approve and delete",
+                true),
+            MetaGrowSampleSurveyDeletionDto request => await _confirm.ShowAsync(
+                $"Permanently delete Sample survey {request.SurveyId} for {request.PropertyName}?{LabResultPreservationText(request)} Live safety and concurrency checks will run again first.",
+                "Approve Sample survey deletion",
+                "Approve and delete",
+                true),
+            _ => false
+        };
+        if (!confirmed) return;
+
+        _busyApprovalId = approval.Id;
+        _busyMessage = "Approving and deleting...";
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            switch (approval.Request)
+            {
+                case MetaGrowPropertyDeletionDto request:
+                    var (property, propertyError) = await PropertyDeletions.ApproveAsync(request.Id);
+                    if (property is null)
+                    {
+                        ShowToast("Farm deletion failed", propertyError ?? "The farm deletion could not be approved.", ToastRenderStyle.Danger);
+                        await LoadApprovalsAsync();
+                        return;
+                    }
+                    ShowToast("Farm deleted", $"{property.PropertyName} was deleted.", ToastRenderStyle.Success);
+                    break;
+
+                case MetaGrowSampleSurveyDeletionDto request:
+                    var (survey, surveyError) = await SampleSurveyDeletions.ApproveAsync(request.Id);
+                    if (survey is null)
+                    {
+                        ShowToast("Survey deletion failed", surveyError ?? "The Sample survey deletion could not be approved.", ToastRenderStyle.Danger);
+                        await LoadApprovalsAsync();
+                        return;
+                    }
+                    ShowToast(
+                        "Survey deleted",
+                        $"Sample survey {survey.SurveyId} was deleted.{LabResultCompletionText(survey)}",
+                        ToastRenderStyle.Success);
+                    break;
+            }
+
+            await LoadApprovalsAsync();
+        }
+        finally
+        {
+            _busyApprovalId = null;
+        }
+    }
+
+    private async Task RejectAsync(PendingApproval approval)
+    {
+        if (_confirm is null || _busyApprovalId is not null) return;
+
+        var confirmed = approval.Request switch
+        {
+            MetaGrowPropertyDeletionDto request => await _confirm.ShowAsync(
+                $"Reject deletion of {request.PropertyName} (farm {request.PropertyId})? No farm data will be changed.",
+                "Reject farm deletion",
+                "Reject request"),
+            MetaGrowPropertyMergeRequestDto request => await _confirm.ShowAsync(
+                $"Reject the request to merge {request.SourcePropertyName} into {request.TargetPropertyName}? No farm data will be changed.",
+                "Reject farm merge",
+                "Reject request"),
+            MetaGrowSampleSurveyDeletionDto request => await _confirm.ShowAsync(
+                $"Reject deletion of Sample survey {request.SurveyId}? No survey data will be changed.",
+                "Reject Sample survey deletion",
+                "Reject request"),
+            _ => false
+        };
+        if (!confirmed) return;
+
+        _busyApprovalId = approval.Id;
+        _busyMessage = "Rejecting request...";
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var (completed, error) = approval.Request switch
+            {
+                MetaGrowPropertyDeletionDto request => await RejectPropertyDeletionAsync(request),
+                MetaGrowPropertyMergeRequestDto request => await RejectPropertyMergeAsync(request),
+                MetaGrowSampleSurveyDeletionDto request => await RejectSampleDeletionAsync(request),
+                _ => (false, "This approval type is not supported.")
+            };
+
+            if (!completed)
+            {
+                ShowToast("Request could not be rejected", error ?? "The approval request could not be rejected.", ToastRenderStyle.Danger);
+                await LoadApprovalsAsync();
+                return;
+            }
+
+            await LoadApprovalsAsync();
+            ShowToast("Request rejected", "The request was rejected and no farm or survey data was changed.", ToastRenderStyle.Success);
+        }
+        finally
+        {
+            _busyApprovalId = null;
+        }
+    }
+
+    private async Task CancelAsync(PendingApproval approval)
+    {
+        if (_confirm is null || _busyApprovalId is not null || approval.Request is not MetaGrowSampleSurveyDeletionDto request)
+            return;
+        if (!await _confirm.ShowAsync(
+                $"Cancel your deletion request for Sample survey {request.SurveyId}? No survey data will be changed.",
+                "Cancel Sample survey deletion",
+                "Cancel request")) return;
+
+        _busyApprovalId = approval.Id;
+        _busyMessage = "Cancelling request...";
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            var (cancelled, error) = await SampleSurveyDeletions.CancelAsync(request.Id);
+            if (cancelled is null)
+            {
+                ShowToast("Request could not be cancelled", error ?? "The Sample survey deletion request could not be cancelled.", ToastRenderStyle.Danger);
+                await LoadApprovalsAsync();
+                return;
+            }
+
+            await LoadApprovalsAsync();
+            ShowToast("Request cancelled", $"Deletion request for Sample survey {cancelled.SurveyId} was cancelled.", ToastRenderStyle.Success);
+        }
+        finally
+        {
+            _busyApprovalId = null;
+        }
+    }
+
+    private async Task<(bool Completed, string? Error)> RejectPropertyDeletionAsync(MetaGrowPropertyDeletionDto request)
+    {
+        var (result, error) = await PropertyDeletions.RejectAsync(request.Id);
+        return (result is not null, error);
+    }
+
+    private async Task<(bool Completed, string? Error)> RejectPropertyMergeAsync(MetaGrowPropertyMergeRequestDto request)
+    {
+        var (result, error) = await PropertyMerges.RejectAsync(request.Id);
+        return (result is not null, error);
+    }
+
+    private async Task<(bool Completed, string? Error)> RejectSampleDeletionAsync(MetaGrowSampleSurveyDeletionDto request)
+    {
+        var (result, error) = await SampleSurveyDeletions.RejectAsync(request.Id);
+        return (result is not null, error);
+    }
+
+    private static string LabResultPreservationText(MetaGrowSampleSurveyDeletionDto request) =>
+        request.LinkedLabResultCount > 0
+            ? request.DeleteLinkedLabResults
+                ? $" Its {request.LinkedLabResultCount:N0} linked lab result {(request.LinkedLabResultCount == 1 ? "row will also" : "rows will also")} be permanently deleted."
+                : $" Its {request.LinkedLabResultCount:N0} linked lab result {(request.LinkedLabResultCount == 1 ? "row will" : "rows will")} be retained and returned to unlinked lab data."
+            : string.Empty;
+
+    private static string LabResultCompletionText(MetaGrowSampleSurveyDeletionDto request) =>
+        request.LinkedLabResultCount > 0
+            ? request.DeleteLinkedLabResults
+                ? $" {request.LinkedLabResultCount:N0} linked lab result {(request.LinkedLabResultCount == 1 ? "row was" : "rows were")} permanently deleted."
+                : $" {request.LinkedLabResultCount:N0} lab result {(request.LinkedLabResultCount == 1 ? "row was" : "rows were")} retained and unlinked."
+            : string.Empty;
+
+    private static string LabResultQueueText(MetaGrowSampleSurveyDeletionDto request) =>
+        request.LinkedLabResultCount == 0
+            ? "no linked lab results"
+            : $"{request.LinkedLabResultCount:N0} linked lab results · lab data will be {(request.DeleteLinkedLabResults ? "deleted" : "retained")}";
+
+    private void AddLoadError(string queueName, string? error)
+    {
+        var detail = error ?? "The queue could not be loaded.";
+        _loadErrors.Add($"{queueName}: {detail}");
+        ShowToast($"{queueName} unavailable", detail, ToastRenderStyle.Danger);
+    }
+
+    private void ShowToast(string title, string text, ToastRenderStyle style) => ToastService.ShowToast(new ToastOptions
+    {
+        ProviderName = "DashboardApprovalMessages",
+        Title = title,
+        Text = text,
+        RenderStyle = style,
+        DisplayTime = TimeSpan.FromSeconds(10)
+    });
+}

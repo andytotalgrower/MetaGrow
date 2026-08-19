@@ -13,24 +13,24 @@
 @inject IJSRuntime JS
 @inject IToastNotificationService ToastService
 
-<PageTitle>Historical soil data | MetaGrow</PageTitle>
+<PageTitle>Legacy soil data | MetaGrow</PageTitle>
 
 <DxToastProvider Name="HistoricalSoilMessages" MaxToastCount="4"
                  AnimationType="ToastAnimationType.Slide"
                  HorizontalAlignment="HorizontalAlignment.Right"
                  StickToViewport="true"
-                 DisplayTime="TimeSpan.FromSeconds(5)"
+                 DisplayTime="TimeSpan.FromSeconds(10)"
                  Width="400px" />
 
 <div class="historical-soil-page">
     <div class="title">
-        <div class="title-header-text">Historical soil data</div>
+        <div class="title-header-text">Legacy soil data</div>
         <div class="title-content-text">Clean up returned Soil results that pre-date the Sample survey workflow.</div>
     </div>
     <nav class="sample-nav" aria-label="Sample survey area">
         <a href="/surveys/samples">Surveys</a>
         <a href="/surveys/samples/lab-results">Lab results</a>
-        <a class="active" href="/surveys/samples/lab-results/historical">Historical data</a>
+        <a class="active" href="/surveys/samples/lab-results/historical">Legacy data</a>
         <span class="disabled">Import activity</span>
     </nav>
 
@@ -106,11 +106,11 @@
 
     @if (_loading)
     {
-        <div class="loading-state"><DxWaitIndicator Visible="true" /><span>Loading historical Soil data…</span></div>
+        <div class="loading-state"><DxWaitIndicator Visible="true" /><span>Loading legacy Soil data…</span></div>
     }
     else if (!string.IsNullOrWhiteSpace(_loadError))
     {
-        <div class="alert alert-danger"><strong>Historical Soil data could not be loaded.</strong> @_loadError</div>
+        <div class="alert alert-danger"><strong>Legacy Soil data could not be loaded.</strong> @_loadError</div>
     }
     else if (FilteredGroups.Count == 0)
     {
@@ -140,12 +140,12 @@
                             <span class="mapping-badge @(isReady ? "mapped" : "attention")">@(isReady ? "Ready" : group.IsFullyMapped ? "Review date" : $"{group.MappedResultCount}/{group.ResultCount}")</span>
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
-                    <DxGridDataColumn Caption="Action" Width="145px" AllowSort="false">
+                    <DxGridDataColumn Caption="Action" Width="140px" AllowSort="false">
                         <CellDisplayTemplate Context="cell">
                             @{ var group = (HistoricalSoilResultGroupDto)cell.DataItem; }
                             <DxButton Text="Generate survey" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Primary"
                                       RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(group.IsFullyMapped && group.HasSingleEffectiveSurveyDate && !_busy)"
-                                      Click="@(() => OpenGeneration(group))" />
+                                      CssClass="mg-grid-action-button" Click="@(() => OpenGeneration(group))" />
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
                 </Columns>
@@ -690,7 +690,7 @@
 
         _groups = groups ?? [];
         SyncCropTypeSelections();
-        if (groups is null) _loadError = TgsApi.ErrorMessage ?? "Historical Soil data could not be loaded.";
+        if (groups is null) _loadError = TgsApi.ErrorMessage ?? "Legacy Soil data could not be loaded.";
         return true;
     }
 
@@ -790,6 +790,10 @@
                                 NullText="Select the actual crop" AllowUserInput="false"
                                 SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
                                 Enabled="@(!_busy && _crops.Count > 0)" />
+                    @if (GetSuggestedCropName(group) is { } suggestedCropName)
+                    {
+                        <small class="batch-crop-suggestion">Suggested crop: @suggestedCropName</small>
+                    }
                 </div>
                 <div class="batch-crop-action">
                     <DxButton SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Secondary"
@@ -812,10 +816,10 @@
         }
         @if (group.HasMixedProperties) { <div class="batch-warning">This batch currently resolves to more than one property. It cannot be generated as one survey; review its mappings first.</div> }
         @if (!group.HasSingleEffectiveSurveyDate) { <div class="batch-warning">@EffectiveSurveyDateError(group)</div> }
-        <div class="detail-table-wrap"><table><thead><tr><th>Order</th><th>Lab field</th><th>Raw crop</th><th>Property</th><th>Canonical block</th><th>Test</th><th>Status</th></tr></thead><tbody>
+        <div class="detail-table-wrap"><table><thead><tr><th>Order</th><th>Lab field</th><th>Raw crop</th><th>Property</th><th>Canonical block</th><th>Status</th></tr></thead><tbody>
         @foreach (var result in group.Results)
         {
-            <tr><td>@Display(result.OrderNo)</td><td>@Display(result.RawFieldReference)</td><td>@Display(result.RawCropName)</td><td>@(result.IsPropertyMapped ? result.PropertyName : "Not mapped")</td><td>@(result.IsBlockMapped ? $"{result.BlockName} · {result.BlockType}" : "Not mapped")</td><td>@Display(result.LabTestName ?? result.LabTestCode)</td><td>@if (result.IsMapped) { <span class="row-ready">Ready</span> } else { <span class="row-needs-mapping">Needs mapping</span> }</td></tr>
+            <tr><td>@Display(result.OrderNo)</td><td>@Display(result.RawFieldReference)</td><td>@Display(result.RawCropName)</td><td>@(result.IsPropertyMapped ? result.PropertyName : "Not mapped")</td><td>@(result.IsBlockMapped ? $"{result.BlockName} · {result.BlockType}" : "Not mapped")</td><td>@if (result.IsMapped) { <span class="row-ready">Ready</span> } else { <span class="row-needs-mapping">Needs mapping</span> }</td></tr>
         }
         </tbody></table></div>
     </div>;
@@ -832,6 +836,18 @@
 
     private int GetCropTypeSelection(HistoricalSoilResultGroupDto group) =>
         _cropTypeSelections.TryGetValue(group.GroupKey, out var cropTypeId) ? cropTypeId : group.CropTypeId ?? 0;
+
+    private string? GetSuggestedCropName(HistoricalSoilResultGroupDto group)
+    {
+        if (GetCropTypeSelection(group) > 0 || group.MissingCropTypeCount == 0) return null;
+
+        return group.Results
+            .FirstOrDefault(result =>
+                result.IsBlockMapped &&
+                result.CanonicalCropTypeId > 0 &&
+                !string.IsNullOrWhiteSpace(result.CanonicalCropTypeName))
+            ?.CanonicalCropTypeName?.Trim();
+    }
 
     private void SetCropTypeSelection(HistoricalSoilResultGroupDto group, int cropTypeId) =>
         _cropTypeSelections[group.GroupKey] = cropTypeId;
@@ -853,7 +869,7 @@
         var accessToken = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
         if (string.IsNullOrWhiteSpace(accessToken))
         {
-            ShowToast("Session expired", "Sign in again before changing historical Soil data.", ToastRenderStyle.Danger);
+            ShowToast("Session expired", "Sign in again before changing legacy Soil data.", ToastRenderStyle.Danger);
             return;
         }
 
@@ -1341,7 +1357,7 @@
         var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var token = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
         if (!string.IsNullOrWhiteSpace(token)) return token;
-        _dialogError = "Your session has expired. Sign in again before changing historical Soil data.";
+        _dialogError = "Your session has expired. Sign in again before changing legacy Soil data.";
         return null;
     }
 
@@ -1370,7 +1386,7 @@
             Title = title,
             Text = message,
             RenderStyle = renderStyle,
-            DisplayTime = TimeSpan.FromSeconds(5)
+            DisplayTime = TimeSpan.FromSeconds(10)
         });
     }
     private static bool Contains(string? source, string? value) => !string.IsNullOrWhiteSpace(source) && !string.IsNullOrWhiteSpace(value) && source.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase);

@@ -15,11 +15,17 @@ public sealed class SampleSurveyDeletionApiClient(
     public Task<(MetaGrowSampleSurveyDeletionDto[]?, string?)> GetPendingAsync() =>
         SendAuthenticated<MetaGrowSampleSurveyDeletionDto[]>(HttpMethod.Get, "sample-survey-deletions/pending");
 
-    public Task<(MetaGrowSampleSurveyDeletionDto?, string?)> RequestAsync(int surveyId) =>
+    public Task<(MetaGrowSampleSurveyDeletionDto?, string?)> RequestAsync(
+        int surveyId,
+        bool deleteLinkedLabResults = false) =>
         SendAuthenticated<MetaGrowSampleSurveyDeletionDto>(
             HttpMethod.Post,
             "sample-survey-deletions",
-            new MetaGrowSampleSurveyDeletionCreateRequest { SurveyId = surveyId });
+            new MetaGrowSampleSurveyDeletionCreateRequest
+            {
+                SurveyId = surveyId,
+                DeleteLinkedLabResults = deleteLinkedLabResults
+            });
 
     public Task<(MetaGrowSampleSurveyDeletionDto?, string?)> ApproveAsync(Guid id, string? note = null) =>
         SendAuthenticated<MetaGrowSampleSurveyDeletionDto>(
@@ -32,6 +38,11 @@ public sealed class SampleSurveyDeletionApiClient(
             HttpMethod.Post,
             $"sample-survey-deletions/{id}/reject",
             new MetaGrowSampleSurveyDeletionReviewRequest { Note = note });
+
+    public Task<(MetaGrowSampleSurveyDeletionDto?, string?)> CancelAsync(Guid id) =>
+        SendAuthenticated<MetaGrowSampleSurveyDeletionDto>(
+            HttpMethod.Post,
+            $"sample-survey-deletions/{id}/cancel");
 
     private async Task<(T?, string?)> SendAuthenticated<T>(HttpMethod method, string path, object? body = null)
     {

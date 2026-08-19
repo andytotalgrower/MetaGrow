@@ -5,11 +5,6 @@
     padding-bottom: 2rem;
 }
 
-.report-links {
-    display: inline-flex;
-    gap: .65rem;
-}
-
 .filter-panel {
     background: var(--dxds-color-surface-neutral-subdued-rest);
     border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
@@ -57,8 +52,6 @@
 
 .empty-state { flex-direction: column; }
 .empty-state span { color: var(--dxds-color-content-neutral-subdued-rest); text-align: center; }
-::deep .banana-grid a { color: var(--mg-link, #0d8ecb); }
-
 .status-badge {
     background: var(--mg-blue-0, #e5f4fb);
     border-radius: 999px;

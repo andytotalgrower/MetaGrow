@@ -79,6 +79,51 @@ html, body {
     width: 100%;
 }
 
+/* ---- Compact actions shared by data grids ---- */
+
+.mg-grid-actions {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.3rem;
+    white-space: nowrap;
+}
+
+.mg-grid-link {
+    align-items: center;
+    background: var(--dxds-color-surface-neutral-subdued-rest);
+    border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
+    border-radius: 0.3rem;
+    box-sizing: border-box;
+    color: var(--mg-link, #0d8ecb);
+    display: inline-flex;
+    font-size: 0.72rem;
+    font-weight: 650;
+    justify-content: center;
+    line-height: 1.15;
+    min-height: 1.55rem;
+    padding: 0.16rem 0.4rem;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.mg-grid-link:hover {
+    background: var(--dxds-color-surface-neutral-default-hovered);
+    color: var(--mg-link, #0d8ecb);
+    text-decoration: none;
+}
+
+.mg-grid-link:focus-visible {
+    outline: 2px solid var(--mg-blue, #007cba);
+    outline-offset: 1px;
+}
+
+.mg-grid-action-button {
+    font-size: 0.72rem;
+    line-height: 1.15;
+    padding: 0.16rem 0.4rem;
+    white-space: nowrap;
+}
+
 /* ---- Account/auth page layout (MetaSales pattern) ---- */
 
 .block-content {

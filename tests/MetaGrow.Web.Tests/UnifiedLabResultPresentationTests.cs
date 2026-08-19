@@ -31,6 +31,7 @@ public class UnifiedLabResultPresentationTests
 
         Assert.Equal("Tissue", row.ResultType);
         Assert.Equal("/surveys/samples/45/edit", row.SurveyUrl);
+        Assert.Equal("Survey #45", row.SurveyLabel);
         Assert.Contains("N 2.50", row.KeyResults);
     }
 

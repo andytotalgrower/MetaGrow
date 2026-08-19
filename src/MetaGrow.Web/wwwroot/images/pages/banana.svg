@@ -1,0 +1,6 @@
+<!-- Banana. Monochrome silhouette drawn to match the 16x16 grid and weight of the
+     Bootstrap Icons set. No width/height so it scales to the .icon mask box. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+  <path d="M11.6 3.4C13.6 7.2 12.8 11.4 9.4 13.2C7.2 14.4 4.4 14.4 2 13.4C5.2 12 7.6 10 9 7.4C9.8 5.8 10.1 4.4 10 3.1Z"/>
+  <path d="M9.8 2.9L11.7 3.5L12.25 1.35C12.4 0.9 12.15 0.5 11.7 0.4C11.3 0.3 10.9 0.5 10.8 0.9Z"/>
+</svg>

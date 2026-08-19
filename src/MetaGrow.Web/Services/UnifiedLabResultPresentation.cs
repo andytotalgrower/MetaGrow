@@ -130,5 +130,5 @@ public static class UnifiedLabResultPresentation
         sampleSurveyId > 0 ? $"/surveys/samples/{sampleSurveyId}/edit" : null;
 
     private static string? SampleSurveyLabel(int sampleSurveyId) =>
-        sampleSurveyId > 0 ? $"Sample #{sampleSurveyId}" : null;
+        sampleSurveyId > 0 ? $"Survey #{sampleSurveyId}" : null;
 }

@@ -19,14 +19,14 @@
     </div>
 
     <section aria-labelledby="work-areas-heading">
-        <h2 id="work-areas-heading">Work areas</h2>
-        <p class="section-intro">Choose an area to open its dashboard and dedicated search.</p>
+        <h2 id="work-areas-heading">My Hub</h2>
+        <p class="section-intro">Choose a work area to open its dashboard and related pages.</p>
         <div class="tiles">
             <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)">
                 <IndexTile NavigateUrl="/surveys/multicrop" Title="Multi-crop surveys" Description="Find surveys and open online or printable reports." IconCssClass="icon-chart" />
-                <IndexTile NavigateUrl="/surveys/banana" Title="Banana surveys" Description="Open the dedicated banana survey dashboard." IconCssClass="icon-basic-form" />
+                <IndexTile NavigateUrl="/surveys/banana" Title="Banana surveys" Description="Open the dedicated banana survey dashboard." IconCssClass="icon-banana" />
             </AuthorizeView>
-            <IndexTile NavigateUrl="/surveys/samples" Title="Sample surveys" Description="Find surveys, returned lab data and imports in one work area." IconCssClass="icon-demos" />
+            <IndexTile NavigateUrl="/surveys/samples" Title="Sample surveys" Description="Find surveys, returned lab data and imports in one work area." IconCssClass="icon-flask" />
             <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager)">
                 <IndexTile NavigateUrl="/farms" Title="Farm setup" Description="Maintain properties, growers and blocks." IconCssClass="icon-editable-grid" />
             </AuthorizeView>
@@ -139,13 +139,13 @@
                             </DxGridDataColumn>
                             <DxGridDataColumn FieldName="@nameof(IncompleteSurveySummaryDto.LastModified)" Caption="Modified" Width="110px" DisplayFormat="dd/MM/yyyy" />
                             <DxGridDataColumn FieldName="@nameof(IncompleteSurveySummaryDto.PhotoCount)" Caption="Photos" Width="75px" />
-                            <DxGridDataColumn Caption="Actions" Width="180px" AllowSort="false">
+                            <DxGridDataColumn Caption="Actions" Width="155px" AllowSort="false">
                                 <CellDisplayTemplate Context="cell">
                                     @{ var survey = (IncompleteSurveySummaryDto)cell.DataItem; }
-                                    <div class="queue-links">
-                                        <a class="queue-edit-link" href="@IncompleteSurveyNavigation.EditUrl(survey)">Edit</a>
-                                        <a href="@IncompleteSurveyNavigation.OnlineReportUrl(survey)">Online</a>
-                                        <a href="@IncompleteSurveyNavigation.PrintReportUrl(survey)">Print</a>
+                                    <div class="mg-grid-actions">
+                                        <a class="mg-grid-link" href="@IncompleteSurveyNavigation.EditUrl(survey)">Edit</a>
+                                        <a class="mg-grid-link" href="@IncompleteSurveyNavigation.OnlineReportUrl(survey)">Online</a>
+                                        <a class="mg-grid-link" href="@IncompleteSurveyNavigation.PrintReportUrl(survey)">Print</a>
                                     </div>
                                 </CellDisplayTemplate>
                             </DxGridDataColumn>
@@ -183,8 +183,12 @@
     </section>
     </AuthorizeView>
 
+    <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Accountant)">
+        <DashboardApprovals />
+    </AuthorizeView>
+
     <div class="release-note">
-        <strong>Current phase:</strong> Multi-crop and banana workflows, farm setup and controlled property management are available. Sample survey search and returned Soil-data navigation are now being introduced; editing, importing and reporting will follow.
+        <strong>Current phase:</strong> To be defined.
     </div>
 </div>
 

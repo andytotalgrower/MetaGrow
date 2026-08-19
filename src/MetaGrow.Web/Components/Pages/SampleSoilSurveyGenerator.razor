@@ -17,7 +17,7 @@
 <DxToastProvider Name="SampleSurveyGenerationMessages" MaxToastCount="3"
                  AnimationType="ToastAnimationType.Slide"
                  HorizontalAlignment="HorizontalAlignment.Right"
-                 StickToViewport="true" DisplayTime="TimeSpan.FromSeconds(5)" Width="410px" />
+                 StickToViewport="true" DisplayTime="TimeSpan.FromSeconds(10)" Width="410px" />
 
 <div class="generation-page">
     <div class="generation-toolbar">
@@ -28,7 +28,7 @@
         <div>
             <span class="generation-kicker">Returned laboratory data</span>
             <h1>Generate Sample surveys from CSV</h1>
-            <p>Create the surveys, collected samples and linked Soil results from one returned laboratory file.</p>
+            <p>Create the surveys, collected samples and linked @ResultTypeName results from one returned laboratory file.</p>
         </div>
         <div class="hero-safety">
             <span>Preview first</span>
@@ -51,7 +51,7 @@
             <div class="receipt-copy">
                 <span class="generation-kicker">Generation complete</span>
                 <h2 id="generation-receipt-heading">@_receipt.Surveys.Count Sample survey@(_receipt.Surveys.Count == 1 ? string.Empty : "s") created</h2>
-                <p>@_receipt.ImportedRowCount Soil results from @_receipt.FileName · @_receipt.PropertyName</p>
+                <p>@_receipt.ImportedRowCount @_receipt.ResultTypeName results from @_receipt.FileName · @_receipt.PropertyName</p>
                 <small>@_receipt.ImportedUtc.ToLocalTime().ToString("dd MMM yyyy h:mm tt") by @_receipt.ImportedBy</small>
             </div>
             <div class="generated-surveys">
@@ -61,7 +61,7 @@
                         Survey @survey.SurveyId <span>@survey.SurveyDate.ToString("dd MMM yyyy") · @survey.ImportedRowCount result@(survey.ImportedRowCount == 1 ? string.Empty : "s")</span>
                     </a>
                 }
-                <DxButton Text="Generate another file" RenderStyle="ButtonRenderStyle.Primary" Click="ResetAll" />
+                <DxButton Text="Generate from another file" RenderStyle="ButtonRenderStyle.Primary" Click="ResetAll" />
             </div>
         </section>
     }
@@ -72,7 +72,7 @@
                 <span class="step-number">1</span>
                 <div>
                     <h2 id="generation-setup-heading">Choose the destination</h2>
-                    <p>The selected farm and agronomist will be used for every survey generated from this file.</p>
+                    <p>The selected farm, agronomist and result family will be used for every survey generated from this file.</p>
                 </div>
             </div>
             <div class="setup-grid">
@@ -92,16 +92,27 @@
                                 SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
                                 ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" Enabled="@(!_uploading && !_committing)" />
                 </div>
+                <div class="field">
+                    <label for="generation-result-type">Result family</label>
+                    <DxComboBox Id="generation-result-type" Data="@ResultTypeOptions" @bind-Value="_resultTypeId" @bind-Value:after="SelectionChanged"
+                                TextFieldName="@nameof(ResultTypeOption.Name)" ValueFieldName="@nameof(ResultTypeOption.Id)"
+                                AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never"
+                                Enabled="@(!_uploading && !_committing)" />
+                    @if (_resultTypeId is SampleLaboratoryResultType.QuickSoil or SampleLaboratoryResultType.Sap)
+                    {
+                        <small>Quick Soil and Sap results use Multi-crop blocks.</small>
+                    }
+                </div>
             </div>
 
             <div id="generation-csv-drop-zone" class="csv-drop-zone @(_uploading ? "busy" : string.Empty) @(!CanUpload ? "disabled" : string.Empty)">
                 <span class="drop-icon" aria-hidden="true">⇧</span>
-                <strong>Drag and drop one returned Soil CSV here</strong>
-                <span>@(CanUpload ? "or select it from your device" : "Select a farm and agronomist first")</span>
+                <strong>Drag and drop one returned @ResultTypeName CSV here</strong>
+                <span>@(CanUpload ? "or select it from your device" : "Select a farm, agronomist and result family first")</span>
                 <DxButton Id="generationCsvSelectButton" Text="@(_uploading ? "Reading CSV…" : "Select CSV")"
                           RenderStyle="ButtonRenderStyle.Primary" Enabled="@(CanUpload && !_uploading && !_committing)" />
                 @if (_uploading) { <DxWaitIndicator Visible="true" /> }
-                <small>Soil CSV only · maximum 20 MB · nothing is written during preview</small>
+                <small>@ResultTypeName CSV · maximum 20 MB · nothing is written during preview</small>
             </div>
             <DxFileInput @ref="_fileInput"
                          ExternalDropZoneCssSelector="#generation-csv-drop-zone"
@@ -176,7 +187,7 @@
                     {
                         <article class="survey-date-card @(group.ExistingSurveyIds.Count > 0 ? "has-existing" : string.Empty)">
                             <div><span>Survey date</span><strong>@group.SurveyDate.ToString("dd MMMM yyyy")</strong></div>
-                            <div><span>Soil results</span><strong>@group.ResultCount</strong></div>
+                            <div><span>@ResultTypeName results</span><strong>@group.ResultCount</strong></div>
                             @if (group.ExistingSurveyIds.Count > 0)
                             {
                                 <div class="existing-surveys"><span>Existing on this date</span><strong>@string.Join(", ", group.ExistingSurveyIds.Select(id => $"#{id}"))</strong></div>
@@ -202,7 +213,7 @@
                             <span class="mapping-arrow" aria-hidden="true">→</span>
                             <div class="mapping-choice">
                                 <label for="@mapping.BlockControlId">Block</label>
-                                <DxComboBox Id="@mapping.BlockControlId" Data="@_blockChoices" @bind-Value="mapping.BlockKey"
+                                <DxComboBox Id="@mapping.BlockControlId" Data="@AvailableBlockChoices" @bind-Value="mapping.BlockKey"
                                             TextFieldName="@nameof(BlockChoice.Label)" ValueFieldName="@nameof(BlockChoice.Key)"
                                             NullText="Select a block" SearchMode="ListSearchMode.AutoSearch"
                                             SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
@@ -221,13 +232,13 @@
                     }
                 </div>
 
-                <div class="result-heading"><h3>Returned result rows</h3><p>These rows will become collected sample items and linked Soil results.</p></div>
+                <div class="result-heading"><h3>Returned result rows</h3><p>These rows will become collected sample items and linked @ResultTypeName results.</p></div>
                 <div class="result-grid-wrap">
                     <DxGrid Data="@_preview.Rows" PageSize="20" HighlightRowOnHover="true" TextWrapEnabled="false"
                             ColumnResizeMode="GridColumnResizeMode.NextColumn" CssClass="generation-preview-grid">
                         <Columns>
                             <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.RowNumber)" Caption="CSV row" Width="82px" />
-                            <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.OrderNo)" Caption="Order no." Width="115px" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.OrderNo)" Caption="Sample ref." Width="115px" />
                             <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.DateReceived)" Caption="Received" Width="112px" DisplayFormat="dd/MM/yyyy" />
                             <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.RawPropertyName)" Caption="Lab Grower" MinWidth="150" />
                             <DxGridDataColumn FieldName="@nameof(SampleSoilSurveyGenerationRowDto.RawBlockName)" Caption="Block name in file" MinWidth="150" />
@@ -259,7 +270,7 @@
         @if (_preview is not null)
         {
             <div class="confirm-content">
-                <p>You are about to create <strong>@_preview.SurveyGroups.Count Sample survey@(_preview.SurveyGroups.Count == 1 ? string.Empty : "s")</strong> for <strong>@_preview.PropertyName</strong>, containing <strong>@_preview.Rows.Count Soil results</strong>.</p>
+                <p>You are about to create <strong>@_preview.SurveyGroups.Count Sample survey@(_preview.SurveyGroups.Count == 1 ? string.Empty : "s")</strong> for <strong>@_preview.PropertyName</strong>, containing <strong>@_preview.Rows.Count @ResultTypeName results</strong>.</p>
                 <p>The surveys will be assigned to <strong>@_preview.AgronomistName</strong>. This operation is atomic and the same file cannot be generated twice for this farm.</p>
                 @if (_preview.SurveyGroups.Any(group => group.ExistingSurveyIds.Count > 0))
                 {
@@ -299,6 +310,13 @@
 @code {
     private const int MaxFileBytes = 20 * 1024 * 1024;
     private static readonly List<string> AcceptedFileTypes = [".csv"];
+    private static readonly List<ResultTypeOption> ResultTypeOptions =
+    [
+        new(SampleLaboratoryResultType.Soil, SampleLaboratoryResultType.Name(SampleLaboratoryResultType.Soil)),
+        new(SampleLaboratoryResultType.Tissue, SampleLaboratoryResultType.Name(SampleLaboratoryResultType.Tissue)),
+        new(SampleLaboratoryResultType.QuickSoil, SampleLaboratoryResultType.Name(SampleLaboratoryResultType.QuickSoil)),
+        new(SampleLaboratoryResultType.Sap, SampleLaboratoryResultType.Name(SampleLaboratoryResultType.Sap))
+    ];
 
     private DxFileInput? _fileInput;
     private List<Property> _properties = [];
@@ -310,6 +328,7 @@
     private SampleSoilSurveyGenerationReceiptDto? _receipt;
     private int _propertyId;
     private int _agronomistId;
+    private int _resultTypeId = SampleLaboratoryResultType.Soil;
     private bool _loading = true;
     private bool _uploading;
     private bool _committing;
@@ -318,7 +337,13 @@
     private string? _loadError;
     private string? _commitError;
 
-    private bool CanUpload => _propertyId > 0 && _agronomistId > 0 && !_loading;
+    private string ResultTypeName => SampleLaboratoryResultType.Name(_resultTypeId);
+    private IReadOnlyList<BlockChoice> AvailableBlockChoices =>
+        _resultTypeId is SampleLaboratoryResultType.QuickSoil or SampleLaboratoryResultType.Sap
+            ? _blockChoices.Where(choice => NormalizeBlockType(choice.MatchBlock.BlockType) == "mcs").ToList()
+            : _blockChoices;
+    private bool CanUpload => _propertyId > 0 && _agronomistId > 0 &&
+        SampleLaboratoryResultType.IsSupported(_resultTypeId) && !_loading;
     private bool CanCommit => _preview?.CanGenerate == true &&
         (!_preview.PropertyNameOverrideRequired || _propertyOverrideAccepted) &&
         !_uploading && !_committing &&
@@ -427,14 +452,14 @@
                 return;
             }
             await using var stream = file.OpenReadStream(MaxFileBytes, file.CancellationTokenSource.Token);
-            _preview = await TgsApi.PreviewSampleSoilSurveyGeneration(_propertyId, _agronomistId, stream, file.Name, file.Type, token);
+            _preview = await TgsApi.PreviewSampleChemistrySurveyGeneration(_propertyId, _agronomistId, _resultTypeId, stream, file.Name, file.Type, token);
             if (_preview is null)
             {
-                ShowToast("Preview failed", TgsApi.ErrorMessage ?? "The Soil CSV could not be previewed.", ToastRenderStyle.Danger);
+                ShowToast("Preview failed", TgsApi.ErrorMessage ?? $"The {ResultTypeName} CSV could not be previewed.", ToastRenderStyle.Danger);
                 return;
             }
             BuildMappingRows();
-            ShowToast("Preview ready", $"{_preview.Rows.Count} Soil results across {_preview.SurveyGroups.Count} survey date(s) were read. No data was changed.",
+            ShowToast("Preview ready", $"{_preview.Rows.Count} {ResultTypeName} results across {_preview.SurveyGroups.Count} survey date(s) were read. No data was changed.",
                 _preview.BlockingErrors.Count == 0 ? ToastRenderStyle.Success : ToastRenderStyle.Warning);
         }
         catch (Exception exception)
@@ -461,11 +486,11 @@
             var suggestedKey = mapping.SuggestedBlockId > 0
                 ? $"{NormalizeBlockType(mapping.SuggestedBlockType)}:{mapping.SuggestedBlockId}"
                 : string.Empty;
-            var choice = _blockChoices.FirstOrDefault(item => item.Key.Equals(suggestedKey, StringComparison.OrdinalIgnoreCase));
+            var choice = AvailableBlockChoices.FirstOrDefault(item => item.Key.Equals(suggestedKey, StringComparison.OrdinalIgnoreCase));
             if (choice is null)
             {
-                var best = Similarity.FindBestMatchingBlock(mapping.RawBlockName, _blockChoices.Select(item => item.MatchBlock));
-                choice = best is null ? null : _blockChoices.FirstOrDefault(item => ReferenceEquals(item.MatchBlock, best));
+                var best = Similarity.FindBestMatchingBlock(mapping.RawBlockName, AvailableBlockChoices.Select(item => item.MatchBlock));
+                choice = best is null ? null : AvailableBlockChoices.FirstOrDefault(item => ReferenceEquals(item.MatchBlock, best));
             }
             var testId = _preview.LabTestTypes.Any(test => test.LabTestTypeId == mapping.SuggestedLabTestTypeId)
                 ? mapping.SuggestedLabTestTypeId
@@ -510,7 +535,7 @@
             var mappings = new List<SampleSoilSurveyGenerationMappingSelectionDto>();
             foreach (var row in _mappingRows)
             {
-                var choice = _blockChoices.FirstOrDefault(item => item.Key == row.BlockKey)
+                var choice = AvailableBlockChoices.FirstOrDefault(item => item.Key == row.BlockKey)
                     ?? throw new InvalidOperationException("Select a block for every block name in the file.");
                 mappings.Add(new SampleSoilSurveyGenerationMappingSelectionDto
                 {
@@ -520,7 +545,7 @@
                     LabTestTypeId = row.LabTestTypeId
                 });
             }
-            _receipt = await TgsApi.CommitSampleSoilSurveyGeneration(new SampleSoilSurveyGenerationCommitRequest
+            _receipt = await TgsApi.CommitSampleChemistrySurveyGeneration(new SampleSoilSurveyGenerationCommitRequest
             {
                 PreviewToken = _preview.PreviewToken,
                 ConfirmPropertyNameMismatch = _propertyOverrideAccepted,
@@ -536,7 +561,7 @@
             _confirmVisible = false;
             _preview = null;
             _mappingRows = [];
-            ShowToast("Sample surveys generated", $"{_receipt.Surveys.Count} surveys and {_receipt.ImportedRowCount} Soil results were committed.", ToastRenderStyle.Success);
+            ShowToast("Sample surveys generated", $"{_receipt.Surveys.Count} surveys and {_receipt.ImportedRowCount} {_receipt.ResultTypeName} results were committed.", ToastRenderStyle.Success);
         }
         catch (Exception exception)
         {
@@ -566,7 +591,7 @@
 
     private void ShowToast(string title, string text, ToastRenderStyle style) => ToastService.ShowToast(new ToastOptions
     {
-        ProviderName = "SampleSurveyGenerationMessages", Title = title, Text = text, RenderStyle = style, DisplayTime = TimeSpan.FromSeconds(5)
+        ProviderName = "SampleSurveyGenerationMessages", Title = title, Text = text, RenderStyle = style, DisplayTime = TimeSpan.FromSeconds(10)
     });
     private void BackToSamples() => Navigation.NavigateTo("/surveys/samples");
     private static string SurveyUrl(int surveyId) => $"/surveys/samples/{surveyId}/edit";
@@ -582,6 +607,7 @@
 
     private sealed record BlockChoice(string Key, string Label, Block MatchBlock);
     private sealed record TestTypeChoice(int Id, string Label);
+    private sealed record ResultTypeOption(int Id, string Name);
     private sealed class MappingRow
     {
         public string BlockControlId { get; init; } = string.Empty;

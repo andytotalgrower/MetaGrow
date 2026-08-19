@@ -16,7 +16,7 @@
         <div class="title-header-text">Lab results</div>
         <div class="title-content-text">Review Soil, Tissue, Quick Soil and Sap data in one place.</div>
     </div>
-    <nav class="sample-nav" aria-label="Sample survey area"><a href="/surveys/samples">Surveys</a><a class="active" href="/surveys/samples/lab-results">Lab results</a><a href="/surveys/samples/lab-results/historical">Historical data</a><span class="disabled">Import activity</span></nav>
+    <nav class="sample-nav" aria-label="Sample survey area"><a href="/surveys/samples">Surveys</a><a class="active" href="/surveys/samples/lab-results">Lab results</a><a href="/surveys/samples/lab-results/historical">Legacy data</a><span class="disabled">Import activity</span></nav>
 
     @if (SurveyId.HasValue)
     {
@@ -88,7 +88,7 @@
                     <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.Reference)" Caption="Field reference" MinWidth="140" />
                     <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.OrderNumber)" Caption="Order / sample" MinWidth="130" />
                     <DxGridDataColumn FieldName="@nameof(UnifiedLabResultRow.KeyResults)" Caption="Key results" MinWidth="230" />
-                    <DxGridDataColumn Caption="Survey" Width="115px" AllowSort="false"><CellDisplayTemplate Context="cell">@{ var row = (UnifiedLabResultRow)cell.DataItem; }@if (row.SurveyUrl is not null) { <a href="@row.SurveyUrl" target="_blank" rel="noopener">@row.SurveyLabel</a> } else { <span class="not-linked">Not linked</span> }</CellDisplayTemplate></DxGridDataColumn>
+                    <DxGridDataColumn Caption="Survey" Width="115px" AllowSort="false"><CellDisplayTemplate Context="cell">@{ var row = (UnifiedLabResultRow)cell.DataItem; }@if (row.SurveyUrl is not null) { <a class="mg-grid-link" href="@row.SurveyUrl" target="_blank" rel="noopener">@row.SurveyLabel</a> } else { <span class="not-linked">Not linked</span> }</CellDisplayTemplate></DxGridDataColumn>
                 </Columns>
             </DxGrid>
         </div>

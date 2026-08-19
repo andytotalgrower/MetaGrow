@@ -11,12 +11,12 @@
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 
-<PageTitle>Import Soil results @SurveyId | MetaGrow</PageTitle>
+<PageTitle>Import @ResultTypeName results @SurveyId | MetaGrow</PageTitle>
 
 <DxToastProvider Name="SampleSoilImportMessages" MaxToastCount="3"
                  AnimationType="ToastAnimationType.Slide"
                  HorizontalAlignment="HorizontalAlignment.Right"
-                 StickToViewport="true" DisplayTime="TimeSpan.FromSeconds(5)" Width="410px" />
+                 StickToViewport="true" DisplayTime="TimeSpan.FromSeconds(10)" Width="410px" />
 
 <div class="soil-import-page">
     <div class="import-toolbar">
@@ -37,7 +37,7 @@
         <header class="import-hero">
             <div>
                 <span class="import-kicker">Sample survey @SurveyId</span>
-                <h1>Import Soil results</h1>
+                <h1>Import @ResultTypeName results</h1>
                 <p>@_editor.PropertyName · @_editor.SurveyDate.ToString("dd MMMM yyyy")</p>
             </div>
             <div class="hero-safety">
@@ -46,13 +46,24 @@
             </div>
         </header>
 
+        <section class="result-type-card" aria-labelledby="result-type-heading">
+            <div>
+                <span class="import-kicker">Result family</span>
+                <h2 id="result-type-heading">Choose what this file contains</h2>
+                <p>Only result types represented by outstanding collected samples are available.</p>
+            </div>
+            <DxComboBox Data="@AvailableResultTypes" @bind-Value="_resultTypeId" @bind-Value:after="ResultTypeChanged"
+                        TextFieldName="@nameof(ResultTypeOption.Name)" ValueFieldName="@nameof(ResultTypeOption.Id)"
+                        AllowUserInput="false" Enabled="@(_preview is null && _receipt is null && !_uploading && !_committing)" />
+        </section>
+
         @if (_receipt is not null)
         {
             <section class="receipt-card" aria-labelledby="receipt-heading">
                 <div class="receipt-icon">✓</div>
                 <div>
                     <span class="import-kicker">Import receipt #@_receipt.ImportId</span>
-                    <h2 id="receipt-heading">@_receipt.ImportedRowCount Soil results imported</h2>
+                    <h2 id="receipt-heading">@_receipt.ImportedRowCount @_receipt.ResultTypeName results imported</h2>
                     <p>@_receipt.FileName · @_receipt.LabName · @_receipt.LabTestName</p>
                     <small>@_receipt.ImportedUtc.ToLocalTime().ToString("dd MMM yyyy h:mm tt") by @_receipt.ImportedBy</small>
                 </div>
@@ -65,15 +76,15 @@
                 <div class="section-heading">
                     <div>
                         <span class="step-number">1</span>
-                        <div><h2 id="upload-heading">Choose the returned Soil CSV</h2><p>The file is parsed using the existing laboratory definitions. Nothing is written during preview.</p></div>
+                        <div><h2 id="upload-heading">Choose the returned @ResultTypeName CSV</h2><p>The file is parsed using the existing laboratory definitions. Nothing is written during preview.</p></div>
                     </div>
                 </div>
-                <div id="soil-csv-drop-zone" class="csv-drop-zone @(_uploading ? "busy" : string.Empty)">
+                <div id="soil-csv-drop-zone" class="csv-drop-zone @(_uploading ? "busy" : string.Empty) @(!CanUpload ? "disabled" : string.Empty)">
                     <span class="drop-icon" aria-hidden="true">⇧</span>
                     <strong>Drag and drop one CSV here</strong>
-                    <span>or select it from your device</span>
+                    <span>@(CanUpload ? "or select it from your device" : "There are no outstanding collected samples for this result family")</span>
                     <DxButton Id="soilCsvSelectButton" Text="@(_uploading ? "Reading CSV..." : "Select CSV")"
-                              RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_uploading && !_committing)" />
+                              RenderStyle="ButtonRenderStyle.Primary" Enabled="@(CanUpload && !_uploading && !_committing)" />
                     @if (_uploading) { <DxWaitIndicator Visible="true" /> }
                     <small>CSV only · maximum 20 MB</small>
                 </div>
@@ -103,7 +114,7 @@
                     <div><span>Survey</span><strong>#@SurveyId · @_preview.PropertyName</strong></div>
                     <div><span>Detected laboratory</span><strong>@_preview.LabName</strong></div>
                     <div><span>Default unmatched test</span><strong>@_preview.LabTestName</strong></div>
-                    <div><span>Order matches</span><strong>@MatchedRows of @_preview.Rows.Count</strong></div>
+                    <div><span>Sample matches</span><strong>@MatchedRows of @_preview.Rows.Count</strong></div>
                 </div>
 
                 @if (_preview.BlockingErrors.Count > 0)
@@ -124,10 +135,10 @@
                 @if (HasUnmatchedRows)
                 {
                     <div class="fallback-test">
-                        <div><label for="fallback-soil-test">Fallback Soil test</label><p>Used only for rows whose order number did not identify one collected sample.</p></div>
+                        <div><label for="fallback-soil-test">Fallback @ResultTypeName test</label><p>Used only for rows whose sample reference did not identify one collected sample.</p></div>
                         <DxComboBox Id="fallback-soil-test" Data="@FallbackTests" @bind-Value="_fallbackLabTestTypeId"
                                     TextFieldName="@nameof(LabTestType.TestName)" ValueFieldName="@nameof(LabTestType.LabTestTypeId)"
-                                    NullText="Select a Soil test" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch"
+                                    NullText="@($"Select a {ResultTypeName} test")" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch"
                                     SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_committing)" />
                     </div>
                 }
@@ -141,7 +152,7 @@
                             <span class="mapping-arrow" aria-hidden="true">→</span>
                             <div class="block-choice">
                                 <label for="@mapping.ControlId">Property block</label>
-                                <DxComboBox Id="@mapping.ControlId" Data="@_blockChoices" @bind-Value="mapping.BlockKey"
+                                <DxComboBox Id="@mapping.ControlId" Data="@AvailableBlockChoices" @bind-Value="mapping.BlockKey"
                                             TextFieldName="@nameof(BlockChoice.Label)" ValueFieldName="@nameof(BlockChoice.Key)"
                                             NullText="Select a block" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch"
                                             SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_committing)" />
@@ -151,17 +162,17 @@
                     }
                 </div>
 
-                <div class="result-heading"><h3>Result rows</h3><p>Order numbers match the returned result to the Android-collected sample where possible.</p></div>
+                <div class="result-heading"><h3>Result rows</h3><p>Sample references match the returned result to the Android-collected sample where possible.</p></div>
                 <div class="result-grid-wrap">
                     <DxGrid Data="@_preview.Rows" PageSize="20" HighlightRowOnHover="true" TextWrapEnabled="false"
                             ColumnResizeMode="GridColumnResizeMode.NextColumn" CssClass="soil-preview-grid">
                         <Columns>
                             <DxGridDataColumn FieldName="@nameof(SampleSoilImportPreviewRowDto.RowNumber)" Caption="CSV row" Width="82px" />
-                            <DxGridDataColumn FieldName="@nameof(SampleSoilImportPreviewRowDto.OrderNo)" Caption="Order no." Width="110px" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSoilImportPreviewRowDto.OrderNo)" Caption="Sample ref." Width="110px" />
                             <DxGridDataColumn FieldName="@nameof(SampleSoilImportPreviewRowDto.DateReceived)" Caption="Received" Width="110px" DisplayFormat="dd/MM/yyyy" />
                             <DxGridDataColumn FieldName="@nameof(SampleSoilImportPreviewRowDto.RawBlockName)" Caption="Lab block" MinWidth="130" />
                             <DxGridDataColumn FieldName="@nameof(SampleSoilImportPreviewRowDto.RawCropName)" Caption="Lab crop" MinWidth="110" />
-                            <DxGridDataColumn FieldName="@nameof(SampleSoilImportPreviewRowDto.LabTestName)" Caption="Soil test" MinWidth="145" />
+                            <DxGridDataColumn FieldName="@nameof(SampleSoilImportPreviewRowDto.LabTestName)" Caption="Test" MinWidth="145" />
                             <DxGridDataColumn Caption="Collected sample" MinWidth="150" AllowSort="false">
                                 <CellDisplayTemplate Context="cell">
                                     @{ var row = (SampleSoilImportPreviewRowDto)cell.DataItem; }
@@ -182,21 +193,21 @@
 
                 <div class="commit-bar">
                     <div><strong>@(_preview.CanImport ? "Ready for final confirmation" : "Resolve the blocked checks before importing")</strong><span>The commit is atomic: either all rows import or none do.</span></div>
-                    <DxButton Text="Import Soil results" RenderStyle="ButtonRenderStyle.Primary" Enabled="@CanCommit" Click="OpenConfirmation" />
+                    <DxButton Text="@($"Import {ResultTypeName} results")" RenderStyle="ButtonRenderStyle.Primary" Enabled="@CanCommit" Click="OpenConfirmation" />
                 </div>
             </section>
         }
     }
 </div>
 
-<DxPopup @bind-Visible="_confirmVisible" HeaderText="Confirm Soil result import" Width="min(560px, 94vw)" CloseOnOutsideClick="@(!_committing)">
+<DxPopup @bind-Visible="_confirmVisible" HeaderText="@($"Confirm {ResultTypeName} result import")" Width="min(560px, 94vw)" CloseOnOutsideClick="@(!_committing)">
     <BodyContentTemplate>
         @if (_preview is not null)
         {
             <div class="confirm-content">
-                <p>You are about to import <strong>@_preview.Rows.Count Soil results</strong> from <strong>@_preview.FileName</strong> into Sample survey <strong>#@SurveyId · @_preview.PropertyName</strong>.</p>
+                <p>You are about to import <strong>@_preview.Rows.Count @ResultTypeName results</strong> from <strong>@_preview.FileName</strong> into Sample survey <strong>#@SurveyId · @_preview.PropertyName</strong>.</p>
                 <p>This writes laboratory result and reusable block-mapping records. It does not create or change collected samples.</p>
-                @if (HasUnmatchedRows) { <div class="review-message warning"><strong>@UnmatchedRows unmatched order number@(UnmatchedRows == 1 ? string.Empty : "s")</strong><span>The selected fallback Soil test will be used.</span></div> }
+                @if (HasUnmatchedRows) { <div class="review-message warning"><strong>@UnmatchedRows unmatched sample reference@(UnmatchedRows == 1 ? string.Empty : "s")</strong><span>The selected fallback @ResultTypeName test will be used.</span></div> }
             </div>
         }
     </BodyContentTemplate>
@@ -214,6 +225,7 @@
     private const int MaxFileBytes = 20 * 1024 * 1024;
     private static readonly List<string> AcceptedFileTypes = [".csv"];
     [Parameter] public int SurveyId { get; set; }
+    [SupplyParameterFromQuery(Name = "type")] public string? RequestedResultType { get; set; }
 
     private DxFileInput? _fileInput;
     private SampleSurveyEditorDto? _editor;
@@ -227,12 +239,36 @@
     private bool _confirmVisible;
     private string? _error;
     private int _fallbackLabTestTypeId;
+    private int _resultTypeId = SampleLaboratoryResultType.Soil;
+
+    private sealed record ResultTypeOption(int Id, string Name);
+    private string ResultTypeName => SampleLaboratoryResultType.Name(_resultTypeId);
+    private IReadOnlyList<ResultTypeOption> AvailableResultTypes
+    {
+        get
+        {
+            if (_editor is null) return [];
+            var ids = _editor.Samples
+                .Where(item => item.LabId != 6 && item.LabStatusId < 100)
+                .Select(item => _editor.LabTestTypes.FirstOrDefault(test => test.LabTestTypeId == item.TestTypeId)?.TestTypeId ?? 0)
+                .Where(SampleLaboratoryResultType.IsSupported)
+                .Distinct()
+                .OrderBy(id => id)
+                .ToList();
+            return ids.Select(id => new ResultTypeOption(id, SampleLaboratoryResultType.Name(id))).ToList();
+        }
+    }
 
     private int MatchedRows => _preview?.Rows.Count(row => row.SampleItemId.HasValue) ?? 0;
     private int UnmatchedRows => _preview?.Rows.Count(row => !row.SampleItemId.HasValue) ?? 0;
     private bool HasUnmatchedRows => UnmatchedRows > 0;
+    private bool CanUpload => AvailableResultTypes.Any(option => option.Id == _resultTypeId);
+    private IReadOnlyList<BlockChoice> AvailableBlockChoices =>
+        _resultTypeId is SampleLaboratoryResultType.QuickSoil or SampleLaboratoryResultType.Sap
+            ? _blockChoices.Where(choice => NormalizeBlockType(choice.MatchBlock.BlockType) == "mcs").ToList()
+            : _blockChoices;
     private IReadOnlyList<LabTestType> FallbackTests => _editor?.LabTestTypes
-        .Where(test => _preview is not null && test.LabId == _preview.LabId && test.TestTypeId == 10)
+        .Where(test => _preview is not null && test.LabId == _preview.LabId && test.TestTypeId == _resultTypeId)
         .OrderBy(test => test.TestName).ToList() ?? [];
     private bool CanCommit => _preview?.CanImport == true && !_committing && !_uploading &&
         _mappingRows.Count > 0 && _mappingRows.All(row => !string.IsNullOrWhiteSpace(row.BlockKey)) &&
@@ -246,13 +282,21 @@
         _receipt = null;
         _editor = await TgsApi.GetSampleSurveyEditor(SurveyId);
         if (_editor is null) _error = TgsApi.ErrorMessage ?? "The Sample survey could not be loaded.";
-        else BuildBlockChoices();
+        else
+        {
+            BuildBlockChoices();
+            var requestedTypeId = SampleLaboratoryResultType.FromSlug(RequestedResultType);
+            var options = AvailableResultTypes;
+            _resultTypeId = options.Any(option => option.Id == requestedTypeId)
+                ? requestedTypeId
+                : options.FirstOrDefault()?.Id ?? SampleLaboratoryResultType.Soil;
+        }
         _loading = false;
     }
 
     private async Task PreviewFilesAsync(FilesUploadingEventArgs args)
     {
-        if (_editor is null || args.Files.Count != 1) return;
+        if (_editor is null || !CanUpload || args.Files.Count != 1) return;
         _uploading = true;
         _preview = null;
         _receipt = null;
@@ -269,19 +313,19 @@
             var token = await ApiTokens.GetAccessTokenAsync(state.User);
             if (string.IsNullOrWhiteSpace(token))
             {
-                ShowToast("Session expired", "Sign in again before importing Soil results.", ToastRenderStyle.Danger);
+                ShowToast("Session expired", $"Sign in again before importing {ResultTypeName} results.", ToastRenderStyle.Danger);
                 return;
             }
             await using var stream = file.OpenReadStream(MaxFileBytes, file.CancellationTokenSource.Token);
-            _preview = await TgsApi.PreviewSampleSoilImport(SurveyId, stream, file.Name, file.Type, token);
+            _preview = await TgsApi.PreviewSampleChemistryImport(SurveyId, _resultTypeId, stream, file.Name, file.Type, token);
             if (_preview is null)
             {
-                ShowToast("Preview failed", TgsApi.ErrorMessage ?? "The Soil CSV could not be previewed.", ToastRenderStyle.Danger);
+                ShowToast("Preview failed", TgsApi.ErrorMessage ?? $"The {ResultTypeName} CSV could not be previewed.", ToastRenderStyle.Danger);
                 return;
             }
             _fallbackLabTestTypeId = _preview.LabTestTypeId;
             BuildMappingRows();
-            ShowToast("Preview ready", $"{_preview.Rows.Count} Soil result rows were read. No database rows were changed.",
+            ShowToast("Preview ready", $"{_preview.Rows.Count} {ResultTypeName} result rows were read. No database rows were changed.",
                 _preview.BlockingErrors.Count == 0 ? ToastRenderStyle.Success : ToastRenderStyle.Warning);
         }
         catch (Exception exception)
@@ -315,11 +359,11 @@
             var suggestedKey = mapping.SuggestedBlockId > 0
                 ? $"{NormalizeBlockType(mapping.SuggestedBlockType)}:{mapping.SuggestedBlockId}"
                 : string.Empty;
-            var choice = _blockChoices.FirstOrDefault(item => item.Key.Equals(suggestedKey, StringComparison.OrdinalIgnoreCase));
+            var choice = AvailableBlockChoices.FirstOrDefault(item => item.Key.Equals(suggestedKey, StringComparison.OrdinalIgnoreCase));
             if (choice is null)
             {
-                var best = Similarity.FindBestMatchingBlock(mapping.RawBlockName, _blockChoices.Select(item => item.MatchBlock));
-                choice = best is null ? null : _blockChoices.FirstOrDefault(item => ReferenceEquals(item.MatchBlock, best));
+                var best = Similarity.FindBestMatchingBlock(mapping.RawBlockName, AvailableBlockChoices.Select(item => item.MatchBlock));
+                choice = best is null ? null : AvailableBlockChoices.FirstOrDefault(item => ReferenceEquals(item.MatchBlock, best));
             }
             return new MappingRow
             {
@@ -336,6 +380,15 @@
     private void OpenConfirmation() { if (CanCommit) _confirmVisible = true; }
     private void CloseConfirmation() { if (!_committing) _confirmVisible = false; }
 
+    private void ResultTypeChanged()
+    {
+        _preview = null;
+        _receipt = null;
+        _mappingRows = [];
+        _fallbackLabTestTypeId = 0;
+        _confirmVisible = false;
+    }
+
     private async Task CommitAsync()
     {
         if (_preview is null || !CanCommit) return;
@@ -346,13 +399,13 @@
             var token = await ApiTokens.GetAccessTokenAsync(state.User);
             if (string.IsNullOrWhiteSpace(token))
             {
-                ShowToast("Session expired", "Sign in again before importing Soil results.", ToastRenderStyle.Danger);
+                ShowToast("Session expired", $"Sign in again before importing {ResultTypeName} results.", ToastRenderStyle.Danger);
                 return;
             }
             var mappings = new List<SampleSoilImportMappingSelectionDto>();
             foreach (var row in _mappingRows)
             {
-                var choice = _blockChoices.FirstOrDefault(item => item.Key == row.BlockKey);
+                var choice = AvailableBlockChoices.FirstOrDefault(item => item.Key == row.BlockKey);
                 if (choice is null) throw new InvalidOperationException("Select a property block for every lab block.");
                 mappings.Add(new SampleSoilImportMappingSelectionDto
                 {
@@ -361,7 +414,7 @@
                     BlockType = choice.MatchBlock.BlockType ?? string.Empty
                 });
             }
-            _receipt = await TgsApi.CommitSampleSoilImport(SurveyId, new SampleSoilImportCommitRequest
+            _receipt = await TgsApi.CommitSampleChemistryImport(SurveyId, new SampleSoilImportCommitRequest
             {
                 PreviewToken = _preview.PreviewToken,
                 FallbackLabTestTypeId = _fallbackLabTestTypeId,
@@ -369,12 +422,12 @@
             }, token);
             if (_receipt is null)
             {
-                ShowToast("Import failed", TgsApi.ErrorMessage ?? "No Soil rows were imported.", ToastRenderStyle.Danger);
+                ShowToast("Import failed", TgsApi.ErrorMessage ?? $"No {ResultTypeName} rows were imported.", ToastRenderStyle.Danger);
                 return;
             }
             _confirmVisible = false;
             _preview = null;
-            ShowToast("Soil results imported", $"{_receipt.ImportedRowCount} rows were committed in one transaction.", ToastRenderStyle.Success);
+            ShowToast($"{ResultTypeName} results imported", $"{_receipt.ImportedRowCount} rows were committed in one transaction.", ToastRenderStyle.Success);
         }
         catch (Exception exception)
         {
@@ -385,10 +438,10 @@
 
     private void ShowToast(string title, string text, ToastRenderStyle style) => ToastService.ShowToast(new ToastOptions
     {
-        ProviderName = "SampleSoilImportMessages", Title = title, Text = text, RenderStyle = style, DisplayTime = TimeSpan.FromSeconds(5)
+        ProviderName = "SampleSoilImportMessages", Title = title, Text = text, RenderStyle = style, DisplayTime = TimeSpan.FromSeconds(10)
     });
     private void BackToSurvey() => Navigation.NavigateTo($"/surveys/samples/{SurveyId}/edit");
-    private void ViewLabData() => Navigation.NavigateTo($"/surveys/samples/{SurveyId}/lab-results");
+    private void ViewLabData() => Navigation.NavigateTo($"/surveys/samples/{SurveyId}/lab-results?type={SampleLaboratoryResultType.Slug(_resultTypeId)}");
     private static string NormalizeBlockType(string? value) => value?.StartsWith("ban", StringComparison.OrdinalIgnoreCase) == true ? "banana" : "mcs";
 
     private sealed record BlockChoice(string Key, string Label, Block MatchBlock);

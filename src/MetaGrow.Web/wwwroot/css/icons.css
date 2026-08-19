@@ -45,6 +45,12 @@
 .icon-weather {
     --icon-mask-image: url("/images/pages/weather.svg");
 }
+.icon-banana {
+    --icon-mask-image: url("/images/pages/banana.svg");
+}
+.icon-flask {
+    --icon-mask-image: url("/images/pages/flask.svg");
+}
 
 /* account */
 .icon-log-in {

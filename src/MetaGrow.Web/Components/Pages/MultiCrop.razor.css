@@ -74,11 +74,6 @@
 .empty-state { flex-direction: column; }
 .empty-state span { color: var(--dxds-color-content-neutral-subdued-rest); text-align: center; }
 
-::deep .multicrop-grid a,
-.report-links a { color: var(--mg-link, #0d8ecb); }
-
-.report-links { display: flex; gap: 0.65rem; }
-
 .status-badge {
     background: var(--mg-blue-0, #e5f4fb);
     border-radius: 999px;

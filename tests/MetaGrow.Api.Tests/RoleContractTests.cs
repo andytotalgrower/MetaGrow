@@ -74,6 +74,7 @@ public sealed class RoleContractTests
     [Theory]
     [InlineData(nameof(SampleSurveyDeletionsController.GetPending))]
     [InlineData(nameof(SampleSurveyDeletionsController.Create))]
+    [InlineData(nameof(SampleSurveyDeletionsController.Cancel))]
     public void All_sample_workflow_roles_can_view_or_request_deletion(string methodName)
     {
         AssertRoles<SampleSurveyDeletionsController>(methodName,

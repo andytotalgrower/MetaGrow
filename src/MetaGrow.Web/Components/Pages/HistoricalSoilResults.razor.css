@@ -34,6 +34,7 @@
 .batch-crop-source { align-self: center; display: flex; flex-direction: column; min-width: 0; }
 .batch-crop-source span { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .75rem; }
 .batch-crop-source strong { overflow-wrap: anywhere; }
+.batch-crop-suggestion { color: #198754; display: block; font-size: .78rem; font-weight: 700; margin-top: .25rem; }
 .batch-crop-action { align-items: center; display: flex; min-height: 2.2rem; }
 .batch-crop-button-content { align-items: center; display: inline-flex; gap: .45rem; white-space: nowrap; }
 .batch-warning { background: #fff3cd; border-left: 4px solid #ffc107; color: #664d03; margin-bottom: .65rem; padding: .55rem .7rem; }

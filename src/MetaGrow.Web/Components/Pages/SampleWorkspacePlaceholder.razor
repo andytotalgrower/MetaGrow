@@ -1,6 +1,7 @@
 @page "/surveys/samples/{SurveyId:int}/edit"
 @using ApiModels
 @using ApiModels.MetaGrow
+@using DevExpress.Blazor.Office
 @using MetaGrow.Web.Services
 @using Metagen.Shared.Services
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist + "," + MetaGrowRoles.Accountant)]
@@ -9,8 +10,14 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 @inject SampleSurveyDeletionApiClient Deletions
+@inject IToastNotificationService ToastService
 
 <PageTitle>Sample survey @SurveyId | MetaGrow</PageTitle>
+
+<DxToastProvider Name="SampleSurveyEditorMessages" MaxToastCount="3"
+                 AnimationType="ToastAnimationType.Slide"
+                 HorizontalAlignment="HorizontalAlignment.Right"
+                 StickToViewport="true" DisplayTime="TimeSpan.FromSeconds(10)" Width="410px" />
 
 <div class="sample-editor-page">
     @if (_loading)
@@ -19,7 +26,7 @@
     }
     else if (_editor is null)
     {
-        <div class="alert alert-danger" role="alert">@_message</div>
+        <div class="alert alert-danger" role="alert">@_loadError</div>
         <DxButton Text="Back to Sample surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
     }
     else
@@ -55,11 +62,6 @@
                 @if (_editor.Nutrition is not null) { <span class="type-badge nutrition">Chemistry</span> }
             </div>
         </header>
-
-        @if (!string.IsNullOrWhiteSpace(_message))
-        {
-            <div class="alert @(_success ? "alert-success" : "alert-danger")" role="alert">@_message</div>
-        }
 
         <section class="workflow-section" aria-labelledby="workflow-heading">
             <div class="section-heading">
@@ -139,6 +141,64 @@
                     <label for="sample-accountant-notes">Notes for accountant</label>
                     <DxMemo Id="sample-accountant-notes" @bind-Text="_editor.NotesForAccountant" Rows="4" Enabled="@_canEditFinance" />
                 </div>
+            </section>
+
+            <section class="editor-card full-width key-findings-card" aria-labelledby="key-findings-heading">
+                <div class="section-heading split-heading">
+                    <div>
+                        <span class="editor-kicker">Report content</span>
+                        <h2 id="key-findings-heading">Key findings</h2>
+                        <p>These ordered findings will introduce the combined Soil, Tissue, Quick Soil and Sap report.</p>
+                    </div>
+                    @if (CanEditKeyFindings)
+                    {
+                        <DxButton Text="Add key finding" RenderStyle="ButtonRenderStyle.Primary"
+                                  Enabled="@(!_keyFindingBusy)" Click="OpenNewKeyFindingEditor" />
+                    }
+                </div>
+
+                @if (KeyFindingsLocked)
+                {
+                    <div class="key-findings-locked">This report is complete. Reopen it before changing its key findings.</div>
+                }
+
+                @if (_editor.KeyFindings.Count == 0)
+                {
+                    <div class="key-findings-empty">
+                        <strong>No key findings have been recorded.</strong>
+                        <span>Add the agronomist's report findings before submitting the report for QA.</span>
+                    </div>
+                }
+                else
+                {
+                    <ol class="key-findings-list">
+                        @for (var index = 0; index < _editor.KeyFindings.Count; index++)
+                        {
+                            var finding = _editor.KeyFindings[index];
+                            var findingIndex = index;
+                            <li class="key-finding-item">
+                                <div class="key-finding-sequence" aria-label="Finding @(findingIndex + 1)">@(findingIndex + 1)</div>
+                                <div class="key-finding-content">@((MarkupString)finding.Html)</div>
+                                @if (CanEditKeyFindings)
+                                {
+                                    <div class="key-finding-actions" aria-label="Actions for finding @(findingIndex + 1)">
+                                        <DxButton Text="↑" RenderStyle="ButtonRenderStyle.Secondary"
+                                                  Enabled="@(!_keyFindingBusy && findingIndex > 0)"
+                                                  Click="@(() => MoveKeyFindingAsync(finding, -1))" />
+                                        <DxButton Text="↓" RenderStyle="ButtonRenderStyle.Secondary"
+                                                  Enabled="@(!_keyFindingBusy && findingIndex < _editor.KeyFindings.Count - 1)"
+                                                  Click="@(() => MoveKeyFindingAsync(finding, 1))" />
+                                        <DxButton Text="Edit" RenderStyle="ButtonRenderStyle.Secondary"
+                                                  Enabled="@(!_keyFindingBusy)" Click="@(() => OpenKeyFindingEditor(finding))" />
+                                        <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger"
+                                                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  Enabled="@(!_keyFindingBusy)" Click="@(() => OpenKeyFindingDelete(finding))" />
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ol>
+                }
             </section>
 
             <section class="editor-card full-width" aria-labelledby="samples-heading">
@@ -308,6 +368,61 @@
     }
 </div>
 
+<DxPopup @bind-Visible="_keyFindingEditorVisible" ShowFooter="true" HeaderText="@KeyFindingEditorTitle"
+         AllowDrag="true" ShowCloseButton="@(!_keyFindingBusy)" CloseOnEscape="@(!_keyFindingBusy)"
+         CloseOnOutsideClick="false" Width="min(820px, calc(100vw - 2rem))">
+    <BodyContentTemplate>
+        <div class="key-finding-editor-dialog">
+            <p>Use concise findings for the grower. Formatting is limited to report-safe text styles and lists.</p>
+            <DxHtmlEditor @bind-Markup="_keyFindingDraftHtml"
+                          BindMarkupMode="HtmlEditorBindMarkupMode.OnDelayedInput"
+                          InputDelay="500"
+                          CustomizeToolbar="CustomizeKeyFindingToolbar"
+                          ReadOnly="@_keyFindingBusy"
+                          Height="260px" Width="100%" />
+            @if (!string.IsNullOrWhiteSpace(_keyFindingError))
+            {
+                <div class="dialog-error" role="alert">@_keyFindingError</div>
+            }
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="dialog-footer">
+            <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary"
+                      Enabled="@(!_keyFindingBusy)" Click="CloseKeyFindingEditor" />
+            @if (_keyFindingBusy)
+            {
+                <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Saving key finding…</span></div>
+            }
+            <DxButton Text="Save key finding" RenderStyle="ButtonRenderStyle.Primary"
+                      Enabled="@(!_keyFindingBusy)" Click="SaveKeyFindingAsync" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="_keyFindingDeleteVisible" ShowFooter="true" HeaderText="Delete key finding"
+         AllowDrag="true" ShowCloseButton="@(!_keyFindingBusy)" CloseOnEscape="@(!_keyFindingBusy)"
+         CloseOnOutsideClick="false" Width="min(520px, calc(100vw - 2rem))">
+    <BodyContentTemplate>
+        <div class="key-finding-delete-dialog">
+            <p>Delete key finding <strong>@(_keyFindingDeleteTarget is null ? string.Empty : $"#{_keyFindingDeleteTarget.Sequence}")</strong>?</p>
+            <p>The deletion is recorded in the report audit history.</p>
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="dialog-footer">
+            <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary"
+                      Enabled="@(!_keyFindingBusy)" Click="CloseKeyFindingDelete" />
+            @if (_keyFindingBusy)
+            {
+                <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Deleting key finding…</span></div>
+            }
+            <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger"
+                      Enabled="@(!_keyFindingBusy)" Click="DeleteKeyFindingAsync" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
 <DxPopup @bind-Visible="_itemEditorVisible" ShowFooter="true" HeaderText="@ItemEditorTitle"
          AllowDrag="true" ShowCloseButton="@(!_itemBusy)" CloseOnEscape="@(!_itemBusy)"
          CloseOnOutsideClick="false" Width="min(760px, calc(100vw - 2rem))">
@@ -424,10 +539,31 @@
                     <div><strong>@_deletionPreview.PhotoCount</strong><span>Photo records</span></div>
                     <div><strong>@_deletionPreview.ActionCount</strong><span>Actions</span></div>
                     <div><strong>@_deletionPreview.ReportCount</strong><span>Reports</span></div>
+                    <div><strong>@_deletionPreview.LinkedLabResultCount</strong><span>Linked lab results</span></div>
                 </div>
                 @if (_deletionPreview.CanDelete)
                 {
-                    <div class="sample-item-warning">This permanently removes the survey and its operational child records. A different admin, agriculture manager or accountant must approve it.</div>
+                    @if (_deletionPreview.LinkedLabResultCount > 0)
+                    {
+                        <div class="lab-deletion-choice">
+                            <DxCheckBox @bind-Checked="_deleteLinkedLabResults">
+                                Permanently delete the linked lab data as well
+                            </DxCheckBox>
+                            @if (_deleteLinkedLabResults)
+                            {
+                                <div class="dialog-error" role="alert">
+                                    The @_deletionPreview.LinkedLabResultCount linked lab result @(_deletionPreview.LinkedLabResultCount == 1 ? "row will" : "rows will") be permanently deleted with the survey. Choose this only when the laboratory file contains unusable data.
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="sample-item-warning">
+                                    The @_deletionPreview.LinkedLabResultCount linked lab result @(_deletionPreview.LinkedLabResultCount == 1 ? "row will" : "rows will") be retained and returned to the unlinked lab-data workflow.
+                                </div>
+                            }
+                        </div>
+                    }
+                    <div class="sample-item-warning">This permanently removes the survey and its operational child records. Approval is required before anything changes.</div>
                 }
                 else
                 {
@@ -455,15 +591,21 @@
     private SampleSurveyEditorDto? _editor;
     private bool _loading = true;
     private bool _busy;
-    private bool _success;
     private bool _canEditOperations;
     private bool _canEditFinance;
     private bool _canMoveStatuses;
+    private bool _keyFindingEditorVisible;
+    private bool _keyFindingDeleteVisible;
+    private bool _keyFindingBusy;
+    private int? _keyFindingDraftId;
+    private string _keyFindingDraftHtml = string.Empty;
+    private string? _keyFindingError;
+    private SampleSurveyKeyFindingDto? _keyFindingDeleteTarget;
     private bool _itemEditorVisible;
     private bool _itemBusy;
     private bool _useTypedBlockName;
     private bool _labResultsLoading;
-    private string? _message;
+    private string? _loadError;
     private string? _itemError;
     private string? _labResultsError;
     private string? _itemBlockKey;
@@ -472,9 +614,13 @@
     private SampleSurveyItemEditorUpdateRequest? _itemEdit;
     private bool _deletionPopupVisible;
     private bool _deletionBusy;
+    private bool _deleteLinkedLabResults;
     private string? _deletionError;
     private SampleSurveyDeletionPreviewDto? _deletionPreview;
     private MetaGrowSampleSurveyDeletionDto? _pendingDeletion;
+    private bool KeyFindingsLocked => (_editor?.Nutrition ?? _editor?.Metagen)?.ReportStatusId == MultiCropSurveyStatus.Complete;
+    private bool CanEditKeyFindings => _canEditOperations && !KeyFindingsLocked;
+    private string KeyFindingEditorTitle => _keyFindingDraftId.HasValue ? "Edit key finding" : "Add key finding";
     private bool HasImportedResults => _importedLabResults.Count > 0;
     private bool CanImportResults => _editor?.Samples.Any(item => item.LabId != 6 && item.LabStatusId < 100) == true;
     private string ImportResultsButtonText => HasImportedResults ? "Import more results" : "Import results";
@@ -507,7 +653,7 @@
     protected override async Task OnParametersSetAsync()
     {
         _loading = true;
-        _message = null;
+        _loadError = null;
         var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = authenticationState.User;
         _canEditOperations = user.IsInRole(MetaGrowRoles.Admin) || user.IsInRole(MetaGrowRoles.AgricultureManager) || user.IsInRole(MetaGrowRoles.Agronomist);
@@ -515,7 +661,7 @@
         _canMoveStatuses = _canEditOperations;
 
         _editor = await TgsApi.GetSampleSurveyEditor(SurveyId);
-        if (_editor is null) _message = TgsApi.ErrorMessage ?? "The Sample survey could not be loaded.";
+        if (_editor is null) _loadError = TgsApi.ErrorMessage ?? "The Sample survey could not be loaded.";
         _labResultsLoading = _editor is not null;
         _loading = false;
         await InvokeAsync(StateHasChanged);
@@ -566,6 +712,7 @@
         _deletionBusy = true;
         _deletionError = null;
         _deletionPreview = null;
+        _deleteLinkedLabResults = false;
         try
         {
             var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
@@ -589,7 +736,7 @@
         _deletionError = null;
         try
         {
-            var (request, error) = await Deletions.RequestAsync(SurveyId);
+            var (request, error) = await Deletions.RequestAsync(SurveyId, _deleteLinkedLabResults);
             if (request is null)
             {
                 _deletionError = error ?? "The deletion request could not be submitted.";
@@ -597,8 +744,12 @@
             }
             _pendingDeletion = request;
             _deletionPopupVisible = false;
-            _success = true;
-            _message = "Deletion is awaiting approval from another admin, agriculture manager or accountant.";
+            ShowToast(
+                "Deletion requested",
+                _deleteLinkedLabResults
+                    ? "The request includes permanent deletion of the linked lab data and can now be reviewed from the approval queue."
+                    : "The request will preserve any linked lab data and can now be reviewed from the approval queue.",
+                ToastRenderStyle.Success);
         }
         finally { _deletionBusy = false; }
     }
@@ -609,9 +760,193 @@
         _deletionPopupVisible = false;
         _deletionPreview = null;
         _deletionError = null;
+        _deleteLinkedLabResults = false;
     }
 
     private async Task SaveAsync() => await SaveAsync(showSuccess: true);
+
+    private void OpenNewKeyFindingEditor()
+    {
+        if (!CanEditKeyFindings || _keyFindingBusy) return;
+        _keyFindingDraftId = null;
+        _keyFindingDraftHtml = string.Empty;
+        _keyFindingError = null;
+        _keyFindingEditorVisible = true;
+    }
+
+    private void OpenKeyFindingEditor(SampleSurveyKeyFindingDto finding)
+    {
+        if (!CanEditKeyFindings || _keyFindingBusy) return;
+        _keyFindingDraftId = finding.KeyPointId;
+        _keyFindingDraftHtml = finding.Html;
+        _keyFindingError = null;
+        _keyFindingEditorVisible = true;
+    }
+
+    private void CloseKeyFindingEditor()
+    {
+        if (_keyFindingBusy) return;
+        _keyFindingEditorVisible = false;
+        _keyFindingDraftId = null;
+        _keyFindingDraftHtml = string.Empty;
+        _keyFindingError = null;
+    }
+
+    private async Task SaveKeyFindingAsync()
+    {
+        if (_editor is null || !CanEditKeyFindings || _keyFindingBusy) return;
+        if (string.IsNullOrWhiteSpace(_keyFindingDraftHtml))
+        {
+            _keyFindingError = "Enter the key finding before saving.";
+            return;
+        }
+
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var accessToken = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            _keyFindingError = "Your session has expired. Sign in again before saving the key finding.";
+            return;
+        }
+
+        _keyFindingBusy = true;
+        _keyFindingError = null;
+        try
+        {
+            var request = new SampleSurveyKeyFindingSaveRequest
+            {
+                Html = _keyFindingDraftHtml,
+                ExpectedModificationDate = _editor.ModificationDate,
+                ModifiedBy = authenticationState.User.Identity?.Name ?? "MetaGrow"
+            };
+            var updated = _keyFindingDraftId.HasValue
+                ? await TgsApi.UpdateSampleSurveyKeyFinding(SurveyId, _keyFindingDraftId.Value, request, accessToken)
+                : await TgsApi.AddSampleSurveyKeyFinding(SurveyId, request, accessToken);
+            if (updated is null)
+            {
+                _keyFindingError = TgsApi.ErrorMessage ?? "The key finding could not be saved.";
+                return;
+            }
+
+            ApplyKeyFindingResult(updated);
+            _keyFindingEditorVisible = false;
+            _keyFindingDraftId = null;
+            _keyFindingDraftHtml = string.Empty;
+            ShowToast("Key finding saved", "The report findings and audit history have been updated.", ToastRenderStyle.Success);
+        }
+        finally { _keyFindingBusy = false; }
+    }
+
+    private async Task MoveKeyFindingAsync(SampleSurveyKeyFindingDto finding, int direction)
+    {
+        if (_editor is null || !CanEditKeyFindings || _keyFindingBusy) return;
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var accessToken = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            SetError("Your session has expired. Sign in again before moving the key finding.");
+            return;
+        }
+
+        _keyFindingBusy = true;
+        try
+        {
+            var updated = await TgsApi.MoveSampleSurveyKeyFinding(
+                SurveyId,
+                finding.KeyPointId,
+                new SampleSurveyKeyFindingMoveRequest
+                {
+                    Direction = direction,
+                    ExpectedModificationDate = _editor.ModificationDate,
+                    ModifiedBy = authenticationState.User.Identity?.Name ?? "MetaGrow"
+                },
+                accessToken);
+            if (updated is null)
+            {
+                SetError(TgsApi.ErrorMessage ?? "The key finding could not be moved.");
+                return;
+            }
+            ApplyKeyFindingResult(updated);
+        }
+        finally { _keyFindingBusy = false; }
+    }
+
+    private void OpenKeyFindingDelete(SampleSurveyKeyFindingDto finding)
+    {
+        if (!CanEditKeyFindings || _keyFindingBusy) return;
+        _keyFindingDeleteTarget = finding;
+        _keyFindingDeleteVisible = true;
+    }
+
+    private void CloseKeyFindingDelete()
+    {
+        if (_keyFindingBusy) return;
+        _keyFindingDeleteVisible = false;
+        _keyFindingDeleteTarget = null;
+    }
+
+    private async Task DeleteKeyFindingAsync()
+    {
+        if (_editor is null || _keyFindingDeleteTarget is null || !CanEditKeyFindings || _keyFindingBusy) return;
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var accessToken = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            SetError("Your session has expired. Sign in again before deleting the key finding.");
+            return;
+        }
+
+        _keyFindingBusy = true;
+        try
+        {
+            var updated = await TgsApi.DeleteSampleSurveyKeyFinding(
+                SurveyId,
+                _keyFindingDeleteTarget.KeyPointId,
+                new SampleSurveyKeyFindingMutationRequest
+                {
+                    ExpectedModificationDate = _editor.ModificationDate,
+                    ModifiedBy = authenticationState.User.Identity?.Name ?? "MetaGrow"
+                },
+                accessToken);
+            if (updated is null)
+            {
+                SetError(TgsApi.ErrorMessage ?? "The key finding could not be deleted.");
+                return;
+            }
+            ApplyKeyFindingResult(updated);
+            _keyFindingDeleteVisible = false;
+            _keyFindingDeleteTarget = null;
+            ShowToast("Key finding deleted", "The finding was removed and the remaining findings were reordered.", ToastRenderStyle.Success);
+        }
+        finally { _keyFindingBusy = false; }
+    }
+
+    private void ApplyKeyFindingResult(SampleSurveyEditorDto updated)
+    {
+        if (_editor is null) return;
+        _editor.KeyFindings = updated.KeyFindings;
+        _editor.ModificationDate = updated.ModificationDate;
+        _editor.ModifiedBy = updated.ModifiedBy;
+    }
+
+    private static void CustomizeKeyFindingToolbar(IToolbar toolbar)
+    {
+        toolbar.Groups.Clear();
+        toolbar.Groups.Add(HtmlEditorToolbarGroupNames.UndoRedo);
+
+        var font = toolbar.Groups.Add(HtmlEditorToolbarGroupNames.Font);
+        font.Items.Clear();
+        font.Items.Add(HtmlEditorToolbarItemNames.FontSize);
+        font.Items.Add(HtmlEditorToolbarItemNames.FontBold);
+        font.Items.Add(HtmlEditorToolbarItemNames.FontItalic);
+        font.Items.Add(HtmlEditorToolbarItemNames.FontUnderline);
+        font.Items.Add(HtmlEditorToolbarItemNames.ClearFormatting);
+
+        var paragraph = toolbar.Groups.Add(HtmlEditorToolbarGroupNames.Paragraph);
+        paragraph.Items.Clear();
+        paragraph.Items.Add(HtmlEditorToolbarItemNames.BulletList);
+        paragraph.Items.Add(HtmlEditorToolbarItemNames.NumberedList);
+    }
 
     private async Task<bool> SaveAsync(bool showSuccess)
     {
@@ -625,8 +960,6 @@
         }
 
         _busy = true;
-        _message = null;
-        _success = false;
         try
         {
             var updated = await TgsApi.UpdateSampleSurveyEditor(
@@ -658,10 +991,7 @@
 
             _editor = updated;
             if (showSuccess)
-            {
-                _success = true;
-                _message = "Sample survey changes saved.";
-            }
+                ShowToast("Survey saved", "Sample survey changes saved.", ToastRenderStyle.Success);
             return true;
         }
         finally { _busy = false; }
@@ -679,8 +1009,6 @@
         }
 
         _busy = true;
-        _message = null;
-        _success = false;
         try
         {
             var updated = await TgsApi.TransitionSampleSurvey(
@@ -701,8 +1029,10 @@
 
             _editor = updated;
             var lane = category == SampleSurveyCategory.Metagen ? updated.Metagen : updated.Nutrition;
-            _success = true;
-            _message = $"{SampleSurveyCategoryNames.DisplayName(category)} moved to {lane?.WorkflowName.ToLowerInvariant() ?? "the next stage"}.";
+            ShowToast(
+                "Status updated",
+                $"{SampleSurveyCategoryNames.DisplayName(category)} moved to {lane?.WorkflowName.ToLowerInvariant() ?? "the next stage"}.",
+                ToastRenderStyle.Success);
         }
         finally { _busy = false; }
     }
@@ -817,8 +1147,7 @@
             _editor.LabTestTypes = updated.LabTestTypes;
             _editor.ModificationDate = updated.ModificationDate;
             _editor.ModifiedBy = updated.ModifiedBy;
-            _success = true;
-            _message = $"Collected sample {itemId} saved.";
+            ShowToast("Sample saved", $"Collected sample {itemId} saved.", ToastRenderStyle.Success);
             _itemEditorVisible = false;
             _editingItem = null;
             _itemEdit = null;
@@ -847,7 +1176,16 @@
     }
 
     private static bool IsQuarterHour(double value) => value >= 0 && Math.Abs(value * 4 - Math.Round(value * 4)) < .0001;
-    private void SetError(string message) { _success = false; _message = message; }
+    private void SetError(string message) =>
+        ShowToast("Action could not be completed", message, ToastRenderStyle.Danger);
+    private void ShowToast(string title, string text, ToastRenderStyle style) => ToastService.ShowToast(new ToastOptions
+    {
+        ProviderName = "SampleSurveyEditorMessages",
+        Title = title,
+        Text = text,
+        RenderStyle = style,
+        DisplayTime = TimeSpan.FromSeconds(10)
+    });
     private void BackToSurveys() => Navigation.NavigateTo("/surveys/samples");
     private void ViewLabData() => Navigation.NavigateTo($"/surveys/samples/{SurveyId}/lab-results");
     private void ImportResults() => Navigation.NavigateTo($"/surveys/samples/{SurveyId}/import");

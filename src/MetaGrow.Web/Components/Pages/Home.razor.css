@@ -110,11 +110,6 @@ body.mantine-dark .release-note { background: rgb(from var(--mg-blue, #007cba) r
     width: 2rem;
 }
 
-::deep .home-survey-grid a,
-.queue-links a { color: var(--mg-link, #0d8ecb); }
-.queue-links { display: flex; gap: .65rem; }
-.queue-links .queue-edit-link { font-weight: 750; }
-
 .area-badge,
 .status-badge {
     border-radius: 999px;

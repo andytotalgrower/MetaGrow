@@ -16,7 +16,7 @@
 .section-heading h2,.mapping-heading h3,.result-heading h3,.survey-date-heading h3,.property-match-heading h3 { margin:0 0 .25rem; }
 .section-heading p,.mapping-heading p,.result-heading p,.survey-date-heading p,.property-match-heading p { margin:0; color:var(--dxds-color-content-neutral-subdued-rest); }
 .step-number { display:grid; place-items:center; flex:0 0 2rem; height:2rem; border-radius:50%; color:#fff; background:#28705f; font-weight:800; }
-.setup-grid { display:grid; grid-template-columns:minmax(16rem,1.5fr) minmax(15rem,1fr); gap:1rem; margin:1.25rem 0; }
+.setup-grid { display:grid; grid-template-columns:minmax(16rem,1.5fr) repeat(2,minmax(13rem,1fr)); gap:1rem; margin:1.25rem 0; }
 .field { display:flex; flex-direction:column; gap:.35rem; }
 .field label,.mapping-choice label { font-weight:700; font-size:.85rem; }
 .csv-drop-zone { min-height:12rem; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.45rem; padding:1.35rem; border:2px dashed #6d9d96; border-radius:.8rem; background:rgba(49,127,111,.045); text-align:center; transition:.16s ease; }
@@ -89,6 +89,7 @@
   .mapping-arrow { display:none; }
   .receipt-card { grid-template-columns:auto 1fr; }
   .generated-surveys { grid-column:1/-1; }
+  .setup-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (max-width:620px) {
   .generation-hero,.setup-card,.preview-card { padding:1rem; }

@@ -125,13 +125,13 @@
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyHours)" Caption="Survey hours" Width="110px" DisplayFormat="N2" Visible="false" />
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ReportHours)" Caption="Report hours" Width="110px" DisplayFormat="N2" Visible="false" />
                         <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ModifiedBy)" Caption="Modified by" MinWidth="150" Visible="false" />
-                        <DxGridDataColumn Caption="Actions" Width="185px" AllowSort="false">
+                        <DxGridDataColumn Caption="Actions" Width="155px" AllowSort="false">
                             <CellDisplayTemplate Context="cell">
                                 @{ var survey = (MultiCropSurveySummaryDto)cell.DataItem; }
-                                <div class="report-links">
-                                    <a href="@EditSurveyUrl(survey)">Edit</a>
-                                    <a href="@OnlineReportUrl(survey)">Online</a>
-                                    <a href="@PrintReportUrl(survey)">Print</a>
+                                <div class="mg-grid-actions">
+                                    <a class="mg-grid-link" href="@EditSurveyUrl(survey)">Edit</a>
+                                    <a class="mg-grid-link" href="@OnlineReportUrl(survey)">Online</a>
+                                    <a class="mg-grid-link" href="@PrintReportUrl(survey)">Print</a>
                                 </div>
                             </CellDisplayTemplate>
                         </DxGridDataColumn>

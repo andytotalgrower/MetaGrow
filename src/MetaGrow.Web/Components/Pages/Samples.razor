@@ -11,8 +11,14 @@
 @inject ApiTokenService ApiTokens
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject SampleSurveyDeletionApiClient Deletions
+@inject IToastNotificationService ToastService
 
 <PageTitle>Sample surveys | MetaGrow</PageTitle>
+
+<DxToastProvider Name="SampleSurveyFinderMessages" MaxToastCount="4"
+                 AnimationType="ToastAnimationType.Slide"
+                 HorizontalAlignment="HorizontalAlignment.Right"
+                 StickToViewport="true" DisplayTime="TimeSpan.FromSeconds(10)" Width="410px" />
 
 <div class="samples-page">
     <div class="title">
@@ -23,7 +29,7 @@
     <nav class="sample-nav" aria-label="Sample survey area">
         <a class="active" href="/surveys/samples">Surveys</a>
         <a href="/surveys/samples/lab-results">Lab results</a>
-        <a href="/surveys/samples/lab-results/historical">Historical data</a>
+        <a href="/surveys/samples/lab-results/historical">Legacy data</a>
         <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)">
             <a href="/surveys/samples/generate-from-csv">Generate from CSV</a>
         </AuthorizeView>
@@ -45,7 +51,7 @@
                     <article class="deletion-queue-row">
                         <div>
                             <strong>@request.PropertyName · survey @request.SurveyId</strong>
-                            <span>@request.SurveyDate.ToString("dd MMM yyyy") · @request.SampleCount samples · requested by @request.RequestedByEmail</span>
+                            <span>@request.SurveyDate.ToString("dd MMM yyyy") · @request.SampleCount samples · @LabResultQueueText(request) · requested by @request.RequestedByEmail</span>
                             @if (!string.IsNullOrWhiteSpace(request.LastError))
                             {
                                 <small>Last attempt: @request.LastError</small>
@@ -53,34 +59,37 @@
                         </div>
                         <div class="deletion-queue-actions">
                             <a href="@EditorUrl(request.SurveyId)">Open survey</a>
-                            @if (_isDeletionReviewer && !IsOwnRequest(request))
+                            @if (_busyDeletionId == request.Id)
                             {
-                                @if (_busyDeletionId == request.Id)
-                                {
-                                    <span class="queue-progress"><DxWaitIndicator Visible="true" /> Processing…</span>
-                                }
-                                else
-                                {
-                                    <DxButton Text="Reject" RenderStyle="ButtonRenderStyle.Secondary" SizeMode="SizeMode.Small"
-                                              Enabled="@(_busyDeletionId is null)" Click="@(() => RejectDeletionAsync(request))" />
-                                    <DxButton Text="Approve and delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
-                                              Enabled="@(_busyDeletionId is null)" Click="@(() => ApproveDeletionAsync(request))" />
-                                }
+                                <span class="queue-progress"><DxWaitIndicator Visible="true" /> Processing…</span>
                             }
                             else
                             {
-                                <span class="awaiting-review">Awaiting another reviewer</span>
+                                @if (CanApproveDeletion(request))
+                                {
+                                    @if (!IsOwnRequest(request))
+                                    {
+                                        <DxButton Text="Reject" RenderStyle="ButtonRenderStyle.Secondary" SizeMode="SizeMode.Small"
+                                                  Enabled="@(_busyDeletionId is null)" Click="@(() => RejectDeletionAsync(request))" />
+                                    }
+                                    <DxButton Text="Approve and delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyDeletionId is null)" Click="@(() => ApproveDeletionAsync(request))" />
+                                }
+                                @if (IsOwnRequest(request))
+                                {
+                                    <DxButton Text="Cancel request" RenderStyle="ButtonRenderStyle.Secondary" SizeMode="SizeMode.Small"
+                                              Enabled="@(_busyDeletionId is null)" Click="@(() => CancelDeletionAsync(request))" />
+                                    @if (!CanApproveDeletion(request))
+                                    {
+                                        <span class="awaiting-review">Awaiting another reviewer</span>
+                                    }
+                                }
                             }
                         </div>
                     </article>
                 }
             </div>
         </section>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(_workflowMessage))
-    {
-        <div class="alert @(_workflowSuccess ? "alert-success" : "alert-danger")" role="alert">@_workflowMessage</div>
     }
 
     <section class="filter-panel search-panel" aria-labelledby="sample-search-heading">
@@ -189,15 +198,15 @@
                     <Columns>
                         <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.SurveyDate)" Caption="Date" Width="110px" DisplayFormat="dd/MM/yyyy" />
                         <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.PropertyName)" Caption="Property" MinWidth="180" />
-                        <DxGridDataColumn Caption="Type" Width="155px" AllowSort="false">
+                        <DxGridDataColumn Caption="Type" Width="125px" AllowSort="false">
                             <CellDisplayTemplate Context="cell"><SampleTypeBadges Survey="@((SampleSurveySummaryDto)cell.DataItem)" /></CellDisplayTemplate>
                         </DxGridDataColumn>
                         <DxGridDataColumn Caption="Sample type" Width="210px" AllowSort="false">
                             <CellDisplayTemplate Context="cell"><SampleMaterialBadges Survey="@((SampleSurveySummaryDto)cell.DataItem)" /></CellDisplayTemplate>
                         </DxGridDataColumn>
-                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.CropNames)" Caption="Crop" MinWidth="135" />
-                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.AgronomistName)" Caption="Agronomist" MinWidth="150" />
-                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.SampleCount)" Caption="Samples" Width="82px" />
+                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.CropNames)" Caption="Crop" Width="165px" />
+                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.AgronomistName)" Caption="Agronomist" Width="170px" />
+                        <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.SampleCount)" Caption="Samples" Width="72px" />
                         <DxGridDataColumn Caption="Chemistry" MinWidth="170" Visible="false">
                             <CellDisplayTemplate Context="cell">
                                 @{
@@ -224,15 +233,18 @@
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
                         <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.NutritionSampleCount)" Caption="Chemistry samples" Width="125px" Visible="false" />
-                        <DxGridDataColumn Caption="Actions" Width="188px" AllowSort="false">
+                        <DxGridDataColumn Caption="Actions" Width="165px" AllowSort="false">
                             <CellDisplayTemplate Context="cell">
                                 @{ var survey = (SampleSurveySummaryDto)cell.DataItem; }
-                                <div class="survey-links">
-                                    <a href="@EditorUrl(survey)">Open survey</a>
-                                    <a href="@LabResultsUrl(survey)">Lab data</a>
+                                <div class="mg-grid-actions">
+                                    <a class="mg-grid-link" href="@EditorUrl(survey)">Open survey</a>
+                                    @if (survey.HasImportedLabData)
+                                    {
+                                        <a class="mg-grid-link" href="@LabResultsUrl(survey)">Lab data</a>
+                                    }
                                     @if (SampleSurveyFilter.CanImportLabData(survey))
                                     {
-                                        <a href="@ImportUrl(survey)">Import</a>
+                                        <a class="mg-grid-link" href="@ImportUrl(survey)">Import</a>
                                     }
                                 </div>
                             </CellDisplayTemplate>
@@ -254,7 +266,10 @@
                         </dl>
                         <div class="survey-card-actions">
                             <a class="btn btn-primary" href="@EditorUrl(survey)">Open survey</a>
-                            <a class="btn btn-outline-secondary" href="@LabResultsUrl(survey)">Lab data</a>
+                            @if (survey.HasImportedLabData)
+                            {
+                                <a class="btn btn-outline-secondary" href="@LabResultsUrl(survey)">Lab data</a>
+                            }
                             @if (SampleSurveyFilter.CanImportLabData(survey))
                             {
                                 <a class="btn btn-outline-secondary" href="@ImportUrl(survey)">Import</a>
@@ -286,11 +301,9 @@
     private int? _testTypeId;
     private bool _loading = true;
     private bool _canMoveStatuses;
-    private bool _workflowSuccess;
     private bool _isDeletionReviewer;
-    private string? _currentEmail;
+    private bool _canApproveOwnDeletion;
     private string? _errorMessage;
-    private string? _workflowMessage;
     private string? _busyLane;
     private List<SampleSurveySummaryDto> _surveys = [];
     private List<MetaGrowSampleSurveyDeletionDto> _deletionRequests = [];
@@ -317,8 +330,8 @@
         _isDeletionReviewer = authenticationState.User.IsInRole(MetaGrowRoles.Admin) ||
             authenticationState.User.IsInRole(MetaGrowRoles.AgricultureManager) ||
             authenticationState.User.IsInRole(MetaGrowRoles.Accountant);
-        _currentEmail = authenticationState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ??
-            authenticationState.User.Identity?.Name;
+        _canApproveOwnDeletion = authenticationState.User.IsInRole(MetaGrowRoles.Admin) ||
+            authenticationState.User.IsInRole(MetaGrowRoles.AgricultureManager);
         await RestoreFiltersAsync();
         await Task.WhenAll(LoadSurveysAsync(), LoadDeletionRequestsAsync());
         await InvokeAsync(StateHasChanged);
@@ -359,39 +372,38 @@
         var (requests, error) = await Deletions.GetPendingAsync();
         if (requests is not null) _deletionRequests = requests.ToList();
         else if (!string.IsNullOrWhiteSpace(error))
-        {
-            _workflowSuccess = false;
-            _workflowMessage = error;
-        }
+            ShowToast("Deletion requests could not be loaded", error, ToastRenderStyle.Danger);
     }
 
-    private bool IsOwnRequest(MetaGrowSampleSurveyDeletionDto request) =>
-        !string.IsNullOrWhiteSpace(_currentEmail) &&
-        string.Equals(request.RequestedByEmail, _currentEmail, StringComparison.OrdinalIgnoreCase);
+    private static bool IsOwnRequest(MetaGrowSampleSurveyDeletionDto request) =>
+        request.IsRequestedByCurrentUser;
+
+    private bool CanApproveDeletion(MetaGrowSampleSurveyDeletionDto request) =>
+        _isDeletionReviewer && (!IsOwnRequest(request) || _canApproveOwnDeletion);
 
     private async Task ApproveDeletionAsync(MetaGrowSampleSurveyDeletionDto request)
     {
         if (_confirm is null || _busyDeletionId is not null) return;
         if (!await _confirm.ShowAsync(
-                $"Permanently delete Sample survey {request.SurveyId} for {request.PropertyName}? Live safety and concurrency checks will run again first.",
+                $"Permanently delete Sample survey {request.SurveyId} for {request.PropertyName}?{LabResultPreservationText(request)} Live safety and concurrency checks will run again first.",
                 "Approve Sample survey deletion",
                 "Approve and delete",
                 true)) return;
         _busyDeletionId = request.Id;
-        _workflowMessage = null;
         await InvokeAsync(StateHasChanged);
         try
         {
             var (completed, error) = await Deletions.ApproveAsync(request.Id);
             if (completed is null)
             {
-                _workflowSuccess = false;
-                _workflowMessage = error ?? "The Sample survey deletion could not be approved.";
+                ShowToast("Deletion failed", error ?? "The Sample survey deletion could not be approved.", ToastRenderStyle.Danger);
                 await LoadDeletionRequestsAsync();
                 return;
             }
-            _workflowSuccess = true;
-            _workflowMessage = $"Sample survey {completed.SurveyId} was deleted.";
+            ShowToast(
+                "Survey deleted",
+                $"Sample survey {completed.SurveyId} was deleted.{LabResultCompletionText(completed)}",
+                ToastRenderStyle.Success);
             await Task.WhenAll(LoadSurveysAsync(), LoadDeletionRequestsAsync());
         }
         finally { _busyDeletionId = null; }
@@ -405,19 +417,39 @@
                 "Reject Sample survey deletion",
                 "Reject request")) return;
         _busyDeletionId = request.Id;
-        _workflowMessage = null;
         try
         {
             var (rejected, error) = await Deletions.RejectAsync(request.Id);
             if (rejected is null)
             {
-                _workflowSuccess = false;
-                _workflowMessage = error ?? "The Sample survey deletion request could not be rejected.";
+                ShowToast("Request could not be rejected", error ?? "The Sample survey deletion request could not be rejected.", ToastRenderStyle.Danger);
                 return;
             }
             _deletionRequests.RemoveAll(item => item.Id == request.Id);
-            _workflowSuccess = true;
-            _workflowMessage = $"Deletion of Sample survey {rejected.SurveyId} was rejected.";
+            ShowToast("Deletion rejected", $"Deletion of Sample survey {rejected.SurveyId} was rejected.", ToastRenderStyle.Success);
+        }
+        finally { _busyDeletionId = null; }
+    }
+
+    private async Task CancelDeletionAsync(MetaGrowSampleSurveyDeletionDto request)
+    {
+        if (_confirm is null || _busyDeletionId is not null || !IsOwnRequest(request)) return;
+        if (!await _confirm.ShowAsync(
+                $"Cancel the deletion request for Sample survey {request.SurveyId}? No survey data will be changed.",
+                "Cancel Sample survey deletion",
+                "Cancel request")) return;
+        _busyDeletionId = request.Id;
+        try
+        {
+            var (cancelled, error) = await Deletions.CancelAsync(request.Id);
+            if (cancelled is null)
+            {
+                ShowToast("Request could not be cancelled", error ?? "The Sample survey deletion request could not be cancelled.", ToastRenderStyle.Danger);
+                await LoadDeletionRequestsAsync();
+                return;
+            }
+            _deletionRequests.RemoveAll(item => item.Id == request.Id);
+            ShowToast("Deletion request cancelled", $"Deletion request for Sample survey {cancelled.SurveyId} was cancelled.", ToastRenderStyle.Success);
         }
         finally { _busyDeletionId = null; }
     }
@@ -497,15 +529,13 @@
         SampleSurveyWorkflowAction action)
     {
         _busyLane = LaneKey(survey.SurveyId, category);
-        _workflowMessage = null;
-        _workflowSuccess = false;
         try
         {
             var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
             var accessToken = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
             if (string.IsNullOrWhiteSpace(accessToken))
             {
-                _workflowMessage = "Your session has expired. Sign in again before moving the survey status.";
+                ShowToast("Status could not be updated", "Your session has expired. Sign in again before moving the survey status.", ToastRenderStyle.Danger);
                 return;
             }
 
@@ -521,14 +551,16 @@
                 accessToken);
             if (updated is null)
             {
-                _workflowMessage = TgsApi.ErrorMessage ?? "The Sample survey status could not be changed.";
+                ShowToast("Status could not be updated", TgsApi.ErrorMessage ?? "The Sample survey status could not be changed.", ToastRenderStyle.Danger);
                 return;
             }
 
             await LoadSurveysAsync();
             var lane = category == SampleSurveyCategory.Metagen ? updated.Metagen : updated.Nutrition;
-            _workflowSuccess = true;
-            _workflowMessage = $"{SampleSurveyCategoryNames.DisplayName(category)} moved to {lane?.WorkflowName.ToLowerInvariant() ?? "the next stage"}.";
+            ShowToast(
+                "Status updated",
+                $"{SampleSurveyCategoryNames.DisplayName(category)} moved to {lane?.WorkflowName.ToLowerInvariant() ?? "the next stage"}.",
+                ToastRenderStyle.Success);
         }
         finally
         {
@@ -543,4 +575,28 @@
     private static string EditorUrl(int surveyId) => $"/surveys/samples/{surveyId}/edit";
     private static string LabResultsUrl(SampleSurveySummaryDto survey) => $"/surveys/samples/{survey.SurveyId}/lab-results";
     private static string ImportUrl(SampleSurveySummaryDto survey) => $"/surveys/samples/{survey.SurveyId}/import";
+    private static string LabResultPreservationText(MetaGrowSampleSurveyDeletionDto request) =>
+        request.LinkedLabResultCount > 0
+            ? request.DeleteLinkedLabResults
+                ? $" Its {request.LinkedLabResultCount:N0} linked lab result {(request.LinkedLabResultCount == 1 ? "row will also" : "rows will also")} be permanently deleted."
+                : $" Its {request.LinkedLabResultCount:N0} linked lab result {(request.LinkedLabResultCount == 1 ? "row will" : "rows will")} be retained and returned to unlinked lab data."
+            : string.Empty;
+    private static string LabResultCompletionText(MetaGrowSampleSurveyDeletionDto request) =>
+        request.LinkedLabResultCount > 0
+            ? request.DeleteLinkedLabResults
+                ? $" {request.LinkedLabResultCount:N0} linked lab result {(request.LinkedLabResultCount == 1 ? "row was" : "rows were")} permanently deleted."
+                : $" {request.LinkedLabResultCount:N0} lab result {(request.LinkedLabResultCount == 1 ? "row was" : "rows were")} retained and unlinked."
+            : string.Empty;
+    private static string LabResultQueueText(MetaGrowSampleSurveyDeletionDto request) =>
+        request.LinkedLabResultCount == 0
+            ? "no linked lab results"
+            : $"{request.LinkedLabResultCount:N0} linked lab results · lab data will be {(request.DeleteLinkedLabResults ? "deleted" : "retained")}";
+    private void ShowToast(string title, string text, ToastRenderStyle style) => ToastService.ShowToast(new ToastOptions
+    {
+        ProviderName = "SampleSurveyFinderMessages",
+        Title = title,
+        Text = text,
+        RenderStyle = style,
+        DisplayTime = TimeSpan.FromSeconds(10)
+    });
 }

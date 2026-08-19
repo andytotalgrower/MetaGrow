@@ -20,8 +20,6 @@
 .loading-state, .empty-state { align-items: center; border: 1px dashed var(--dxds-color-border-neutral-subdued-rest); border-radius: .5rem; display: flex; gap: .6rem; justify-content: center; min-height: 8rem; padding: 1.5rem; }
 .empty-state { flex-direction: column; }
 .empty-state span { color: var(--dxds-color-content-neutral-subdued-rest); text-align: center; }
-::deep .sample-grid a { color: var(--mg-link, #0d8ecb); }
-.survey-links { display: inline-flex; gap: .65rem; }
 .lane-status { align-items: flex-start; display: flex; flex-direction: column; gap: .35rem; padding-block: .15rem; }
 .lane-working { align-items: center; color: var(--dxds-color-content-neutral-subdued-rest); display: inline-flex; font-size: .72rem; gap: .3rem; }
 .lane-working .spinner-border { height: .75rem; width: .75rem; }

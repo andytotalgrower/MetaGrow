@@ -31,7 +31,9 @@ public sealed class SampleSurveyDeletionsController(
             .Where(request => request.Status == MetaGrowSampleSurveyDeletionStatus.Pending ||
                               request.Status == MetaGrowSampleSurveyDeletionStatus.Processing);
         if (!IsReviewer()) query = query.Where(request => request.RequestedByUserId == userId);
-        return Ok((await query.OrderBy(request => request.RequestedUtc).ToListAsync()).Select(ToDto).ToArray());
+        return Ok((await query.OrderBy(request => request.RequestedUtc).ToListAsync())
+            .Select(request => ToDto(request, request.RequestedByUserId == userId))
+            .ToArray());
     }
 
     [Authorize(Roles = StaffRoles)]
@@ -68,6 +70,12 @@ public sealed class SampleSurveyDeletionsController(
             SampleCount = preview.SampleCount,
             PhotoCount = preview.PhotoCount,
             ActionCount = preview.ActionCount,
+            LinkedSoilResultCount = preview.LinkedSoilResultCount,
+            LinkedTissueResultCount = preview.LinkedTissueResultCount,
+            LinkedSapResultCount = preview.LinkedSapResultCount,
+            LinkedQuickSoilResultCount = preview.LinkedQuickSoilResultCount,
+            LinkedLegacyResultCount = preview.LinkedLegacyResultCount,
+            DeleteLinkedLabResults = request.DeleteLinkedLabResults,
             Status = MetaGrowSampleSurveyDeletionStatus.Pending,
             RequestedByUserId = userId,
             RequestedByEmail = email,
@@ -98,10 +106,11 @@ public sealed class SampleSurveyDeletionsController(
         if (string.IsNullOrWhiteSpace(reviewerId) || string.IsNullOrWhiteSpace(reviewerEmail) || token is null)
             return Forbid();
 
+        var canApproveOwnRequest = CanApproveOwnRequest();
         var claimed = await database.SampleSurveyDeletionRequests
             .Where(item => item.Id == id &&
                            item.Status == MetaGrowSampleSurveyDeletionStatus.Pending &&
-                           item.RequestedByUserId != reviewerId)
+                           (canApproveOwnRequest || item.RequestedByUserId != reviewerId))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(item => item.Status, MetaGrowSampleSurveyDeletionStatus.Processing)
                 .SetProperty(item => item.ReviewedByUserId, reviewerId)
@@ -110,7 +119,7 @@ public sealed class SampleSurveyDeletionsController(
                 .SetProperty(item => item.ReviewNote, Clean(request.Note))
                 .SetProperty(item => item.LastError, (string?)null));
         if (claimed == 0)
-            return Conflict(Error("This request is no longer awaiting approval, or it was requested by you and requires another reviewer."));
+            return Conflict(Error("This request is no longer awaiting approval, or your role requires another reviewer."));
 
         var deletion = await database.SampleSurveyDeletionRequests.SingleAsync(item => item.Id == id);
         var result = await tgsApi.DeleteSampleSurveyForMetaGrow(
@@ -130,6 +139,33 @@ public sealed class SampleSurveyDeletionsController(
         deletion.Status = MetaGrowSampleSurveyDeletionStatus.Completed;
         deletion.LastError = null;
         await database.SaveChangesAsync();
+        return Ok(ToDto(deletion));
+    }
+
+    [Authorize(Roles = StaffRoles)]
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<ActionResult<MetaGrowSampleSurveyDeletionDto>> Cancel(Guid id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var email = User.FindFirstValue(ClaimTypes.Email) ?? User.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(email)) return Forbid();
+
+        var cancelled = await database.SampleSurveyDeletionRequests
+            .Where(item => item.Id == id &&
+                           item.Status == MetaGrowSampleSurveyDeletionStatus.Pending &&
+                           item.RequestedByUserId == userId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.Status, MetaGrowSampleSurveyDeletionStatus.Cancelled)
+                .SetProperty(item => item.ReviewedByUserId, userId)
+                .SetProperty(item => item.ReviewedByEmail, email)
+                .SetProperty(item => item.ReviewedUtc, DateTime.UtcNow)
+                .SetProperty(item => item.ReviewNote, "Cancelled by requester.")
+                .SetProperty(item => item.LastError, (string?)null));
+        if (cancelled == 0)
+            return Conflict(Error("This request is no longer awaiting approval, or it was requested by another user."));
+
+        var deletion = await database.SampleSurveyDeletionRequests.AsNoTracking()
+            .SingleAsync(item => item.Id == id);
         return Ok(ToDto(deletion));
     }
 
@@ -177,6 +213,12 @@ public sealed class SampleSurveyDeletionsController(
             SurveyId = deletion.SurveyId,
             ExpectedModificationDate = deletion.ExpectedModificationDate,
             ExpectedSampleCount = deletion.SampleCount,
+            ExpectedLinkedSoilResultCount = deletion.LinkedSoilResultCount,
+            ExpectedLinkedTissueResultCount = deletion.LinkedTissueResultCount,
+            ExpectedLinkedSapResultCount = deletion.LinkedSapResultCount,
+            ExpectedLinkedQuickSoilResultCount = deletion.LinkedQuickSoilResultCount,
+            ExpectedLinkedLegacyResultCount = deletion.LinkedLegacyResultCount,
+            DeleteLinkedLabResults = deletion.DeleteLinkedLabResults,
             ApprovedByUserId = reviewerId,
             ApprovedByEmail = reviewerEmail
         });
@@ -184,6 +226,8 @@ public sealed class SampleSurveyDeletionsController(
 
     private bool IsReviewer() => User.IsInRole(MetaGrowRoles.Admin) ||
         User.IsInRole(MetaGrowRoles.AgricultureManager) || User.IsInRole(MetaGrowRoles.Accountant);
+    private bool CanApproveOwnRequest() => User.IsInRole(MetaGrowRoles.Admin) ||
+        User.IsInRole(MetaGrowRoles.AgricultureManager);
     private string? AccessToken() =>
         AuthenticationHeaderValue.TryParse(Request.Headers.Authorization, out var authorization) &&
         authorization.Scheme.Equals("Bearer", StringComparison.OrdinalIgnoreCase)
@@ -192,7 +236,9 @@ public sealed class SampleSurveyDeletionsController(
     private static MetaGrowAuthError Error(string message) => new() { Errors = [message] };
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length];
-    private static MetaGrowSampleSurveyDeletionDto ToDto(SampleSurveyDeletionRequest request) => new()
+    private static MetaGrowSampleSurveyDeletionDto ToDto(
+        SampleSurveyDeletionRequest request,
+        bool isRequestedByCurrentUser = false) => new()
     {
         Id = request.Id,
         SurveyId = request.SurveyId,
@@ -202,12 +248,19 @@ public sealed class SampleSurveyDeletionsController(
         SampleCount = request.SampleCount,
         PhotoCount = request.PhotoCount,
         ActionCount = request.ActionCount,
+        LinkedSoilResultCount = request.LinkedSoilResultCount,
+        LinkedTissueResultCount = request.LinkedTissueResultCount,
+        LinkedSapResultCount = request.LinkedSapResultCount,
+        LinkedQuickSoilResultCount = request.LinkedQuickSoilResultCount,
+        LinkedLegacyResultCount = request.LinkedLegacyResultCount,
+        DeleteLinkedLabResults = request.DeleteLinkedLabResults,
         Status = request.Status,
         RequestedByEmail = request.RequestedByEmail,
         RequestedUtc = request.RequestedUtc,
         ReviewedByEmail = request.ReviewedByEmail,
         ReviewedUtc = request.ReviewedUtc,
         ReviewNote = request.ReviewNote,
-        LastError = request.LastError
+        LastError = request.LastError,
+        IsRequestedByCurrentUser = isRequestedByCurrentUser
     };
 }

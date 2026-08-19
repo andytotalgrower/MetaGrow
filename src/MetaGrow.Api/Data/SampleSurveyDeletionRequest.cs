@@ -14,6 +14,12 @@ public sealed class SampleSurveyDeletionRequest
     public int SampleCount { get; set; }
     public int PhotoCount { get; set; }
     public int ActionCount { get; set; }
+    public int LinkedSoilResultCount { get; set; }
+    public int LinkedTissueResultCount { get; set; }
+    public int LinkedSapResultCount { get; set; }
+    public int LinkedQuickSoilResultCount { get; set; }
+    public int LinkedLegacyResultCount { get; set; }
+    public bool DeleteLinkedLabResults { get; set; }
     public MetaGrowSampleSurveyDeletionStatus Status { get; set; }
     public string RequestedByUserId { get; set; } = string.Empty;
     public string RequestedByEmail { get; set; } = string.Empty;

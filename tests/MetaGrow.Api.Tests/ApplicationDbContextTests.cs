@@ -146,7 +146,38 @@ public sealed class ApplicationDbContextTests
         {
             historical.SampleSurveyDeletionRequests.Add(SampleDeletionRequest(MetaGrowSampleSurveyDeletionStatus.Rejected));
             await historical.SaveChangesAsync();
+            historical.SampleSurveyDeletionRequests.Add(SampleDeletionRequest(MetaGrowSampleSurveyDeletionStatus.Cancelled));
+            await historical.SaveChangesAsync();
         }
+    }
+
+    [Fact]
+    public async Task Sample_survey_deletion_request_locks_in_lab_counts_and_destructive_choice()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options;
+
+        await using var db = new ApplicationDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+        var request = SampleDeletionRequest(MetaGrowSampleSurveyDeletionStatus.Pending);
+        request.LinkedSoilResultCount = 2;
+        request.LinkedTissueResultCount = 3;
+        request.LinkedSapResultCount = 4;
+        request.LinkedQuickSoilResultCount = 5;
+        request.LinkedLegacyResultCount = 6;
+        request.DeleteLinkedLabResults = true;
+        db.SampleSurveyDeletionRequests.Add(request);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var saved = await db.SampleSurveyDeletionRequests.SingleAsync();
+        Assert.Equal(2, saved.LinkedSoilResultCount);
+        Assert.Equal(3, saved.LinkedTissueResultCount);
+        Assert.Equal(4, saved.LinkedSapResultCount);
+        Assert.Equal(5, saved.LinkedQuickSoilResultCount);
+        Assert.Equal(6, saved.LinkedLegacyResultCount);
+        Assert.True(saved.DeleteLinkedLabResults);
     }
 
     private static PropertyDeletionRequest DeletionRequest(MetaGrowPropertyDeletionStatus status) => new()
