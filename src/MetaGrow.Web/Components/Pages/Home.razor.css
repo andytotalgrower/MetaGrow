@@ -155,17 +155,17 @@ body.mantine-dark .release-note { background: rgb(from var(--mg-blue, #007cba) r
 @container (max-width: 45.125rem) { ::deep .tiles { --tile-column-count: 2; } }
 @container (max-width: 29.75rem) { ::deep .tiles { --tile-column-count: 1; } }
 
-@media (max-width: 72rem) {
+@container page-content (max-width: 72rem) {
     .queue-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .queue-clear-button { justify-self: start; }
 }
 
-@media (max-width: 48rem) {
+@container page-content (max-width: 48rem) {
     .queue-desktop { display: none; }
     .queue-mobile { display: grid; gap: .7rem; }
 }
 
-@media (max-width: 36rem) {
+@container page-content (max-width: 36rem) {
     .queue-heading { align-items: stretch; flex-direction: column; }
     .queue-count { align-self: flex-start; }
     .queue-filters { grid-template-columns: 1fr; }

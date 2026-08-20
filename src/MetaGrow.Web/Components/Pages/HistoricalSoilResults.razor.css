@@ -126,8 +126,8 @@
 .bulk-receipt > div span { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .78rem; }
 .bulk-receipt a { white-space: nowrap; }
 .bulk-footer { gap: .75rem; }
-@media (max-width: 70rem) { .filter-grid, .search-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 48rem) { .desktop-results { display: none; } .mobile-results { display: grid; gap: .75rem; } .result-detail { padding: .6rem 0; } }
-@media (max-width: 48rem) { .mapping-row, .batch-crop-editor { align-items: stretch; grid-template-columns: 1fr; } .mapping-row-status { min-height: 0; } }
-@media (max-width: 48rem) { .bulk-controls { grid-template-columns: 1fr; } .bulk-receipt { align-items: start; grid-template-columns: 1fr; } }
-@media (max-width: 38rem) { .filter-heading, .result-heading, .detail-heading { align-items: stretch; flex-direction: column; } .filter-actions { display: grid; grid-template-columns: 1fr 1fr; } .filter-grid, .search-grid, .dialog-fields, .raw-map-summary, .generation-banner, .bulk-summary { grid-template-columns: 1fr; } .generation-test-field { grid-column: auto; } .generation-block-row { align-items: flex-start; } .sample-nav { overflow-x: auto; } .dialog-footer { flex-wrap: wrap; } }
+@container page-content (max-width: 70rem) { .filter-grid, .search-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container page-content (max-width: 48rem) { .desktop-results { display: none; } .mobile-results { display: grid; gap: .75rem; } .result-detail { padding: .6rem 0; } }
+@container page-content (max-width: 48rem) { .mapping-row, .batch-crop-editor { align-items: stretch; grid-template-columns: 1fr; } .mapping-row-status { min-height: 0; } }
+@container page-content (max-width: 48rem) { .bulk-controls { grid-template-columns: 1fr; } .bulk-receipt { align-items: start; grid-template-columns: 1fr; } }
+@container page-content (max-width: 38rem) { .filter-heading, .result-heading, .detail-heading { align-items: stretch; flex-direction: column; } .filter-actions { display: grid; grid-template-columns: 1fr 1fr; } .filter-grid, .search-grid, .dialog-fields, .raw-map-summary, .generation-banner, .bulk-summary { grid-template-columns: 1fr; } .generation-test-field { grid-column: auto; } .generation-block-row { align-items: flex-start; } .sample-nav { overflow-x: auto; } .dialog-footer { flex-wrap: wrap; } }

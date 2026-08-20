@@ -1,0 +1,431 @@
+@page "/reports/banana"
+@page "/reports/banana/{View}"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject ITgsApiService TgsApi
+@inject IJSRuntime JS
+@inject IToastNotificationService ToastService
+
+<PageTitle>Banana reports | MetaGrow</PageTitle>
+
+<DxToastProvider Name="BananaReportMessages" MaxToastCount="4"
+                 AnimationType="ToastAnimationType.Slide"
+                 HorizontalAlignment="HorizontalAlignment.Right"
+                 StickToViewport="true"
+                 DisplayTime="TimeSpan.FromSeconds(10)"
+                 Width="400px" />
+
+<div class="reporting-hub">
+    <div class="title">
+        <div class="title-header-text">Banana reports</div>
+        <div class="title-content-text">Compare banana survey results on screen, then export the report when it is ready.</div>
+    </div>
+
+    <nav class="report-tabs" aria-label="Banana report sections">
+        <a href="/reports/banana" class="active">Finger count comparison</a>
+    </nav>
+
+    <section class="hub-panel">
+        <div class="panel-heading">
+            <div>
+                <h2>Finger count comparison</h2>
+                <p>Compare one primary farm with between one and four secondary farms.</p>
+            </div>
+        </div>
+
+        <div class="scope-grid">
+            <div class="field">
+                <label for="finger-from">From</label>
+                <DxDateEdit Id="finger-from" @bind-Date="_startDate" DisplayFormat="dd/MM/yyyy" />
+            </div>
+            <div class="field">
+                <label for="finger-to">To</label>
+                <DxDateEdit Id="finger-to" @bind-Date="_endDate" DisplayFormat="dd/MM/yyyy" />
+            </div>
+            <div class="field primary-farm-field">
+                <label for="finger-primary">Primary farm <span aria-hidden="true">*</span></label>
+                <DxComboBox Id="finger-primary"
+                            Data="@_properties"
+                            @bind-Value="_primaryPropertyId"
+                            TextFieldName="@nameof(ApiModels.Property.PropertyName)"
+                            ValueFieldName="@nameof(ApiModels.Property.PropertyId)"
+                            NullText="Search for the primary farm"
+                            AllowUserInput="false"
+                            SearchMode="ListSearchMode.AutoSearch"
+                            SearchFilterCondition="ListSearchFilterCondition.Contains"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+        </div>
+
+        <div class="secondary-heading">
+            <div>
+                <h3>Secondary farms</h3>
+                <p>Add at least one farm. A farm can only appear once in the comparison.</p>
+            </div>
+            <DxButton Text="Add secondary farm"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="AddSecondaryFarm"
+                      Enabled="@(_secondaryPropertyIds.Count < 4 && !_working)" />
+        </div>
+
+        <div class="secondary-farms">
+            @for (var index = 0; index < _secondaryPropertyIds.Count; index++)
+            {
+                var slot = index;
+                <div class="secondary-farm-row">
+                    <div class="field">
+                        <label for="@($"finger-secondary-{slot}")">Secondary farm @(slot + 1) @(slot == 0 ? "*" : string.Empty)</label>
+                        <DxComboBox Id="@($"finger-secondary-{slot}")"
+                                    Data="@_properties"
+                                    Value="@_secondaryPropertyIds[slot]"
+                                    ValueChanged="@((int? value) => SetSecondaryFarm(slot, value))"
+                                    TextFieldName="@nameof(ApiModels.Property.PropertyName)"
+                                    ValueFieldName="@nameof(ApiModels.Property.PropertyId)"
+                                    NullText="Search for a farm"
+                                    AllowUserInput="false"
+                                    SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </div>
+                    @if (_secondaryPropertyIds.Count > 1)
+                    {
+                        <DxButton Text="Remove"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  RenderStyleMode="ButtonRenderStyleMode.Text"
+                                  Click="@(() => RemoveSecondaryFarm(slot))"
+                                  Enabled="@(!_working)" />
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="report-options">
+            <DxCheckBox @bind-Checked="_anonymousSecondaryFarms">Use anonymous labels for secondary farms</DxCheckBox>
+            <DxCheckBox @bind-Checked="_includeAreaAverage">Include comparison average</DxCheckBox>
+        </div>
+
+        <div class="load-actions">
+            <DxButton Text="Load report preview"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      SizeMode="SizeMode.Large"
+                      Click="LoadReportAsync"
+                      Enabled="@(!_working && !_loadingProperties)" />
+        </div>
+
+        @if (_report.Rows.Count > 0)
+        {
+            <section class="preview-panel" aria-labelledby="finger-preview-heading">
+                <div class="preview-heading">
+                    <div>
+                        <span>Report preview</span>
+                        <h3 id="finger-preview-heading">@_report.Title</h3>
+                        <p>@_report.StartDate.ToString("dd MMM yyyy") to @_report.EndDate.ToString("dd MMM yyyy")</p>
+                    </div>
+                </div>
+                <DxChart @ref="_chart"
+                         Data="@_chartPoints"
+                         Width="100%"
+                         CssClass="finger-count-chart"
+                         Palette="@UtilsService.ChartPalette"
+                         PaletteExtensionMode="ChartPaletteExtensionMode.Blend">
+                    <DxChartTitle Text="Bunch Finger Count Comparison" />
+                    <DxChartArgumentAxis>
+                        <DxChartAxisLabel Format="ChartElementFormat.ShortDate" />
+                    </DxChartArgumentAxis>
+                    <DxChartValueAxis>
+                        <DxChartAxisLabel Format="@(ChartElementFormat.FixedPoint(2))" />
+                    </DxChartValueAxis>
+                    @foreach (var series in _report.Series)
+                    {
+                        var seriesKey = series.Key;
+                        <DxChartLineSeries Name="@series.DisplayName"
+                                           ArgumentField="@((FingerCountChartPoint point) => point.Date)"
+                                           ValueField="@((FingerCountChartPoint point) => point.Value)"
+                                           Filter="@((FingerCountChartPoint point) => point.SeriesKey == seriesKey)" />
+                    }
+                    <DxChartLegend Position="RelativePosition.Outside" Orientation="Orientation.Horizontal" AllowToggleSeries="true" />
+                    <DxChartTooltip Enabled="true" Position="RelativePosition.Outside">
+                        <div class="chart-tooltip">
+                            <strong>@context.Point.SeriesName</strong>
+                            <span>@context.Point.Argument</span>
+                            <span>@context.Point.Value</span>
+                        </div>
+                    </DxChartTooltip>
+                </DxChart>
+            </section>
+        }
+
+        <div class="report-grid-wrap">
+            <DxGrid @key="_gridVersion"
+                    Data="@_report.Rows"
+                    PageSize="20"
+                    ShowAllRows="false"
+                    TextWrapEnabled="false"
+                    HighlightRowOnHover="true"
+                    ColumnResizeMode="GridColumnResizeMode.NextColumn"
+                    CssClass="report-results-grid">
+                <ToolbarTemplate>
+                    <DxToolbar CssClass="report-export-toolbar">
+                        <Items>
+                            <DxToolbarItem Text="Export PDF"
+                                           RenderStyle="ButtonRenderStyle.Info"
+                                           Click="@(() => ExportAsync(BananaReportExportFormat.Pdf))"
+                                           Enabled="@(!_working && _report.Rows.Count > 0)" />
+                            <DxToolbarItem Text="Export Excel"
+                                           BeginGroup="true"
+                                           RenderStyle="ButtonRenderStyle.Info"
+                                           Click="@(() => ExportAsync(BananaReportExportFormat.Xlsx))"
+                                           Enabled="@(!_working && _report.Rows.Count > 0)" />
+                        </Items>
+                    </DxToolbar>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(BananaFingerCountComparisonRowDto.SurveyDate)"
+                                      Caption="Survey date"
+                                      Width="130px"
+                                      DisplayFormat="dd/MM/yyyy" />
+                    @for (var seriesIndex = 0; seriesIndex < _report.Series.Count; seriesIndex++)
+                    {
+                        var valueIndex = seriesIndex;
+                        var caption = _report.Series[seriesIndex].DisplayName;
+                        <DxGridDataColumn Caption="@caption" MinWidth="150" AllowSort="false">
+                            <CellDisplayTemplate Context="fingerCell">
+                                @FingerCountValue((BananaFingerCountComparisonRowDto)fingerCell.DataItem, valueIndex)
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    }
+                </Columns>
+            </DxGrid>
+        </div>
+    </section>
+</div>
+
+@code {
+    [Parameter] public string? View { get; set; }
+
+    private const string ToastProvider = "BananaReportMessages";
+    private bool _loadingProperties = true, _working, _loadErrorToastShown;
+    private string? _loadError, _loadedRequestKey;
+    private List<ApiModels.Property> _properties = [];
+    private DateTime _startDate = DateTime.Today.AddYears(-1), _endDate = DateTime.Today;
+    private int? _primaryPropertyId;
+    private readonly List<int?> _secondaryPropertyIds = [null];
+    private bool _anonymousSecondaryFarms = true, _includeAreaAverage;
+    private BananaFingerCountComparisonReportDto _report = new();
+    private List<FingerCountChartPoint> _chartPoints = [];
+    private DxChartBase? _chart;
+    private int _gridVersion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var properties = await TgsApi.GetProperties();
+        _properties = (properties ?? [])
+            .Where(property => property.IsActive)
+            .OrderBy(property => property.PropertyName)
+            .ToList();
+        if (properties == null) _loadError = TgsApi.ErrorMessage ?? "Farm options could not be loaded.";
+        _loadingProperties = false;
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_loadError is not null && !_loadErrorToastShown)
+        {
+            _loadErrorToastShown = true;
+            ShowToast("Farms unavailable", _loadError, ToastRenderStyle.Danger);
+        }
+        return Task.CompletedTask;
+    }
+
+    private void AddSecondaryFarm()
+    {
+        if (_secondaryPropertyIds.Count < 4) _secondaryPropertyIds.Add(null);
+    }
+
+    private void RemoveSecondaryFarm(int index)
+    {
+        if (_secondaryPropertyIds.Count <= 1 || index < 0 || index >= _secondaryPropertyIds.Count) return;
+        _secondaryPropertyIds.RemoveAt(index);
+    }
+
+    private void SetSecondaryFarm(int index, int? propertyId)
+    {
+        if (index >= 0 && index < _secondaryPropertyIds.Count)
+            _secondaryPropertyIds[index] = propertyId;
+    }
+
+    private async Task LoadReportAsync()
+    {
+        if (!TryBuildRequest(out var request)) return;
+        _working = true;
+        try
+        {
+            var report = await TgsApi.PreviewBananaFingerCountComparison(request);
+            if (report == null)
+            {
+                ClearPreview();
+                ShowToast("Report could not be loaded", TgsApi.ErrorMessage ?? "No report results were returned.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            _report = report;
+            _chartPoints = BuildChartPoints(report);
+            _loadedRequestKey = RequestKey(request);
+            _gridVersion++;
+            ShowToast("Report loaded", $"{report.Rows.Count:N0} survey dates are ready to review.", ToastRenderStyle.Success);
+        }
+        finally
+        {
+            _working = false;
+        }
+    }
+
+    private async Task ExportAsync(BananaReportExportFormat format)
+    {
+        if (!TryBuildRequest(out var request)) return;
+        if (!string.Equals(_loadedRequestKey, RequestKey(request), StringComparison.Ordinal))
+        {
+            ShowToast("Reload the report", "The filters have changed. Load the report again before exporting it.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        request.Format = format;
+        _working = true;
+        try
+        {
+            if (format == BananaReportExportFormat.Pdf)
+            {
+                if (_chart == null)
+                {
+                    ShowToast("Export failed", "The report chart is not ready to export.", ToastRenderStyle.Danger);
+                    return;
+                }
+
+                var fileName = ExportFileBaseName();
+                await _chart.ExportAsync(fileName, ChartExportFormat.Pdf, 16, System.Drawing.Color.White);
+                ShowToast("Download ready", $"{fileName}.pdf", ToastRenderStyle.Success);
+                return;
+            }
+
+            var file = await TgsApi.ExportBananaFingerCountComparison(request);
+            if (file == null)
+            {
+                ShowToast("Export failed", TgsApi.ErrorMessage ?? "The report could not be exported.", ToastRenderStyle.Danger);
+                return;
+            }
+            await JS.InvokeVoidAsync("metaGrowFileDownload.fromBase64", file.FileName, file.ContentType, Convert.ToBase64String(file.Content));
+            ShowToast("Download ready", file.FileName, ToastRenderStyle.Success);
+        }
+        finally
+        {
+            _working = false;
+        }
+    }
+
+    private bool TryBuildRequest(out BananaFingerCountComparisonRequest request)
+    {
+        request = new();
+        if (_endDate.Date < _startDate.Date)
+        {
+            ShowToast("Date range invalid", "End date must be on or after start date.", ToastRenderStyle.Warning);
+            return false;
+        }
+        if (!_primaryPropertyId.HasValue)
+        {
+            ShowToast("Primary farm required", "Select the primary farm for the comparison.", ToastRenderStyle.Warning);
+            return false;
+        }
+
+        var secondaryIds = _secondaryPropertyIds.Where(id => id.HasValue).Select(id => id!.Value).ToList();
+        if (secondaryIds.Count == 0)
+        {
+            ShowToast("Secondary farm required", "Select at least one secondary farm.", ToastRenderStyle.Warning);
+            return false;
+        }
+        if (secondaryIds.Any(id => id == 0))
+        {
+            ShowToast("Secondary farm required", "Select a valid secondary farm.", ToastRenderStyle.Warning);
+            return false;
+        }
+        if (secondaryIds.Count != _secondaryPropertyIds.Count)
+        {
+            ShowToast("Complete the farm selection", "Select a farm in every secondary farm row, or remove the empty row.", ToastRenderStyle.Warning);
+            return false;
+        }
+        if (secondaryIds.Distinct().Count() != secondaryIds.Count)
+        {
+            ShowToast("Duplicate secondary farm", "Each secondary farm can only be selected once.", ToastRenderStyle.Warning);
+            return false;
+        }
+        if (secondaryIds.Contains(_primaryPropertyId.Value))
+        {
+            ShowToast("Farm selected twice", "The primary farm cannot also be a secondary farm.", ToastRenderStyle.Warning);
+            return false;
+        }
+
+        request = new BananaFingerCountComparisonRequest
+        {
+            StartDate = _startDate.Date,
+            EndDate = _endDate.Date,
+            PrimaryPropertyId = _primaryPropertyId.Value,
+            SecondaryPropertyIds = secondaryIds,
+            AnonymousSecondaryFarms = _anonymousSecondaryFarms,
+            IncludeAreaAverage = _includeAreaAverage
+        };
+        return true;
+    }
+
+    private void ClearPreview()
+    {
+        _report = new();
+        _chartPoints = [];
+        _loadedRequestKey = null;
+        _gridVersion++;
+    }
+
+    private static List<FingerCountChartPoint> BuildChartPoints(BananaFingerCountComparisonReportDto report)
+    {
+        var points = new List<FingerCountChartPoint>();
+        foreach (var row in report.Rows)
+        {
+            for (var index = 0; index < report.Series.Count && index < row.Values.Count; index++)
+            {
+                if (row.Values[index].HasValue)
+                    points.Add(new FingerCountChartPoint(row.SurveyDate, row.Values[index]!.Value, report.Series[index].Key));
+            }
+        }
+        return points;
+    }
+
+    private static string FingerCountValue(BananaFingerCountComparisonRowDto row, int index) =>
+        index >= 0 && index < row.Values.Count && row.Values[index].HasValue
+            ? row.Values[index]!.Value.ToString("N2")
+            : string.Empty;
+
+    private string ExportFileBaseName()
+    {
+        var primary = _report.Series.FirstOrDefault(series => series.IsPrimary)?.DisplayName;
+        var source = string.IsNullOrWhiteSpace(primary) ? "primary-farm" : primary.Trim().ToLowerInvariant();
+        var safeName = new string(source.Select(character => char.IsLetterOrDigit(character) ? character : '-').ToArray());
+        while (safeName.Contains("--", StringComparison.Ordinal)) safeName = safeName.Replace("--", "-", StringComparison.Ordinal);
+        safeName = safeName.Trim('-');
+        if (safeName.Length == 0) safeName = "primary-farm";
+        return $"finger-count-comparison_{safeName}_{_report.StartDate:yyyyMMdd}-{_report.EndDate:yyyyMMdd}";
+    }
+
+    private static string RequestKey(BananaFingerCountComparisonRequest request) =>
+        $"{request.StartDate:yyyyMMdd}|{request.EndDate:yyyyMMdd}|{request.PrimaryPropertyId}|{string.Join(',', request.SecondaryPropertyIds)}|{request.IncludeAreaAverage}|{request.AnonymousSecondaryFarms}";
+
+    private void ShowToast(string title, string text, ToastRenderStyle style) => ToastService.ShowToast(new ToastOptions
+    {
+        ProviderName = ToastProvider,
+        Title = title,
+        Text = text,
+        RenderStyle = style,
+        DisplayTime = TimeSpan.FromSeconds(10)
+    });
+
+    private sealed record FingerCountChartPoint(DateTime Date, double Value, string SeriesKey);
+}

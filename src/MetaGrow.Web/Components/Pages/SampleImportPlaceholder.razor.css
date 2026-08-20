@@ -115,13 +115,13 @@
 .receipt-card h2 { margin: .15rem 0; }
 .receipt-card p, .receipt-card small { margin: 0; color: var(--dxds-color-content-neutral-subdued-rest); }
 
-@media (max-width: 900px) {
+@container page-content (max-width: 900px) {
     .preview-facts { grid-template-columns: repeat(2, minmax(0,1fr)); }
     .mapping-row { grid-template-columns: 1fr; }
     .mapping-arrow { transform: rotate(90deg); }
 }
 
-@media (max-width: 650px) {
+@container page-content (max-width: 650px) {
     .import-hero { align-items: flex-start; flex-direction: column; padding: 1.35rem; }
     .hero-safety { align-items: flex-start; text-align: left; }
     .section-heading.split, .commit-bar { align-items: stretch; flex-direction: column; }

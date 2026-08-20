@@ -81,12 +81,12 @@
 .clear-state p, .empty-state p { color: var(--dxds-color-content-neutral-subdued-rest); margin: 0; }
 .clear-icon { align-items: center; background: #dcfce7; border-radius: 50%; color: #166534; display: flex; font-size: 1.5rem; font-weight: 750; height: 3.5rem; justify-content: center; width: 3.5rem; }
 
-@media (max-width: 60rem) {
+@container page-content (max-width: 60rem) {
     .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .filter-check { padding-bottom: 0; }
 }
 
-@media (max-width: 40rem) {
+@container page-content (max-width: 40rem) {
     .duplicate-farms-hero, .filter-heading, .approval-heading, .approval-row { align-items: stretch; flex-direction: column; }
     .summary-strip, .filter-grid { grid-template-columns: 1fr; }
     .approval-actions { justify-content: flex-end; }

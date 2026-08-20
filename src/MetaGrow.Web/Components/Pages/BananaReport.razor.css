@@ -327,12 +327,12 @@
     padding: .5rem 0;
 }
 
-@media (max-width: 62rem) {
+@container page-content (max-width: 62rem) {
     .report-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-@media (max-width: 40rem) {
+@container page-content (max-width: 40rem) {
     .report-toolbar { align-items: stretch; flex-direction: column; }
     .report-toolbar-controls { justify-content: flex-start; }
     .report-brand-option { flex: 1 1 100%; }

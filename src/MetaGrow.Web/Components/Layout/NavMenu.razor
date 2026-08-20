@@ -21,6 +21,19 @@
     <hr class="menu-separator" />
     <DxMenu Orientation="Orientation.Vertical" CssClass="menu">
         <Items>
+            <AuthorizeView Roles="@(ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager + "," + ApiModels.MetaGrow.MetaGrowRoles.Agronomist)">
+                <DxMenuItem Text="Reports" CssClass="@MenuSectionCssClass("/reports")" IconCssClass="icon icon-chart">
+                    <Items>
+                        <DxMenuItem NavigateUrl="/reports/multicrop" Text="Multi-crop" CssClass="@MenuSectionCssClass("/reports/multicrop")" />
+                        <DxMenuItem NavigateUrl="/reports/banana" Text="Banana" CssClass="@MenuSectionCssClass("/reports/banana")" />
+                    </Items>
+                </DxMenuItem>
+            </AuthorizeView>
+        </Items>
+    </DxMenu>
+    <hr class="menu-separator" />
+    <DxMenu Orientation="Orientation.Vertical" CssClass="menu">
+        <Items>
             <AuthorizeView Roles="@ApiModels.MetaGrow.MetaGrowRoles.Admin">
                 <DxMenuItem NavigateUrl="/admin" Text="Administration" CssClass="@MenuItemCssClass("/admin")" IconCssClass="icon icon-settings" />
             </AuthorizeView>
@@ -49,6 +62,9 @@
 
     private string? MenuItemCssClass(string itemPath) =>
         string.Equals(currentLocalPath, itemPath, StringComparison.OrdinalIgnoreCase) ? "menu-item-active" : null;
+
+    private string? MenuSectionCssClass(string itemPath) =>
+        currentLocalPath?.StartsWith(itemPath, StringComparison.OrdinalIgnoreCase) == true ? "menu-item-active" : null;
 
     public void Dispose() => NavigationManager.LocationChanged -= OnLocationChanged;
 }

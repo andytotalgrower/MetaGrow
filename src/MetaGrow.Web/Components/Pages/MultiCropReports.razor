@@ -1,0 +1,384 @@
+@page "/reports/multicrop"
+@page "/reports/multicrop/{View}"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject ITgsApiService TgsApi
+@inject IJSRuntime JS
+@inject IToastNotificationService ToastService
+
+<PageTitle>Multi-crop reports | MetaGrow</PageTitle>
+
+<DxToastProvider Name="MultiCropReportMessages" MaxToastCount="4"
+                 AnimationType="ToastAnimationType.Slide"
+                 HorizontalAlignment="HorizontalAlignment.Right"
+                 StickToViewport="true"
+                 DisplayTime="TimeSpan.FromSeconds(10)"
+                 Width="400px" />
+
+<div class="reporting-hub">
+    <div class="title">
+        <div class="title-header-text">Multi-crop reports</div>
+        <div class="title-content-text">Build a pest, beneficials and disease matrix, export history, or maintain reusable templates.</div>
+    </div>
+    <nav class="report-tabs" aria-label="Multi-crop report sections">
+        <a href="/reports/multicrop" class="@TabClass("matrix")">PBD Matrix</a>
+        <a href="/reports/multicrop/history" class="@TabClass("history")">PBD History</a>
+        <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager)">
+            <a href="/reports/multicrop/templates" class="@TabClass("templates")">PBD Templates</a>
+        </AuthorizeView>
+    </nav>
+
+    @if (_loading)
+    {
+        <div class="hub-state" role="status">Loading report options…</div>
+    }
+    else if (_loadError is not null)
+    {
+        <div class="hub-state" role="status">Report options are unavailable. Refresh the page to try again.</div>
+    }
+    else if (ActiveView == "history")
+    {
+        <section class="hub-panel">
+            <div class="panel-heading"><div><h2>History</h2><p>Review and export PBD history for one property.</p></div></div>
+            <div class="scope-grid">
+                <div class="field"><label for="history-from">From</label><DxDateEdit Id="history-from" @bind-Date="_historyStart" DisplayFormat="dd/MM/yyyy" /></div>
+                <div class="field"><label for="history-to">To</label><DxDateEdit Id="history-to" @bind-Date="_historyEnd" DisplayFormat="dd/MM/yyyy" /></div>
+                <div class="field property-field"><label for="history-property">Property</label><DxComboBox Id="history-property" Data="@_properties" @bind-Value="_historyPropertyId" TextFieldName="@nameof(ApiModels.Property.PropertyName)" ValueFieldName="@nameof(ApiModels.Property.PropertyId)" NullText="Search for a property" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" /></div>
+                <div class="field"><label for="history-format">Format</label><DxComboBox Id="history-format" Data="@HistoryFormatOptions" @bind-Value="_historyFormat" TextFieldName="@nameof(HistoryFormatOption.Text)" ValueFieldName="@nameof(HistoryFormatOption.Value)" AllowUserInput="false" /></div>
+            </div>
+            <div class="report-grid-wrap">
+                <DxGrid Data="@_historyRows" PageSize="20" ShowAllRows="false"
+                        TextWrapEnabled="false" HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn"
+                        CssClass="report-results-grid">
+                    <ToolbarTemplate>
+                        <DxToolbar>
+                            <Items>
+                                <DxToolbarItem Text="Load results" RenderStyle="ButtonRenderStyle.Primary" Click="PreviewHistoryAsync" Enabled="@(!_working)" />
+                                <DxToolbarItem Text="@HistoryButtonText" BeginGroup="true" RenderStyle="ButtonRenderStyle.Info" Click="DownloadHistoryAsync" Enabled="@(!_working && _historyRows.Count > 0)" />
+                            </Items>
+                        </DxToolbar>
+                    </ToolbarTemplate>
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(MultiCropPbdHistoryRowDto.BlockName)" Caption="Block" MinWidth="160" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropPbdHistoryRowDto.SurveyDate)" Caption="Survey date" Width="120px" DisplayFormat="dd/MM/yyyy" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropPbdHistoryRowDto.CategoryName)" Caption="Category" Width="130px" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropPbdHistoryRowDto.ParameterName)" Caption="Parameter" MinWidth="220" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropPbdHistoryRowDto.Value)" Caption="Value" Width="110px" DisplayFormat="N2" />
+                    </Columns>
+                </DxGrid>
+            </div>
+        </section>
+    }
+    else if (ActiveView == "templates")
+    {
+        <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager)">
+            <Authorized>
+                <section class="hub-panel">
+                    <div class="panel-heading"><div><h2>Templates</h2><p>Create or update a reusable parameter selection.</p></div><div class="heading-actions"><DxButton Text="New template" RenderStyle="ButtonRenderStyle.Secondary" Click="NewTemplate" /><DxButton Text="Save template" RenderStyle="ButtonRenderStyle.Primary" Click="SaveTemplateAsync" Enabled="@(!_working)" /></div></div>
+                    <div class="template-grid">
+                        <div class="field"><label for="template-select">Existing template</label><DxComboBox Id="template-select" Data="@_catalogue.Templates" @bind-Value="_editTemplateId" @bind-Value:after="LoadTemplateForEditing" TextFieldName="@nameof(MultiCropPbdTemplateDetailDto.Name)" ValueFieldName="@nameof(MultiCropPbdTemplateDetailDto.TemplateId)" NullText="New template" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
+                        <div class="field"><label for="template-name">Template name</label><DxTextBox Id="template-name" @bind-Text="_templateName" NullText="Enter a template name" /></div>
+                        <label class="check-field"><input type="checkbox" @bind="_templateShowSprays" /> Show sprays on report</label>
+                    </div>
+                    @ParameterSelector()
+                </section>
+            </Authorized>
+            <NotAuthorized><div class="hub-state">You do not have permission to edit report templates.</div></NotAuthorized>
+        </AuthorizeView>
+    }
+    else
+    {
+        <section class="hub-panel">
+            <div class="panel-heading"><div><h2>Matrix</h2><p>Choose a period and property scope, then select the values to include.</p></div></div>
+            <div class="scope-grid">
+                <div class="field"><label for="matrix-from">From</label><DxDateEdit Id="matrix-from" @bind-Date="_matrixStart" DisplayFormat="dd/MM/yyyy" /></div>
+                <div class="field"><label for="matrix-to">To</label><DxDateEdit Id="matrix-to" @bind-Date="_matrixEnd" DisplayFormat="dd/MM/yyyy" /></div>
+                <div class="field property-field"><label for="matrix-property">Property</label><DxComboBox Id="matrix-property" Data="@_properties" @bind-Value="_matrixPropertyId" TextFieldName="@nameof(ApiModels.Property.PropertyName)" ValueFieldName="@nameof(ApiModels.Property.PropertyId)" NullText="All properties" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
+                <div class="field"><label for="matrix-template">Template</label><DxComboBox Id="matrix-template" Data="@_catalogue.Templates" @bind-Value="_matrixTemplateId" @bind-Value:after="ApplyMatrixTemplate" TextFieldName="@nameof(MultiCropPbdTemplateDetailDto.Name)" ValueFieldName="@nameof(MultiCropPbdTemplateDetailDto.TemplateId)" NullText="Ad hoc" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" /></div>
+                <div class="field"><label for="matrix-grouping">Group results by</label><DxComboBox Id="matrix-grouping" Data="@GroupingOptions" @bind-Value="_matrixGrouping" TextFieldName="@nameof(GroupingOption.Text)" ValueFieldName="@nameof(GroupingOption.Value)" AllowUserInput="false" /></div>
+            </div>
+            @ParameterSelector()
+            <div class="report-grid-wrap">
+                <DxGrid @key="_matrixGridVersion" Data="@_matrixTable.Rows" ShowAllRows="true"
+                        TextWrapEnabled="false" HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn"
+                        CssClass="report-results-grid">
+                    <ToolbarTemplate>
+                        <DxToolbar>
+                            <Items>
+                                <DxToolbarItem Text="Load results" RenderStyle="ButtonRenderStyle.Primary" Click="PreviewMatrixAsync" Enabled="@(!_working)" />
+                                <DxToolbarItem Text="Download matrix (.xlsx)" BeginGroup="true" RenderStyle="ButtonRenderStyle.Info" Click="DownloadMatrixAsync" Enabled="@(!_working && _matrixTable.Rows.Count > 0)" />
+                            </Items>
+                        </DxToolbar>
+                    </ToolbarTemplate>
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(MultiCropPbdMatrixTableRowDto.Parameter)" Caption="@MatrixParameterColumn" MinWidth="240" />
+                        @for (var columnIndex = 1; columnIndex < _matrixTable.Columns.Count; columnIndex++)
+                        {
+                            var valueIndex = columnIndex - 1;
+                            var caption = _matrixTable.Columns[columnIndex];
+                            <DxGridDataColumn Caption="@caption" Width="120px" AllowSort="false">
+                                <CellDisplayTemplate Context="matrixCell">
+                                    @MatrixValue((MultiCropPbdMatrixTableRowDto)matrixCell.DataItem, valueIndex)
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                        }
+                    </Columns>
+                </DxGrid>
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] public string? View { get; set; }
+    private bool _loading = true, _working, _selectedOnly, _loadErrorToastShown;
+    private string? _loadError;
+    private MultiCropPbdCatalogueDto _catalogue = new();
+    private List<ApiModels.Property> _properties = [];
+    private DateTime _matrixStart = DateTime.Today.AddYears(-1), _matrixEnd = DateTime.Today;
+    private int? _matrixPropertyId, _matrixTemplateId;
+    private MultiCropPbdGrouping _matrixGrouping = MultiCropPbdGrouping.MonthParentCropAndParameter;
+    private readonly HashSet<int> _matrixParameterIds = [];
+    private MultiCropPbdMatrixTableDto _matrixTable = new() { Columns = ["Parameter"] };
+    private int _matrixGridVersion;
+    private DateTime _historyStart = DateTime.Today.AddYears(-1), _historyEnd = DateTime.Today;
+    private int? _historyPropertyId;
+    private MultiCropPbdExportFormat _historyFormat = MultiCropPbdExportFormat.Xlsx;
+    private List<MultiCropPbdHistoryRowDto> _historyRows = [];
+    private int? _editTemplateId;
+    private string _templateName = string.Empty, _parameterSearch = string.Empty, _parameterCategory = "ALL";
+    private bool _templateShowSprays;
+    private readonly HashSet<int> _templateParameterIds = [];
+    private string ActiveView => View?.ToLowerInvariant() is "history" or "templates" ? View.ToLowerInvariant() : "matrix";
+    private HashSet<int> CurrentSelection => ActiveView == "templates" ? _templateParameterIds : _matrixParameterIds;
+    private IEnumerable<MultiCropPbdParameterDto> FilteredParameters => _catalogue.Parameters.Where(p => _parameterCategory == "ALL" || p.CategoryCode == _parameterCategory).Where(p => string.IsNullOrWhiteSpace(_parameterSearch) || p.Name.Contains(_parameterSearch.Trim(), StringComparison.OrdinalIgnoreCase)).Where(p => !_selectedOnly || CurrentSelection.Contains(p.CollectionParameterId));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var catalogue = await TgsApi.GetMultiCropPbdCatalogue();
+        var properties = await TgsApi.GetProperties();
+        _catalogue = catalogue ?? new();
+        _properties = (properties ?? []).Where(p => p.IsActive).OrderBy(p => p.PropertyName).ToList();
+        if (catalogue is null) _loadError = TgsApi.ErrorMessage ?? "PBD report options could not be loaded.";
+        _loading = false;
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_loadError is not null && !_loadErrorToastShown)
+        {
+            _loadErrorToastShown = true;
+            ShowToast("Reports unavailable", _loadError, ToastRenderStyle.Danger);
+        }
+        return Task.CompletedTask;
+    }
+
+    private RenderFragment ParameterSelector() => @<div class="parameter-section">
+        <div class="parameter-toolbar"><div class="category-filters">@CategoryButton("ALL", "All") @CategoryButton("PEST", "Pests") @CategoryButton("BENE", "Beneficials") @CategoryButton("DIS", "Diseases")</div><input class="form-control parameter-search" placeholder="Search parameters" aria-label="Search parameters" @bind="_parameterSearch" @bind:event="oninput" /><label><input type="checkbox" @bind="_selectedOnly" /> Selected only</label></div>
+        <div class="selection-summary"><div><strong>@CurrentSelection.Count selected</strong><span>@SelectedCount("PEST") pests · @SelectedCount("BENE") beneficials · @SelectedCount("DIS") diseases</span></div><div class="selection-actions"><DxButton Text="Select filtered" RenderStyle="ButtonRenderStyle.Secondary" SizeMode="SizeMode.Small" Click="SelectFiltered" /><DxButton Text="Clear filtered" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Text" SizeMode="SizeMode.Small" Click="ClearFiltered" /><DxButton Text="Clear all" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Text" SizeMode="SizeMode.Small" Click="ClearAll" /></div></div>
+        <div class="parameter-list">@foreach (var parameter in FilteredParameters){<label class="parameter-row"><input type="checkbox" checked="@CurrentSelection.Contains(parameter.CollectionParameterId)" @onchange="@(() => ToggleParameter(parameter.CollectionParameterId))" /><span class="category-badge @parameter.CategoryCode.ToLowerInvariant()">@parameter.CategoryName</span><span>@parameter.Name</span></label>}</div>
+    </div>;
+    private RenderFragment CategoryButton(string code, string label) => @<DxButton Text="@($"{label} {CategorySummary(code)}")" RenderStyle="@(_parameterCategory == code ? ButtonRenderStyle.Primary : ButtonRenderStyle.Secondary)" RenderStyleMode="ButtonRenderStyleMode.Contained" SizeMode="SizeMode.Small" CssClass="category-filter-button" Click="@(() => SetParameterCategory(code))" />;
+    private string TabClass(string tab) => ActiveView == tab ? "active" : string.Empty;
+    private void SetParameterCategory(string category) => _parameterCategory = category;
+    private string CategorySummary(string code) { var items = code == "ALL" ? _catalogue.Parameters : _catalogue.Parameters.Where(p => p.CategoryCode == code); return $"{items.Count(p => CurrentSelection.Contains(p.CollectionParameterId))}/{items.Count()}"; }
+    private int SelectedCount(string code) => _catalogue.Parameters.Count(p => p.CategoryCode == code && CurrentSelection.Contains(p.CollectionParameterId));
+    private void ToggleParameter(int id) { if (!CurrentSelection.Add(id)) CurrentSelection.Remove(id); }
+    private void SelectFiltered() { foreach (var p in FilteredParameters.ToList()) CurrentSelection.Add(p.CollectionParameterId); }
+    private void ClearFiltered() { foreach (var p in FilteredParameters.ToList()) CurrentSelection.Remove(p.CollectionParameterId); }
+    private void ClearAll() => CurrentSelection.Clear();
+    private Task ApplyMatrixTemplate() { _matrixParameterIds.Clear(); var t = _catalogue.Templates.FirstOrDefault(x => x.TemplateId == _matrixTemplateId); if (t != null) foreach (var id in t.ParameterIds) _matrixParameterIds.Add(id); return Task.CompletedTask; }
+    private Task LoadTemplateForEditing() { var t = _catalogue.Templates.FirstOrDefault(x => x.TemplateId == _editTemplateId); _templateName = t?.Name ?? ""; _templateShowSprays = t?.ShowSprays ?? false; _templateParameterIds.Clear(); if (t != null) foreach (var id in t.ParameterIds) _templateParameterIds.Add(id); return Task.CompletedTask; }
+    private void NewTemplate() { _editTemplateId = null; _templateName = ""; _templateShowSprays = false; _templateParameterIds.Clear(); }
+    private async Task SaveTemplateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_templateName))
+        {
+            ShowToast("Template name required", "Enter a template name.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        _working = true;
+        try
+        {
+            var saved = await TgsApi.SaveMultiCropPbdTemplate(_editTemplateId ?? 0, new()
+            {
+                Name = _templateName,
+                ShowSprays = _templateShowSprays,
+                ParameterIds = _templateParameterIds.ToList()
+            });
+            if (saved == null)
+            {
+                ShowToast("Template save failed", TgsApi.ErrorMessage ?? "The template could not be saved.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            var index = _catalogue.Templates.FindIndex(x => x.TemplateId == saved.TemplateId);
+            if (index >= 0) _catalogue.Templates[index] = saved;
+            else _catalogue.Templates.Add(saved);
+            _editTemplateId = saved.TemplateId;
+            ShowToast("Template saved", $"{saved.Name} is ready to use in the Matrix report.", ToastRenderStyle.Success);
+        }
+        finally
+        {
+            _working = false;
+        }
+    }
+
+    private async Task PreviewMatrixAsync()
+    {
+        if (!TryBuildMatrixRequest(out var request)) return;
+        _working = true;
+        try
+        {
+            var rows = await TgsApi.PreviewMultiCropPbdMatrix(request);
+            if (rows == null)
+            {
+                _matrixTable = new() { Columns = ["Parameter"] };
+                _matrixGridVersion++;
+                ShowToast("Matrix could not be loaded", TgsApi.ErrorMessage ?? "No matrix results were returned.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            _matrixTable = rows;
+            _matrixGridVersion++;
+            ShowToast("Matrix loaded", $"{_matrixTable.Rows.Count:N0} parameter rows are ready.", ToastRenderStyle.Success);
+        }
+        finally
+        {
+            _working = false;
+        }
+    }
+
+    private async Task PreviewHistoryAsync()
+    {
+        if (!TryBuildHistoryRequest(out var request)) return;
+        _working = true;
+        try
+        {
+            var rows = await TgsApi.PreviewMultiCropPbdHistory(request);
+            if (rows == null)
+            {
+                _historyRows = [];
+                ShowToast("History could not be loaded", TgsApi.ErrorMessage ?? "No history results were returned.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            _historyRows = rows.OrderBy(row => row.SurveyDate).ThenBy(row => row.BlockName).ThenBy(row => row.ParameterName).ToList();
+            ShowToast("History loaded", $"{_historyRows.Count:N0} result rows are ready.", ToastRenderStyle.Success);
+        }
+        finally
+        {
+            _working = false;
+        }
+    }
+
+    private async Task DownloadMatrixAsync()
+    {
+        if (!TryBuildMatrixRequest(out var request)) return;
+        _working = true;
+        try { await DeliverFile(await TgsApi.ExportMultiCropPbdMatrix(request)); }
+        finally { _working = false; }
+    }
+
+    private async Task DownloadHistoryAsync()
+    {
+        if (!TryBuildHistoryRequest(out var request)) return;
+        _working = true;
+        try { await DeliverFile(await TgsApi.ExportMultiCropPbdHistory(request)); }
+        finally { _working = false; }
+    }
+
+    private async Task DeliverFile(GeneratedFileDto? file)
+    {
+        if (file == null)
+        {
+            ShowToast("Export failed", TgsApi.ErrorMessage ?? "The report could not be exported.", ToastRenderStyle.Danger);
+            return;
+        }
+        await JS.InvokeVoidAsync("metaGrowFileDownload.fromBase64", file.FileName, file.ContentType, Convert.ToBase64String(file.Content));
+        ShowToast("Download ready", file.FileName, ToastRenderStyle.Success);
+    }
+
+    private bool TryBuildMatrixRequest(out MultiCropPbdMatrixExportRequest request)
+    {
+        request = new();
+        if (_matrixEnd < _matrixStart)
+        {
+            ShowToast("Date range invalid", "End date must be on or after start date.", ToastRenderStyle.Warning);
+            return false;
+        }
+        if (_matrixParameterIds.Count == 0)
+        {
+            ShowToast("Parameters required", "Select at least one parameter.", ToastRenderStyle.Warning);
+            return false;
+        }
+        request = new()
+        {
+            StartDate = _matrixStart,
+            EndDate = _matrixEnd,
+            PropertyId = _matrixPropertyId,
+            Grouping = _matrixGrouping,
+            ParameterIds = _matrixParameterIds.ToList()
+        };
+        return true;
+    }
+
+    private bool TryBuildHistoryRequest(out MultiCropPbdHistoryExportRequest request)
+    {
+        request = new();
+        if (!_historyPropertyId.HasValue)
+        {
+            ShowToast("Property required", "Select a property.", ToastRenderStyle.Warning);
+            return false;
+        }
+        if (_historyEnd < _historyStart)
+        {
+            ShowToast("Date range invalid", "End date must be on or after start date.", ToastRenderStyle.Warning);
+            return false;
+        }
+        request = new()
+        {
+            StartDate = _historyStart,
+            EndDate = _historyEnd,
+            PropertyId = _historyPropertyId.Value,
+            Format = _historyFormat
+        };
+        return true;
+    }
+
+    private string MatrixParameterColumn => _matrixTable.Columns.FirstOrDefault() ?? "Parameter";
+    private static string MatrixValue(MultiCropPbdMatrixTableRowDto row, int valueIndex) =>
+        valueIndex >= 0 && valueIndex < row.Values.Count && row.Values[valueIndex].HasValue
+            ? row.Values[valueIndex]!.Value.ToString("N2")
+            : string.Empty;
+
+    private string HistoryButtonText => $"Download history (.{_historyFormat.ToString().ToLowerInvariant()})";
+    private void ShowToast(string title, string text, ToastRenderStyle style) => ToastService.ShowToast(new ToastOptions
+    {
+        ProviderName = "MultiCropReportMessages",
+        Title = title,
+        Text = text,
+        RenderStyle = style,
+        DisplayTime = TimeSpan.FromSeconds(10)
+    });
+
+    private static readonly IReadOnlyList<GroupingOption> GroupingOptions =
+    [
+        new(MultiCropPbdGrouping.MonthAndParameter, "Month + parameter"),
+        new(MultiCropPbdGrouping.MonthParentCropAndParameter, "Month + parent crop + parameter"),
+        new(MultiCropPbdGrouping.MonthCropAndParameter, "Month + crop + parameter")
+    ];
+
+    private static readonly IReadOnlyList<HistoryFormatOption> HistoryFormatOptions =
+    [
+        new(MultiCropPbdExportFormat.Xlsx, "Excel (.xlsx)"),
+        new(MultiCropPbdExportFormat.Csv, "CSV (.csv)"),
+        new(MultiCropPbdExportFormat.Json, "JSON (.json)")
+    ];
+
+    private sealed record GroupingOption(MultiCropPbdGrouping Value, string Text);
+    private sealed record HistoryFormatOption(MultiCropPbdExportFormat Value, string Text);
+}

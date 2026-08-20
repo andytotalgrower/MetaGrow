@@ -110,12 +110,12 @@
 }
 .approval-load-warning span { font-size: .78rem; }
 
-@media (max-width: 52rem) {
+@container page-content (max-width: 52rem) {
     .approval-row { align-items: flex-start; flex-direction: column; }
     .approval-actions { justify-content: flex-start; width: 100%; }
 }
 
-@media (max-width: 36rem) {
+@container page-content (max-width: 36rem) {
     .approval-heading { align-items: stretch; flex-direction: column; }
     .approval-heading-actions { justify-content: space-between; }
     .approval-actions { align-items: stretch; flex-direction: column; }

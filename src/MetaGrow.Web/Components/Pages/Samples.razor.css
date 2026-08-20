@@ -35,9 +35,9 @@
 .survey-card dd { margin: 0; }
 .survey-card-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .survey-card-actions .btn { flex: 1; }
-@media (max-width: 70rem) { .filter-grid, .search-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 48rem) { .desktop-results, .desktop-only { display: none; } .mobile-results { display: grid; gap: .75rem; } }
-@media (max-width: 34rem) { .filter-heading { align-items: stretch; flex-direction: column; } .filter-actions { display: grid; grid-template-columns: 1fr 1fr; } .filter-grid, .search-grid { grid-template-columns: 1fr; } .survey-card-actions { flex-direction: column; } .sample-nav { overflow-x: auto; } }
+@container page-content (max-width: 70rem) { .filter-grid, .search-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container page-content (max-width: 48rem) { .desktop-results, .desktop-only { display: none; } .mobile-results { display: grid; gap: .75rem; } }
+@container page-content (max-width: 34rem) { .filter-heading { align-items: stretch; flex-direction: column; } .filter-actions { display: grid; grid-template-columns: 1fr 1fr; } .filter-grid, .search-grid { grid-template-columns: 1fr; } .survey-card-actions { flex-direction: column; } .sample-nav { overflow-x: auto; } }
 .sample-deletion-queue { background: var(--dxds-color-surface-neutral-rest, #fff); border: 1px solid var(--dxds-color-border-danger-rest, #d9534f); border-radius: .55rem; display: grid; gap: .75rem; margin: 1rem 0; padding: 1rem; }
 .deletion-queue-heading, .deletion-queue-row, .deletion-queue-actions, .queue-progress { align-items: center; display: flex; gap: .75rem; }
 .deletion-queue-heading { justify-content: space-between; }
@@ -50,4 +50,4 @@
 .deletion-queue-row small { color: #842029; }
 .deletion-queue-actions { flex-wrap: wrap; justify-content: flex-end; }
 .awaiting-review { font-size: .8rem; }
-@media (max-width: 52rem) { .deletion-queue-row { align-items: flex-start; flex-direction: column; } .deletion-queue-actions { justify-content: flex-start; } }
+@container page-content (max-width: 52rem) { .deletion-queue-row { align-items: flex-start; flex-direction: column; } .deletion-queue-actions { justify-content: flex-start; } }

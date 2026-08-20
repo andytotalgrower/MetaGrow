@@ -60,14 +60,14 @@
 .empty-members span { font-size: .8rem; }
 .visually-hidden { clip: rect(0 0 0 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
 
-@media (max-width: 54rem) {
+@container page-content (max-width: 54rem) {
     .reporting-groups-workspace { grid-template-columns: 1fr; }
     .group-browser { max-height: none; overflow: visible; position: static; }
     .group-results { max-height: 18rem; }
     .detail-toolbar { top: .25rem; }
 }
 
-@media (max-width: 40rem) {
+@container page-content (max-width: 40rem) {
     .reporting-groups-hero, .detail-toolbar, .membership-heading { align-items: stretch; flex-direction: column; }
     .hero-actions, .detail-actions { align-items: stretch; flex-direction: column; }
     .summary-strip { grid-template-columns: 1fr; }

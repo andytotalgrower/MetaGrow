@@ -75,20 +75,20 @@
 .block-editor-actions { align-items: center; border-top: 1px solid var(--dxds-color-border-neutral-subdued-rest); color: var(--dxds-color-content-neutral-subdued-rest); display: flex; font-size: .76rem; justify-content: space-between; margin-top: 1rem; padding-top: .8rem; }
 .visually-hidden { clip: rect(0 0 0 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
 
-@media (max-width: 72rem) {
+@container page-content (max-width: 72rem) {
     .farm-workspace { grid-template-columns: 17rem minmax(0, 1fr); }
     .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .property-general, .block-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-@media (max-width: 54rem) {
+@container page-content (max-width: 54rem) {
     .farm-workspace { grid-template-columns: 1fr; }
     .property-browser { max-height: none; overflow: visible; position: static; }
     .property-results { max-height: 18rem; min-height: 0; }
     .detail-toolbar { top: .25rem; }
 }
 
-@media (max-width: 40rem) {
+@container page-content (max-width: 40rem) {
     .farm-hero, .detail-toolbar, .blocks-heading-row, .block-editor-heading { align-items: stretch; flex-direction: column; }
     .farm-hero-actions { align-items: stretch; flex-direction: column; }
     .form-grid, .property-general, .block-form, .block-filter-row { grid-template-columns: 1fr; }

@@ -45,6 +45,6 @@
 .result-card dt { color: var(--dxds-color-content-neutral-subdued-rest); font-weight: 500; }
 .result-card dd { margin: 0; }
 .record-id, .not-linked { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .75rem; }
-@media (max-width: 70rem) { .filter-grid, .search-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 48rem) { .desktop-results { display: none; } .mobile-results { display: grid; gap: .75rem; } }
-@media (max-width: 34rem) { .filter-heading, .survey-context { align-items: stretch; flex-direction: column; } .filter-actions { display: grid; grid-template-columns: 1fr 1fr; } .filter-grid, .search-grid, .result-type-tabs { grid-template-columns: 1fr; } .sample-nav { overflow-x: auto; } }
+@container page-content (max-width: 70rem) { .filter-grid, .search-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container page-content (max-width: 48rem) { .desktop-results { display: none; } .mobile-results { display: grid; gap: .75rem; } }
+@container page-content (max-width: 34rem) { .filter-heading, .survey-context { align-items: stretch; flex-direction: column; } .filter-actions { display: grid; grid-template-columns: 1fr 1fr; } .filter-grid, .search-grid, .result-type-tabs { grid-template-columns: 1fr; } .sample-nav { overflow-x: auto; } }

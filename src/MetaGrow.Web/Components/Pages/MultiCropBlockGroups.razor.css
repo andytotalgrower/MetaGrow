@@ -22,7 +22,7 @@
 .block-option input { height: 1rem; margin: 0; width: 1rem; }
 .editor-footer { display: flex; gap: 0.65rem; justify-content: flex-end; margin-top: 1rem; }
 
-@media (max-width: 760px) {
+@container page-content (max-width: 760px) {
     .editor-header,
     .group-card-header { align-items: stretch; flex-direction: column; }
     .group-name { max-width: none; }

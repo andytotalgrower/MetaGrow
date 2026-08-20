@@ -99,14 +99,14 @@
 .empty-inline { color: var(--dxds-color-content-neutral-subdued-rest); padding: 1.25rem 0 .25rem; }
 .bottom-actions { justify-content: flex-end; }
 
-@media (max-width: 62rem) {
+@container page-content (max-width: 62rem) {
     .editor-grid { grid-template-columns: 1fr; }
     .editor-card,
     .full-width { grid-column: 1; }
     .spray-field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-@media (max-width: 46rem) {
+@container page-content (max-width: 46rem) {
     .editor-toolbar { align-items: stretch; flex-direction: column; position: static; }
     .toolbar-right { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .field-grid,

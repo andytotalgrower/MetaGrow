@@ -35,7 +35,14 @@
 .nav-buttons-container { align-items: center; display: flex; gap: 0.625rem; min-height: 2rem; }
 ::deep .nav-buttons-container > a { color: inherit; }
 ::deep .nav-buttons-container .back-button { padding-left: 0; padding-right: 0.25rem; }
-.page-content-container { display: flex; flex-direction: column; flex-grow: 1; min-height: 0; }
+.page-content-container {
+    container-name: page-content;
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    min-height: 0;
+}
 .switcher-panel { margin-left: auto; }
 
 #blazor-error-ui {
