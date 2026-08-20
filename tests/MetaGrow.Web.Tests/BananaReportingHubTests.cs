@@ -66,4 +66,36 @@ public sealed class BananaReportingHubTests
         Assert.Equal(-1, request.PrimaryPropertyId);
         Assert.Equal([-2], request.SecondaryPropertyIds);
     }
+
+    [Fact]
+    public void Weekly_averages_defaults_to_the_last_18_months()
+    {
+        var component = new BananaReports();
+
+        var startDate = Assert.IsType<DateTime>(typeof(BananaReports)
+            .GetField("_weeklyStartDate", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(component));
+        var endDate = Assert.IsType<DateTime>(typeof(BananaReports)
+            .GetField("_weeklyEndDate", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(component));
+
+        Assert.Equal(DateTime.Today.AddMonths(-18), startDate);
+        Assert.Equal(DateTime.Today, endDate);
+    }
+
+    [Fact]
+    public void Weekly_averages_rows_are_typed_for_native_grid_export()
+    {
+        var row = new BananaWeeklyAverageRowDto
+        {
+            WeekStartDate = new DateTime(2026, 8, 17),
+            FingerCount = 187.93,
+            HandCount = 10.64,
+            Ler = 0.61
+        };
+
+        Assert.Equal(187.93, row.FingerCount);
+        Assert.Equal(10.64, row.HandCount);
+        Assert.Equal(0.61, row.Ler);
+    }
 }

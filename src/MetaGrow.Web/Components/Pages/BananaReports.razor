@@ -24,9 +24,81 @@
     </div>
 
     <nav class="report-tabs" aria-label="Banana report sections">
-        <a href="/reports/banana" class="active">Finger count comparison</a>
+        <a href="/reports/banana" class="@(!IsWeeklyAveragesView ? "active" : null)">Finger count comparison</a>
+        <a href="/reports/banana/weekly-averages" class="@(IsWeeklyAveragesView ? "active" : null)">Weekly Averages</a>
     </nav>
 
+    @if (IsWeeklyAveragesView)
+    {
+        <section class="hub-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Weekly Averages</h2>
+                    <p>Review all-farm weekly averages for finger count, hand count, and LER.</p>
+                </div>
+            </div>
+
+            <div class="scope-grid weekly-scope-grid">
+                <div class="field">
+                    <label for="weekly-from">From</label>
+                    <DxDateEdit Id="weekly-from" @bind-Date="_weeklyStartDate" DisplayFormat="dd/MM/yyyy" />
+                </div>
+                <div class="field">
+                    <label for="weekly-to">To</label>
+                    <DxDateEdit Id="weekly-to" @bind-Date="_weeklyEndDate" DisplayFormat="dd/MM/yyyy" />
+                </div>
+            </div>
+
+            <div class="load-actions">
+                <DxButton Text="Load Weekly Averages"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          SizeMode="SizeMode.Large"
+                          Click="LoadWeeklyAveragesAsync"
+                          Enabled="@(!_working)" />
+            </div>
+
+            <div class="report-grid-wrap">
+                <DxGrid @ref="_weeklyAveragesGrid"
+                        Data="@_weeklyAverageRows"
+                        PageSize="20"
+                        ShowAllRows="false"
+                        TextWrapEnabled="false"
+                        HighlightRowOnHover="true"
+                        ColumnResizeMode="GridColumnResizeMode.NextColumn"
+                        CssClass="report-results-grid weekly-averages-grid">
+                    <ToolbarTemplate>
+                        <DxToolbar CssClass="report-export-toolbar">
+                            <Items>
+                                <DxToolbarItem Text="Export to Excel"
+                                               Click="ExportWeeklyAveragesAsync"
+                                               Enabled="@(!_working && _weeklyAverageRows.Count > 0)" />
+                            </Items>
+                        </DxToolbar>
+                    </ToolbarTemplate>
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(BananaWeeklyAverageRowDto.WeekStartDate)"
+                                          Caption="Week starting"
+                                          Width="150px"
+                                          DisplayFormat="dd/MM/yyyy" />
+                        <DxGridDataColumn FieldName="@nameof(BananaWeeklyAverageRowDto.FingerCount)"
+                                          Caption="Finger count"
+                                          Width="170px"
+                                          DisplayFormat="N2" />
+                        <DxGridDataColumn FieldName="@nameof(BananaWeeklyAverageRowDto.HandCount)"
+                                          Caption="Hand count"
+                                          Width="170px"
+                                          DisplayFormat="N2" />
+                        <DxGridDataColumn FieldName="@nameof(BananaWeeklyAverageRowDto.Ler)"
+                                          Caption="LER"
+                                          Width="170px"
+                                          DisplayFormat="N2" />
+                    </Columns>
+                </DxGrid>
+            </div>
+        </section>
+    }
+    else
+    {
     <section class="hub-panel">
         <div class="panel-heading">
             <div>
@@ -200,13 +272,14 @@
             </DxGrid>
         </div>
     </section>
+    }
 </div>
 
 @code {
     [Parameter] public string? View { get; set; }
 
     private const string ToastProvider = "BananaReportMessages";
-    private bool _loadingProperties = true, _working, _loadErrorToastShown;
+    private bool _loadingProperties = true, _propertiesLoadAttempted, _working, _loadErrorToastShown;
     private string? _loadError, _loadedRequestKey;
     private List<ApiModels.Property> _properties = [];
     private DateTime _startDate = DateTime.Today.AddYears(-1), _endDate = DateTime.Today;
@@ -217,9 +290,24 @@
     private List<FingerCountChartPoint> _chartPoints = [];
     private DxChartBase? _chart;
     private int _gridVersion;
+    private DateTime _weeklyStartDate = DateTime.Today.AddMonths(-18), _weeklyEndDate = DateTime.Today;
+    private List<BananaWeeklyAverageRowDto> _weeklyAverageRows = [];
+    private IGrid? _weeklyAveragesGrid;
 
-    protected override async Task OnInitializedAsync()
+    private bool IsWeeklyAveragesView =>
+        string.Equals(View, "weekly-averages", StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnParametersSetAsync()
     {
+        if (IsWeeklyAveragesView)
+        {
+            _loadingProperties = false;
+            return;
+        }
+        if (_propertiesLoadAttempted) return;
+
+        _propertiesLoadAttempted = true;
+        _loadingProperties = true;
         var properties = await TgsApi.GetProperties();
         _properties = (properties ?? [])
             .Where(property => property.IsActive)
@@ -321,6 +409,69 @@
         finally
         {
             _working = false;
+        }
+    }
+
+    private async Task LoadWeeklyAveragesAsync()
+    {
+        if (_weeklyEndDate.Date < _weeklyStartDate.Date)
+        {
+            ShowToast("Date range invalid", "End date must be on or after start date.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        _working = true;
+        try
+        {
+            var rows = await TgsApi.PreviewBananaWeeklyAverages(new BananaWeeklyAveragesRequest
+            {
+                StartDate = _weeklyStartDate.Date,
+                EndDate = _weeklyEndDate.Date
+            });
+            if (rows == null)
+            {
+                _weeklyAverageRows = [];
+                ShowToast("Report could not be loaded", TgsApi.ErrorMessage ?? "No weekly averages were returned.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            _weeklyAverageRows = rows;
+            ShowToast(
+                rows.Count == 0 ? "No results" : "Report loaded",
+                rows.Count == 0
+                    ? "No weekly averages matched this date range."
+                    : $"{rows.Count:N0} weeks are ready to review.",
+                rows.Count == 0 ? ToastRenderStyle.Warning : ToastRenderStyle.Success);
+        }
+        finally
+        {
+            _working = false;
+        }
+    }
+
+    private async Task ExportWeeklyAveragesAsync()
+    {
+        if (_weeklyAveragesGrid == null || _weeklyAverageRows.Count == 0) return;
+        await _weeklyAveragesGrid.ExportToXlsxAsync(
+            $"weekly-averages_{_weeklyStartDate:yyyyMMdd}-{_weeklyEndDate:yyyyMMdd}",
+            new GridXlExportOptions
+            {
+                ExportSelectedRowsOnly = false,
+                SelectedRowsExportMode = GridSelectedRowsExportMode.KeepGrouping,
+                SheetName = "Weekly Averages",
+                CustomizeCell = CustomizeWeeklyAverageExportCell
+            });
+    }
+
+    private static void CustomizeWeeklyAverageExportCell(GridExportCustomizeCellEventArgs args)
+    {
+        if (args.AreaType == DevExpress.Export.SheetAreaType.DataArea &&
+            args.ColumnFieldName is nameof(BananaWeeklyAverageRowDto.FingerCount)
+                or nameof(BananaWeeklyAverageRowDto.HandCount)
+                or nameof(BananaWeeklyAverageRowDto.Ler))
+        {
+            args.Formatting.NumberFormat = "0.00";
+            args.Handled = true;
         }
     }
 

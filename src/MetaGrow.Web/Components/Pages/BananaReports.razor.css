@@ -10,6 +10,7 @@
 .panel-heading h2, .secondary-heading h3, .preview-heading h3 { margin: 0 0 .2rem; }
 .panel-heading p, .secondary-heading p, .preview-heading p { margin: 0; }
 .scope-grid { align-items: end; display: grid; gap: .8rem; grid-template-columns: minmax(10rem, .6fr) minmax(10rem, .6fr) minmax(19rem, 1.8fr); }
+.weekly-scope-grid { grid-template-columns: repeat(2, minmax(10rem, 14rem)); }
 .field { display: grid; gap: .3rem; }
 .field label { font-size: .85rem; font-weight: 700; }
 .secondary-heading { align-items: end; display: flex; gap: 1rem; justify-content: space-between; margin-top: 1.25rem; }
@@ -24,6 +25,7 @@
 .chart-tooltip { display: grid; gap: .15rem; }
 .report-grid-wrap { margin-top: 1.25rem; min-width: 0; overflow-x: auto; }
 .report-grid-wrap ::deep .report-results-grid { min-width: 48rem; }
+.report-grid-wrap ::deep .weekly-averages-grid { min-width: 42rem; }
 .report-grid-wrap ::deep .report-export-toolbar { width: 100%; }
 @container page-content (max-width: 70rem) { .secondary-farms { grid-template-columns: 1fr; } }
 @container page-content (max-width: 48rem) { .scope-grid { grid-template-columns: 1fr; } .secondary-heading { align-items: stretch; flex-direction: column; } .report-options { align-items: flex-start; flex-direction: column; } }
