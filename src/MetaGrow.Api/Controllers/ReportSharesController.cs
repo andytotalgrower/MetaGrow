@@ -19,10 +19,14 @@ public sealed class ReportSharesController(
 
     [Authorize(Roles = StaffRoles)]
     [HttpGet("survey/{surveyId:int}")]
-    public async Task<ActionResult<MetaGrowReportShareDto[]>> GetForSurvey(int surveyId)
+    public async Task<ActionResult<MetaGrowReportShareDto[]>> GetForSurvey(
+        int surveyId,
+        [FromQuery] string reportArea = MetaGrowReportAreas.MultiCrop)
     {
+        if (!MetaGrowReportAreas.IsSupported(reportArea)) return BadRequest("Unsupported report area.");
+
         var shares = await database.ReportShares.AsNoTracking()
-            .Where(share => share.SurveyId == surveyId)
+            .Where(share => share.SurveyId == surveyId && share.ReportArea == reportArea.ToLowerInvariant())
             .OrderByDescending(share => share.CreatedUtc)
             .ToListAsync();
 
@@ -33,6 +37,8 @@ public sealed class ReportSharesController(
     [HttpPost]
     public async Task<ActionResult<MetaGrowReportShareDto>> Create(MetaGrowReportShareCreateRequest request)
     {
+        if (!MetaGrowReportAreas.IsSupported(request.ReportArea)) return BadRequest("Unsupported report area.");
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var email = User.FindFirstValue(ClaimTypes.Email) ?? User.Identity?.Name;
         if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(email)) return Forbid();
@@ -42,6 +48,7 @@ public sealed class ReportSharesController(
         {
             Id = Guid.NewGuid(),
             SurveyId = request.SurveyId,
+            ReportArea = request.ReportArea.ToLowerInvariant(),
             Name = string.IsNullOrWhiteSpace(request.Name) ? $"Survey {request.SurveyId}" : request.Name.Trim(),
             TokenHash = tokens.HashToken(token),
             ProtectedToken = tokens.ProtectToken(token),
@@ -89,13 +96,18 @@ public sealed class ReportSharesController(
                 .SetProperty(item => item.ViewCount, item => item.ViewCount + 1));
         if (updated == 0) return NotFound();
 
-        return Ok(new MetaGrowReportShareResolveResponse { SurveyId = share.SurveyId });
+        return Ok(new MetaGrowReportShareResolveResponse
+        {
+            SurveyId = share.SurveyId,
+            ReportArea = share.ReportArea
+        });
     }
 
     private MetaGrowReportShareDto ToDto(ReportShare share, string? token = null) => new()
     {
         Id = share.Id,
         SurveyId = share.SurveyId,
+        ReportArea = share.ReportArea,
         Name = share.Name,
         Token = share.RevokedUtc is null
             ? token ?? tokens.TryUnprotectToken(share.ProtectedToken)

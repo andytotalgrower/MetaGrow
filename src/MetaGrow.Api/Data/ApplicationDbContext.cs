@@ -44,6 +44,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
         builder.Entity<ReportShare>(entity =>
         {
+            entity.Property(share => share.ReportArea).HasMaxLength(20).IsRequired();
             entity.Property(share => share.Name).HasMaxLength(120).IsRequired();
             entity.Property(share => share.TokenHash).HasMaxLength(44).IsRequired();
             entity.Property(share => share.ProtectedToken).HasMaxLength(1000).IsRequired();
@@ -52,7 +53,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(share => share.RevokedByUserId).HasMaxLength(450);
             entity.Property(share => share.RevokedByEmail).HasMaxLength(256);
             entity.HasIndex(share => share.TokenHash).IsUnique();
-            entity.HasIndex(share => new { share.SurveyId, share.CreatedUtc });
+            entity.HasIndex(share => new { share.ReportArea, share.SurveyId, share.CreatedUtc });
         });
 
         builder.Entity<PropertyDeletionRequest>(entity =>

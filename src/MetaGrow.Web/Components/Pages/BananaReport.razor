@@ -37,8 +37,15 @@
     {
         <div class="report-toolbar no-print" role="toolbar" aria-label="Banana report tools">
             <div class="report-toolbar-navigation">
-                <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
-                <DxButton Text="Edit survey" RenderStyle="ButtonRenderStyle.Secondary" Click="EditSurvey" />
+                @if (!Shared)
+                {
+                    <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
+                    <DxButton Text="Edit survey" RenderStyle="ButtonRenderStyle.Secondary" Click="EditSurvey" />
+                    <DxButton Text="Edit photos" RenderStyle="ButtonRenderStyle.Secondary" Click="ManagePhotos" />
+                    <ReportShareButton SurveyId="@_report.SurveyId"
+                                       PropertyName="@_report.PropertyName"
+                                       ReportArea="@MetaGrowReportAreas.Banana" />
+                }
             </div>
             <div class="report-toolbar-controls">
                 <div class="report-brand-option">
@@ -418,6 +425,8 @@
 
 @code {
     [Parameter] public int SurveyId { get; set; }
+    [Parameter] public BananaOnlineReportDto? Report { get; set; }
+    [Parameter] public bool Shared { get; set; }
     [SupplyParameterFromQuery(Name = "print")] public bool Print { get; set; }
 
     private BananaOnlineReportDto? _report;
@@ -477,6 +486,12 @@
 
         try
         {
+            if (Report is not null)
+            {
+                _report = Report;
+                return;
+            }
+
             _report = await TgsApi.GetBananaOnlineReport(SurveyId);
             if (_report is null) _errorMessage = TgsApi.ErrorMessage ?? "No report data was found for this survey.";
         }
@@ -508,6 +523,7 @@
 
     private void BackToSurveys() => Navigation.NavigateTo("/surveys/banana");
     private void EditSurvey() => Navigation.NavigateTo($"/surveys/banana/{SurveyId}/edit");
+    private void ManagePhotos() => Navigation.NavigateTo($"/surveys/banana/{SurveyId}/photos");
 
     private async Task PrintReportAsync()
     {

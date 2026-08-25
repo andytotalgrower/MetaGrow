@@ -2,6 +2,7 @@
 @layout SharedReportLayout
 @attribute [AllowAnonymous]
 @using ApiModels
+@using ApiModels.MetaGrow
 @using MetaGrow.Web.Components.Pages
 @using MetaGrow.Web.Services
 @using Metagen.Shared.Services
@@ -19,9 +20,13 @@
         <span>Opening shared report...</span>
     </div>
 }
-else if (_report is not null)
+else if (_multiCropReport is not null)
 {
-    <MultiCropReport SurveyId="@_report.SurveyId" Report="@_report" Shared="true" />
+    <MultiCropReport SurveyId="@_multiCropReport.SurveyId" Report="@_multiCropReport" Shared="true" />
+}
+else if (_bananaReport is not null)
+{
+    <BananaReport SurveyId="@_bananaReport.SurveyId" Report="@_bananaReport" Shared="true" />
 }
 else
 {
@@ -34,7 +39,8 @@ else
 @code {
     [Parameter] public Guid ShareId { get; set; }
 
-    private MultiCropOnlineReportDto? _report;
+    private MultiCropOnlineReportDto? _multiCropReport;
+    private BananaOnlineReportDto? _bananaReport;
     private string _errorMessage = "This report link is invalid or has been revoked.";
     private bool _loading = true;
     private bool _started;
@@ -56,8 +62,12 @@ else
                 return;
             }
 
-            _report = await TgsApi.GetMultiCropOnlineReport(access.SurveyId);
-            if (_report is null)
+            if (string.Equals(access.ReportArea, MetaGrowReportAreas.Banana, StringComparison.OrdinalIgnoreCase))
+                _bananaReport = await TgsApi.GetBananaOnlineReport(access.SurveyId);
+            else
+                _multiCropReport = await TgsApi.GetMultiCropOnlineReport(access.SurveyId);
+
+            if (_multiCropReport is null && _bananaReport is null)
                 _errorMessage = TgsApi.ErrorMessage ?? "The survey report could not be loaded.";
         }
         catch (Exception exception)

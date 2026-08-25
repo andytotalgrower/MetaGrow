@@ -30,6 +30,7 @@
             <div class="toolbar-left">
                 <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
                 <DxButton Text="View report" RenderStyle="ButtonRenderStyle.Secondary" Click="ViewReport" />
+                <DxButton Text="Survey images" RenderStyle="ButtonRenderStyle.Secondary" Click="EditImages" />
             </div>
             <DxButton Text="Save changes" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="SaveAsync" />
         </div>
@@ -556,6 +557,7 @@
 
     private void BackToSurveys() => Navigation.NavigateTo("/surveys/banana");
     private void ViewReport() => Navigation.NavigateTo($"/surveys/banana/{SurveyId}/report");
+    private void EditImages() => Navigation.NavigateTo($"/surveys/banana/{SurveyId}/photos");
 
     private static string RecommendationItemText(BananaSurveyRecommendationItemDto item) =>
         item.SprayProductRefId > 0

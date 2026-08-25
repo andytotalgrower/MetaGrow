@@ -16,5 +16,10 @@ public sealed class ReportShareRouteTests
             .Single(attribute => !string.IsNullOrWhiteSpace(attribute.Roles));
         Assert.Contains("Admin", authorization.Roles);
         Assert.Contains("Agronomist", authorization.Roles);
+
+        var bananaAuthorization = typeof(BananaReport).GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>()
+            .Single(attribute => !string.IsNullOrWhiteSpace(attribute.Roles));
+        Assert.Contains("Agronomist", bananaAuthorization.Roles);
     }
 }

@@ -109,6 +109,7 @@ app.MapGet("/downloads/surveys/multicrop/{surveyId:int}/pbd", async (int surveyI
         : Results.File(file.Content, file.ContentType, file.FileName);
 }).RequireAuthorization();
 app.MapMultiCropPhotoEndpoints();
+app.MapBananaPhotoEndpoints();
 app.MapStaticAssets();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode().AllowAnonymous();
 app.MapAccountEndpoints();

@@ -5,6 +5,7 @@ public sealed class ReportShare
 {
     public Guid Id { get; set; }
     public int SurveyId { get; set; }
+    public string ReportArea { get; set; } = ApiModels.MetaGrow.MetaGrowReportAreas.MultiCrop;
     public string Name { get; set; } = string.Empty;
     public string TokenHash { get; set; } = string.Empty;
     public string ProtectedToken { get; set; } = string.Empty;

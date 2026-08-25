@@ -12,12 +12,13 @@ public sealed class ReportShareApiClient(
 {
     private HttpClient Client => clients.CreateClient(AuthApiClient.HttpClientName);
 
-    public Task<(MetaGrowReportShareDto[]?, string?)> GetForSurveyAsync(int surveyId) =>
-        SendAuthenticated<MetaGrowReportShareDto[]>(HttpMethod.Get, $"report-shares/survey/{surveyId}");
+    public Task<(MetaGrowReportShareDto[]?, string?)> GetForSurveyAsync(int surveyId, string reportArea) =>
+        SendAuthenticated<MetaGrowReportShareDto[]>(HttpMethod.Get,
+            $"report-shares/survey/{surveyId}?reportArea={Uri.EscapeDataString(reportArea)}");
 
-    public Task<(MetaGrowReportShareDto?, string?)> CreateAsync(int surveyId, string? name) =>
+    public Task<(MetaGrowReportShareDto?, string?)> CreateAsync(int surveyId, string reportArea, string? name) =>
         SendAuthenticated<MetaGrowReportShareDto>(HttpMethod.Post, "report-shares",
-            new MetaGrowReportShareCreateRequest { SurveyId = surveyId, Name = name });
+            new MetaGrowReportShareCreateRequest { SurveyId = surveyId, ReportArea = reportArea, Name = name });
 
     public async Task<string?> RevokeAsync(Guid id)
     {

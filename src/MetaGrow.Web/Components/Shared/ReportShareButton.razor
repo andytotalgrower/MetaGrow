@@ -108,6 +108,7 @@
 @code {
     [Parameter] public int SurveyId { get; set; }
     [Parameter] public string? PropertyName { get; set; }
+    [Parameter] public string ReportArea { get; set; } = MetaGrowReportAreas.MultiCrop;
 
     private readonly List<MetaGrowReportShareDto> _shares = [];
     private ConfirmDialog? _confirm;
@@ -139,7 +140,7 @@
     private async Task LoadAsync()
     {
         _loading = true;
-        var (shares, error) = await Shares.GetForSurveyAsync(SurveyId);
+        var (shares, error) = await Shares.GetForSurveyAsync(SurveyId, ReportArea);
         _shares.Clear();
         if (shares is not null) _shares.AddRange(shares);
         if (error is not null) SetMessage(error, true);
@@ -151,7 +152,7 @@
         _working = true;
         try
         {
-            var (share, error) = await Shares.CreateAsync(SurveyId, _newName);
+            var (share, error) = await Shares.CreateAsync(SurveyId, ReportArea, _newName);
             if (share is null)
             {
                 SetMessage(error ?? "The shared link could not be created.", true);

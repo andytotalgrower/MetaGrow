@@ -1,0 +1,331 @@
+@page "/surveys/banana/{SurveyId:int}/photos"
+@using ApiModels
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject ITgsApiService TgsApi
+@inject NavigationManager Navigation
+@inject IJSRuntime JavaScript
+
+<PageTitle>Edit banana survey images | MetaGrow</PageTitle>
+
+<div class="photo-manager-page">
+    @if (_loading)
+    {
+        <div class="photo-loading"><DxWaitIndicator Visible="true" /><span>Loading survey images...</span></div>
+    }
+    else if (_report is null || _editor is null)
+    {
+        <div class="photo-message error">@_message</div>
+        <DxButton Text="Back to report" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToReport" />
+    }
+    else
+    {
+        <header class="photo-manager-header">
+            <div>
+                <span class="photo-kicker">Banana survey @SurveyId</span>
+                <h1>Edit Survey Images</h1>
+                <p>@_report.PropertyName · @_report.SurveyDate.ToString("dd MMMM yyyy")</p>
+            </div>
+            <DxButton Text="Back to report" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToReport" />
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <div class="photo-message @(_saved ? "success" : "error")">@_message</div>
+        }
+
+        <section class="photo-upload-card">
+            <div class="photo-section-heading">
+                <div>
+                    <span class="photo-kicker">Add an image</span>
+                    <h2>Upload survey image</h2>
+                </div>
+                <p>Choose the image details, then drag in a JPEG or select one from your device.</p>
+            </div>
+
+            <div class="photo-upload-layout">
+                <div class="photo-drop-zone" id="banana-survey-photo-drop-zone">
+                    <span class="photo-drop-icon" aria-hidden="true">⇧</span>
+                    <strong>Drag and drop a JPEG here</strong>
+                    <span>or choose a file</span>
+                    <DxUpload @ref="_upload"
+                              Name="file"
+                              UploadUrl="@UploadUrl"
+                              AllowMultiFileUpload="false"
+                              MaxFileSize="@MaxPhotoBytes"
+                              AllowedFileExtensions="@AllowedFileExtensions"
+                              ExternalDropZoneCssSelector="#banana-survey-photo-drop-zone"
+                              ExternalDropZoneDragOverCssClass="drop-zone-active"
+                              FileUploaded="@OnFileUploadedAsync"
+                              FileUploadError="@OnFileUploadError"
+                              CssClass="photo-upload-control" />
+                    <small>JPEG only · maximum 20 MB</small>
+                </div>
+
+                <div class="photo-upload-details">
+                    <label class="photo-field">
+                        <span>Block</span>
+                        <DxComboBox Data="@ActiveBlocks"
+                                    @bind-Value="_newBlockId"
+                                    TextFieldName="@nameof(BananaSurveyEditorBlockDto.BlockName)"
+                                    ValueFieldName="@nameof(BananaSurveyEditorBlockDto.BlockId)"
+                                    AllowUserInput="false" />
+                    </label>
+                    <label class="photo-field">
+                        <span>Plant number</span>
+                        <InputNumber @bind-Value="_newPlantNo" min="1" />
+                    </label>
+                    <label class="photo-field comments-field">
+                        <span>Comments <small>optional</small></span>
+                        <DxMemo @bind-Text="_newComments"
+                                Rows="4"
+                                NullText="What should the report reader notice?"
+                                CssClass="w-100" />
+                    </label>
+                    <p class="upload-order-note">New images are added at the end. Use the arrow buttons below to change their report order.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="existing-photos">
+            <div class="existing-photos-heading">
+                <div>
+                    <span class="photo-kicker">Current report images</span>
+                    <h2>@_report.Photos.Count image@(_report.Photos.Count == 1 ? string.Empty : "s")</h2>
+                </div>
+                <p>Changes appear in the online and printed reports. Removing an image retains the original server file as a safety archive.</p>
+            </div>
+
+            @if (_report.Photos.Count == 0)
+            {
+                <div class="empty-photos">This survey does not currently have any images.</div>
+            }
+            else
+            {
+                <div class="photo-editor-grid">
+                    @foreach (var photo in OrderedPhotos)
+                    {
+                        <article class="photo-editor-card">
+                            <div class="photo-image-shell">
+                                <a href="@photo.Url" target="_blank" rel="noopener noreferrer">
+                                    <img src="@photo.Url" alt="@PhotoHeading(photo)" loading="lazy" />
+                                </a>
+                                <span class="photo-position">Image @(PhotoPosition(photo) + 1) of @OrderedPhotos.Count</span>
+                            </div>
+                            <div class="photo-editor-body">
+                                <div class="photo-card-heading">
+                                    <div>
+                                        <strong>@PhotoHeading(photo)</strong>
+                                        <small>@photo.FileName</small>
+                                    </div>
+                                    <div class="photo-order-actions" aria-label="Change image order">
+                                        <DxButton Text="←"
+                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                  Enabled="@(!_saving && CanMoveEarlier(photo))"
+                                                  Click="@(() => MovePhotoAsync(photo, -1))" />
+                                        <DxButton Text="→"
+                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                  Enabled="@(!_saving && CanMoveLater(photo))"
+                                                  Click="@(() => MovePhotoAsync(photo, 1))" />
+                                    </div>
+                                </div>
+                                <label class="photo-field">
+                                    <span>Comments</span>
+                                    <DxMemo @bind-Text="photo.Comments" Rows="3" NullText="No comments" CssClass="w-100" />
+                                </label>
+                                <div class="photo-card-actions">
+                                    <DxButton Text="Save comments" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_saving)" Click="@(() => SavePhotoAsync(photo))" />
+                                    <DxButton Text="Remove" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Text" Enabled="@(!_saving)" Click="@(() => RemovePhotoAsync(photo))" />
+                                </div>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    private const int MaxPhotoBytes = 20 * 1024 * 1024;
+    private static readonly List<string> AllowedFileExtensions = [".jpg", ".jpeg"];
+
+    [Parameter] public int SurveyId { get; set; }
+
+    private BananaOnlineReportDto? _report;
+    private BananaSurveyEditorDto? _editor;
+    private DxUpload? _upload;
+    private int _newBlockId;
+    private int _newPlantNo = 1;
+    private string? _newComments;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _saved;
+    private string? _message;
+
+    private IReadOnlyList<BananaSurveyEditorBlockDto> ActiveBlocks => _editor?.Blocks
+        .Where(block => block.IsActive)
+        .OrderBy(block => block.BlockOrder)
+        .ThenBy(block => block.BlockName)
+        .ToList() ?? [];
+
+    private IReadOnlyList<BananaReportPhotoDto> OrderedPhotos => _report?.Photos
+        .OrderBy(photo => photo.DisplayOrder)
+        .ThenBy(photo => photo.PhotoId)
+        .ToList() ?? [];
+
+    private string UploadUrl
+    {
+        get
+        {
+            var comments = Uri.EscapeDataString(_newComments?.Trim() ?? string.Empty);
+            var displayOrder = OrderedPhotos.Count + 1;
+            return Navigation.ToAbsoluteUri(
+                    $"/uploads/surveys/banana/{SurveyId}/photos?blockId={_newBlockId}&plantNo={Math.Max(1, _newPlantNo)}&displayOrder={displayOrder}&comments={comments}")
+                .ToString();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _report = await TgsApi.GetBananaOnlineReport(SurveyId);
+        _editor = await TgsApi.GetBananaSurveyEditor(SurveyId);
+        if (_report is null || _editor is null)
+        {
+            SetError(TgsApi.ErrorMessage ?? "The survey images could not be loaded.");
+        }
+        else
+        {
+            _newBlockId = ActiveBlocks.FirstOrDefault()?.BlockId ?? 0;
+        }
+        _loading = false;
+    }
+
+    private async Task OnFileUploadedAsync(FileUploadEventArgs args)
+    {
+        ClearMessage();
+        _upload?.RemoveFile(args.FileInfo);
+        _newComments = null;
+        _newPlantNo = 1;
+        await RefreshPhotosAsync();
+        _saved = true;
+        _message = "Image added to the survey and report.";
+    }
+
+    private void OnFileUploadError(FileUploadErrorEventArgs args) =>
+        SetError($"Upload of '{args.FileInfo.Name}' failed. Check that it is a JPEG smaller than 20 MB and try again.");
+
+    private async Task SavePhotoAsync(BananaReportPhotoDto photo)
+    {
+        _saving = true;
+        ClearMessage();
+        if (!await UpdatePhotoAsync(photo))
+        {
+            SetError(TgsApi.ErrorMessage ?? "The image comments could not be saved.");
+        }
+        else
+        {
+            await RefreshPhotosAsync();
+            _saved = true;
+            _message = "Image comments saved.";
+        }
+        _saving = false;
+    }
+
+    private async Task MovePhotoAsync(BananaReportPhotoDto photo, int direction)
+    {
+        var ordered = OrderedPhotos.ToList();
+        var currentIndex = ordered.FindIndex(item => item.PhotoId == photo.PhotoId);
+        var targetIndex = currentIndex + direction;
+        if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ordered.Count) return;
+
+        (ordered[currentIndex], ordered[targetIndex]) = (ordered[targetIndex], ordered[currentIndex]);
+        for (var index = 0; index < ordered.Count; index++) ordered[index].DisplayOrder = index + 1;
+
+        _saving = true;
+        ClearMessage();
+        foreach (var orderedPhoto in ordered)
+        {
+            if (await UpdatePhotoAsync(orderedPhoto)) continue;
+
+            SetError(TgsApi.ErrorMessage ?? "The image order could not be saved.");
+            await RefreshPhotosAsync();
+            _saving = false;
+            return;
+        }
+
+        _report!.Photos = ordered;
+        _saved = true;
+        _message = "Image order updated.";
+        _saving = false;
+    }
+
+    private async Task RemovePhotoAsync(BananaReportPhotoDto photo)
+    {
+        var confirmed = await JavaScript.InvokeAsync<bool>("confirm", $"Remove '{PhotoHeading(photo)}' from this survey and its reports?");
+        if (!confirmed) return;
+
+        _saving = true;
+        ClearMessage();
+        if (!await TgsApi.DeleteBananaSurveyPhoto(photo.PhotoId))
+        {
+            SetError(TgsApi.ErrorMessage ?? "The image could not be removed.");
+        }
+        else
+        {
+            await RefreshPhotosAsync();
+            _saved = true;
+            _message = "Image removed from the survey. The original image file remains archived on the server.";
+        }
+        _saving = false;
+    }
+
+    private async Task RefreshPhotosAsync()
+    {
+        var refreshed = await TgsApi.GetBananaOnlineReport(SurveyId);
+        if (refreshed != null) _report = refreshed;
+    }
+
+    private async Task<bool> UpdatePhotoAsync(BananaReportPhotoDto photo) =>
+        await TgsApi.UpdateBananaSurveyPhoto(new SurveyPhoto
+        {
+            PhotoId = photo.PhotoId,
+            SurveyId = SurveyId,
+            BlockId = photo.BlockId,
+            PlantNo = photo.PlantNo ?? 1,
+            FileName = photo.FileName,
+            Comments = photo.Comments?.Trim(),
+            DisplayOrder = Math.Max(1, photo.DisplayOrder)
+        }) != null;
+
+    private int PhotoPosition(BananaReportPhotoDto photo) =>
+        OrderedPhotos.ToList().FindIndex(item => item.PhotoId == photo.PhotoId);
+
+    private bool CanMoveEarlier(BananaReportPhotoDto photo) => PhotoPosition(photo) > 0;
+    private bool CanMoveLater(BananaReportPhotoDto photo) => PhotoPosition(photo) < OrderedPhotos.Count - 1;
+
+    private void BackToReport() => Navigation.NavigateTo($"/surveys/banana/{SurveyId}/report");
+
+    private void SetError(string message)
+    {
+        _saved = false;
+        _message = message;
+    }
+
+    private void ClearMessage()
+    {
+        _saved = false;
+        _message = null;
+    }
+
+    private static string PhotoHeading(BananaReportPhotoDto photo)
+    {
+        if (!string.IsNullOrWhiteSpace(photo.BlockName) && photo.PlantNo.HasValue)
+            return $"{photo.BlockName}, plant {photo.PlantNo}";
+        return string.IsNullOrWhiteSpace(photo.BlockName) ? "Survey image" : photo.BlockName;
+    }
+}
