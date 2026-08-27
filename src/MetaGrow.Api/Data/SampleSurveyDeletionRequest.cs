@@ -6,6 +6,7 @@ namespace MetaGrow.Api.Data;
 public sealed class SampleSurveyDeletionRequest
 {
     public Guid Id { get; set; }
+    public MetaGrowSurveyType SurveyType { get; set; } = MetaGrowSurveyType.Sample;
     public int SurveyId { get; set; }
     public int PropertyId { get; set; }
     public string PropertyName { get; set; } = string.Empty;

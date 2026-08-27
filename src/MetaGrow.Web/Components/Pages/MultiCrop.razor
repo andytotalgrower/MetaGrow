@@ -1,12 +1,16 @@
 @page "/surveys/multicrop"
 @using ApiModels
 @using ApiModels.MetaGrow
+@using ApiModels.Realtime
 @using MetaGrow.Shared
+@using MetaGrow.Web.Services
 @using Metagen.Shared.Services
 @using System.Text.Json
+@implements IDisposable
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
 @inject ITgsApiService TgsApi
 @inject IJSRuntime JS
+@inject IRealtimeChangeNotifier RealtimeChanges
 
 <PageTitle>Multi-crop surveys | MetaGrow</PageTitle>
 
@@ -132,6 +136,8 @@
                                     <a class="mg-grid-link" href="@EditSurveyUrl(survey)">Edit</a>
                                     <a class="mg-grid-link" href="@OnlineReportUrl(survey)">Online</a>
                                     <a class="mg-grid-link" href="@PrintReportUrl(survey)">Print</a>
+                                    <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
+                                              Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.MultiCrop, survey.SurveyId))" />
                                 </div>
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
@@ -160,6 +166,8 @@
                             <a class="btn btn-primary" href="@EditSurveyUrl(survey)">Edit survey</a>
                             <a class="btn btn-outline-secondary" href="@OnlineReportUrl(survey)">Online report</a>
                             <a class="btn btn-outline-secondary" href="@PrintReportUrl(survey)">Print report</a>
+                            <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger"
+                                      Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.MultiCrop, survey.SurveyId))" />
                         </div>
                     </article>
                 }
@@ -167,6 +175,8 @@
         }
     }
 </div>
+
+<SurveyDeletionRequestPopup @ref="_deletionPopup" />
 
 @code {
     [SupplyParameterFromQuery(Name = "property")]
@@ -187,6 +197,10 @@
     private string? _errorMessage;
     private List<MultiCropSurveySummaryDto> _surveys = [];
     private List<MultiCropSurveyTypeDto> _surveyTypes = [];
+    private readonly SemaphoreSlim _loadGate = new(1, 1);
+    private IDisposable? _realtimeSubscription;
+    private CancellationTokenSource? _realtimeRefreshCancellation;
+    private SurveyDeletionRequestPopup? _deletionPopup;
 
     private sealed record StatusOption(int StatusId, string StatusName);
 
@@ -208,6 +222,7 @@
     protected override async Task OnInitializedAsync()
     {
         ApplyFilters(MultiCropSurveyFilterPreferences.CreateDefault(_today));
+        _realtimeSubscription = RealtimeChanges.Subscribe(HandleRealtimeChangeAsync);
         _surveyTypes = await TgsApi.GetMultiCropSurveyTypes() ?? [];
     }
 
@@ -243,32 +258,69 @@
             return;
         }
 
-        _loading = true;
-        _errorMessage = null;
+        await _loadGate.WaitAsync();
         try
         {
-            var surveys = await TgsApi.GetMultiCropSurveySummaries(_startDate.Date, _endDate.Date);
-            _surveys = surveys ?? [];
-            _errorMessage = surveys is null
-                ? TgsApi.ErrorMessage ?? "The multi-crop surveys could not be loaded from the TGS API."
-                : null;
-
-            if (_surveyTypes.Count == 0 && _surveys.Count > 0)
+            _loading = true;
+            _errorMessage = null;
+            try
             {
-                _surveyTypes = _surveys
-                    .GroupBy(survey => new { survey.ApplicationId, survey.ApplicationName })
-                    .Select(group => new MultiCropSurveyTypeDto
-                    {
-                        ApplicationId = group.Key.ApplicationId,
-                        ApplicationName = group.Key.ApplicationName
-                    })
-                    .OrderBy(type => type.ApplicationName)
-                    .ToList();
+                var surveys = await TgsApi.GetMultiCropSurveySummaries(_startDate.Date, _endDate.Date);
+                _surveys = surveys ?? [];
+                _errorMessage = surveys is null
+                    ? TgsApi.ErrorMessage ?? "The multi-crop surveys could not be loaded from the TGS API."
+                    : null;
+
+                if (_surveyTypes.Count == 0 && _surveys.Count > 0)
+                {
+                    _surveyTypes = _surveys
+                        .GroupBy(survey => new { survey.ApplicationId, survey.ApplicationName })
+                        .Select(group => new MultiCropSurveyTypeDto
+                        {
+                            ApplicationId = group.Key.ApplicationId,
+                            ApplicationName = group.Key.ApplicationName
+                        })
+                        .OrderBy(type => type.ApplicationName)
+                        .ToList();
+                }
+            }
+            finally
+            {
+                _loading = false;
             }
         }
         finally
         {
-            _loading = false;
+            _loadGate.Release();
+        }
+    }
+
+    private Task HandleRealtimeChangeAsync(RealtimeEventEnvelope message)
+    {
+        if (!RealtimeEventFilters.IsSurveyChangeFor(message, RealtimeSurveyTypes.MultiCrop))
+            return Task.CompletedTask;
+
+        var cancellation = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref _realtimeRefreshCancellation, cancellation);
+        previous?.Cancel();
+        previous?.Dispose();
+        _ = RefreshAfterRealtimeChangeAsync(cancellation.Token);
+        return Task.CompletedTask;
+    }
+
+    private async Task RefreshAfterRealtimeChangeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+            await InvokeAsync(async () =>
+            {
+                await LoadSurveysAsync();
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
     }
 
@@ -345,4 +397,12 @@
     private static string EditSurveyUrl(MultiCropSurveySummaryDto survey) => $"/surveys/multicrop/{survey.SurveyId}/edit";
     private static string OnlineReportUrl(MultiCropSurveySummaryDto survey) => $"/surveys/multicrop/{survey.SurveyId}/report";
     private static string PrintReportUrl(MultiCropSurveySummaryDto survey) => $"/surveys/multicrop/{survey.SurveyId}/report?print=true";
+
+    public void Dispose()
+    {
+        _realtimeSubscription?.Dispose();
+        var cancellation = Interlocked.Exchange(ref _realtimeRefreshCancellation, null);
+        cancellation?.Cancel();
+        cancellation?.Dispose();
+    }
 }

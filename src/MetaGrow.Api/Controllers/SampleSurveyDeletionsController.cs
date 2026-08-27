@@ -37,6 +37,20 @@ public sealed class SampleSurveyDeletionsController(
     }
 
     [Authorize(Roles = StaffRoles)]
+    [HttpGet("preview/{surveyType}/{surveyId:int}")]
+    public async Task<ActionResult<SampleSurveyDeletionPreviewDto>> Preview(
+        MetaGrowSurveyType surveyType,
+        int surveyId)
+    {
+        var token = AccessToken();
+        if (token is null) return Forbid();
+        var preview = await GetPreviewAsync(surveyType, surveyId, token);
+        return preview is null
+            ? StatusCode(StatusCodes.Status502BadGateway, Error(tgsApi.ErrorMessage ?? "The deletion preview could not be loaded."))
+            : Ok(preview);
+    }
+
+    [Authorize(Roles = StaffRoles)]
     [HttpPost]
     public async Task<ActionResult<MetaGrowSampleSurveyDeletionDto>> Create(
         MetaGrowSampleSurveyDeletionCreateRequest request)
@@ -46,7 +60,7 @@ public sealed class SampleSurveyDeletionsController(
         var token = AccessToken();
         if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(email) || token is null) return Forbid();
 
-        var preview = await tgsApi.GetSampleSurveyDeletionPreview(request.SurveyId, token);
+        var preview = await GetPreviewAsync(request.SurveyType, request.SurveyId, token);
         if (preview is null)
             return StatusCode(StatusCodes.Status502BadGateway,
                 Error(tgsApi.ErrorMessage ?? "The deletion safety check could not be completed."));
@@ -54,6 +68,7 @@ public sealed class SampleSurveyDeletionsController(
             return Conflict(Error(preview.BlockReason ?? "This Sample survey is not eligible for deletion."));
 
         var exists = await database.SampleSurveyDeletionRequests.AsNoTracking().AnyAsync(item =>
+            item.SurveyType == request.SurveyType &&
             item.SurveyId == request.SurveyId &&
             (item.Status == MetaGrowSampleSurveyDeletionStatus.Pending ||
              item.Status == MetaGrowSampleSurveyDeletionStatus.Processing));
@@ -62,6 +77,7 @@ public sealed class SampleSurveyDeletionsController(
         var deletion = new SampleSurveyDeletionRequest
         {
             Id = Guid.NewGuid(),
+            SurveyType = request.SurveyType,
             SurveyId = preview.SurveyId,
             PropertyId = preview.PropertyId,
             PropertyName = preview.PropertyName,
@@ -210,6 +226,7 @@ public sealed class SampleSurveyDeletionsController(
         return Ok(new MetaGrowSampleSurveyDeletionExecutionGrant
         {
             ApprovalRequestId = deletion.Id,
+            SurveyType = deletion.SurveyType,
             SurveyId = deletion.SurveyId,
             ExpectedModificationDate = deletion.ExpectedModificationDate,
             ExpectedSampleCount = deletion.SampleCount,
@@ -236,11 +253,57 @@ public sealed class SampleSurveyDeletionsController(
     private static MetaGrowAuthError Error(string message) => new() { Errors = [message] };
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length];
+    private async Task<SampleSurveyDeletionPreviewDto?> GetPreviewAsync(
+        MetaGrowSurveyType surveyType,
+        int surveyId,
+        string token)
+    {
+        if (surveyType == MetaGrowSurveyType.Sample)
+        {
+            var sample = await tgsApi.GetSampleSurveyDeletionPreview(surveyId, token);
+            if (sample is not null) sample.SurveyType = surveyType;
+            return sample;
+        }
+
+        if (surveyType == MetaGrowSurveyType.Banana)
+        {
+            var editor = await tgsApi.GetBananaSurveyEditor(surveyId);
+            return editor is null ? null : new SampleSurveyDeletionPreviewDto
+            {
+                SurveyType = surveyType,
+                SurveyId = surveyId,
+                PropertyId = editor.Survey.PropertyId,
+                PropertyName = editor.Survey.PropertyName ?? string.Empty,
+                SurveyDate = editor.Survey.SurveyDate,
+                ModificationDate = editor.Survey.ModificationDate,
+                SampleCount = editor.LeafCount,
+                PhotoCount = editor.PhotoCount,
+                ActionCount = editor.Recommendations.Count,
+                CanDelete = true
+            };
+        }
+
+        var editorMulti = await tgsApi.GetMultiCropSurveyEditor(surveyId);
+        return editorMulti is null ? null : new SampleSurveyDeletionPreviewDto
+        {
+            SurveyType = surveyType,
+            SurveyId = surveyId,
+            PropertyId = editorMulti.Survey.PropertyId,
+            PropertyName = editorMulti.Survey.PropertyName ?? string.Empty,
+            SurveyDate = editorMulti.Survey.SurveyDate,
+            ModificationDate = editorMulti.Survey.ModificationDate,
+            SampleCount = editorMulti.Blocks.Count,
+            PhotoCount = editorMulti.Survey.CountPhotos,
+            ActionCount = editorMulti.Recommendations.Count,
+            CanDelete = true
+        };
+    }
     private static MetaGrowSampleSurveyDeletionDto ToDto(
         SampleSurveyDeletionRequest request,
         bool isRequestedByCurrentUser = false) => new()
     {
         Id = request.Id,
+        SurveyType = request.SurveyType,
         SurveyId = request.SurveyId,
         PropertyId = request.PropertyId,
         PropertyName = request.PropertyName,

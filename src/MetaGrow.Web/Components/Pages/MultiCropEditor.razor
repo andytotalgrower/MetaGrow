@@ -32,6 +32,8 @@
                 <DxButton Text="View report" RenderStyle="ButtonRenderStyle.Secondary" Click="ViewReport" />
                 <DxButton Text="Block groups" RenderStyle="ButtonRenderStyle.Secondary" Click="EditBlockGroups" />
                 <DxButton Text="Survey images" RenderStyle="ButtonRenderStyle.Secondary" Click="EditImages" />
+                <DxButton Text="Request deletion" RenderStyle="ButtonRenderStyle.Danger"
+                          Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.MultiCrop, SurveyId))" />
             </div>
             <DxButton Text="Save changes" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="SaveAsync" />
         </div>
@@ -298,6 +300,8 @@
     }
 </div>
 
+<SurveyDeletionRequestPopup @ref="_deletionPopup" />
+
 @code {
     [Parameter] public int SurveyId { get; set; }
 
@@ -558,6 +562,7 @@
     private void EditRecommendation(int surveyActionId) =>
         Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/recommendations/{surveyActionId}");
 
+    private SurveyDeletionRequestPopup? _deletionPopup;
     private static string RecommendationItemText(MultiCropSurveyRecommendationItemDto item) =>
         item.SprayProductRefId > 0
             ? $"{item.ProductName} {item.ApplicationRate:0.###} {item.ApplicationUnit}".Trim()

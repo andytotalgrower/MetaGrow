@@ -224,7 +224,7 @@
                 }
                 else
                 {
-                    AddLoadError("Sample survey deletion approvals", deletionError);
+                    AddLoadError("Survey deletion approvals", deletionError);
                 }
             }
         }
@@ -273,13 +273,13 @@
             return new PendingApproval(
                 request.Id,
                 ApprovalKind.SampleSurveyDeletion,
-                "Sample deletion",
+                $"{SurveyTypeName(request.SurveyType)} deletion",
                 "sample-deletion",
                 $"Delete {request.PropertyName} · survey {request.SurveyId}",
-                $"{request.SurveyDate:dd MMM yyyy} · {request.SampleCount} {(request.SampleCount == 1 ? "sample" : "samples")} · {LabResultQueueText(request)}",
+                $"{request.SurveyDate:dd MMM yyyy} · {ImpactText(request)}",
                 request.RequestedByEmail,
                 request.RequestedUtc,
-                $"/surveys/samples/{request.SurveyId}/edit",
+                SurveyUrl(request),
                 "Open survey",
                 request.LastError,
                 !ownRequest,
@@ -307,6 +307,18 @@
     {
         if (_confirm is null || _busyApprovalId is not null) return;
 
+        SampleSurveyDeletionPreviewDto? liveSurveyPreview = null;
+        if (approval.Request is MetaGrowSampleSurveyDeletionDto surveyRequest)
+        {
+            var (preview, error) = await SampleSurveyDeletions.PreviewAsync(surveyRequest.SurveyType, surveyRequest.SurveyId);
+            if (preview is null)
+            {
+                ShowToast("Deletion preview failed", error ?? "The live survey impact could not be loaded.", ToastRenderStyle.Danger);
+                return;
+            }
+            liveSurveyPreview = preview;
+        }
+
         var confirmed = approval.Request switch
         {
             MetaGrowPropertyDeletionDto request => await _confirm.ShowAsync(
@@ -315,8 +327,8 @@
                 "Approve and delete",
                 true),
             MetaGrowSampleSurveyDeletionDto request => await _confirm.ShowAsync(
-                $"Permanently delete Sample survey {request.SurveyId} for {request.PropertyName}?{LabResultPreservationText(request)} Live safety and concurrency checks will run again first.",
-                "Approve Sample survey deletion",
+                $"Permanently delete {SurveyTypeName(request.SurveyType)} survey {request.SurveyId} for {liveSurveyPreview!.PropertyName}? {LiveImpactText(liveSurveyPreview)}{LabResultPreservationText(request)} A final concurrency check will run during deletion.",
+                $"Approve {SurveyTypeName(request.SurveyType)} survey deletion",
                 "Approve and delete",
                 true),
             _ => false
@@ -482,6 +494,30 @@
         request.LinkedLabResultCount == 0
             ? "no linked lab results"
             : $"{request.LinkedLabResultCount:N0} linked lab results · lab data will be {(request.DeleteLinkedLabResults ? "deleted" : "retained")}";
+
+    private static string SurveyTypeName(MetaGrowSurveyType type) =>
+        type == MetaGrowSurveyType.MultiCrop ? "Multi-crop" : type.ToString();
+
+    private static string SurveyUrl(MetaGrowSampleSurveyDeletionDto request) => request.SurveyType switch
+    {
+        MetaGrowSurveyType.Banana => $"/surveys/banana/{request.SurveyId}/edit",
+        MetaGrowSurveyType.MultiCrop => $"/surveys/multicrop/{request.SurveyId}/edit",
+        _ => $"/surveys/samples/{request.SurveyId}/edit"
+    };
+
+    private static string ImpactText(MetaGrowSampleSurveyDeletionDto request) => request.SurveyType switch
+    {
+        MetaGrowSurveyType.Banana => $"{request.SampleCount} leaf records",
+        MetaGrowSurveyType.MultiCrop => $"{request.SampleCount} blocks",
+        _ => $"{request.SampleCount} samples · {LabResultQueueText(request)}"
+    };
+
+    private static string LiveImpactText(SampleSurveyDeletionPreviewDto preview) => preview.SurveyType switch
+    {
+        MetaGrowSurveyType.Banana => $"Live impact: {preview.SampleCount} leaf records, {preview.PhotoCount} photos and {preview.ActionCount} recommendations.",
+        MetaGrowSurveyType.MultiCrop => $"Live impact: {preview.SampleCount} blocks, {preview.PhotoCount} photos and {preview.ActionCount} recommendations.",
+        _ => $"Live impact: {preview.SampleCount} samples, {preview.PhotoCount} photos and {preview.LinkedLabResultCount} linked lab results."
+    };
 
     private void AddLoadError(string queueName, string? error)
     {

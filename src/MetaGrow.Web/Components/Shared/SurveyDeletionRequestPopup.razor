@@ -1,0 +1,92 @@
+@using ApiModels.MetaGrow
+@using MetaGrow.Web.Services
+@inject SampleSurveyDeletionApiClient Deletions
+
+<DxPopup @bind-Visible="_visible" HeaderText="Request survey deletion" ShowFooter="true"
+         Width="520px" ShowCloseButton="false" CloseOnOutsideClick="false" CloseOnEscape="true">
+    <BodyContentTemplate>
+        @if (_loading)
+        {
+            <div class="loading-state"><DxWaitIndicator Visible="true" /> Loading deletion impact…</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert alert-danger" role="alert">@_error</div>
+        }
+        else if (_preview is not null)
+        {
+            <p><strong>@TypeName(_preview.SurveyType) survey @_preview.SurveyId</strong></p>
+            <p>@_preview.PropertyName · @_preview.SurveyDate.ToString("dd MMM yyyy")</p>
+            <p>This creates an approval request only. The survey is not deleted until a reviewer confirms it separately.</p>
+            <p>@ImpactText(_preview)</p>
+            @if (_preview.SurveyType == MetaGrowSurveyType.Sample && _preview.LinkedLabResultCount > 0)
+            {
+                <DxCheckBox @bind-Checked="_deleteLinkedLabResults">
+                    Permanently delete @_preview.LinkedLabResultCount linked lab result rows
+                </DxCheckBox>
+                @if (!_deleteLinkedLabResults)
+                {
+                    <small>Linked lab results will be retained and returned to the unlinked-data workflow.</small>
+                }
+            }
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="confirm-footer">
+            <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" Click="Close" Enabled="@(!_submitting)" />
+            <DxButton Text="Submit for approval" RenderStyle="ButtonRenderStyle.Danger" Click="SubmitAsync"
+                      Enabled="@(!_loading && !_submitting && _preview?.CanDelete == true)" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public EventCallback<MetaGrowSampleSurveyDeletionDto> Requested { get; set; }
+    private bool _visible;
+    private bool _loading;
+    private bool _submitting;
+    private bool _deleteLinkedLabResults;
+    private string? _error;
+    private SampleSurveyDeletionPreviewDto? _preview;
+
+    public async Task ShowAsync(MetaGrowSurveyType surveyType, int surveyId)
+    {
+        _visible = true;
+        _loading = true;
+        _error = null;
+        _preview = null;
+        _deleteLinkedLabResults = false;
+        StateHasChanged();
+        var (preview, error) = await Deletions.PreviewAsync(surveyType, surveyId);
+        _preview = preview;
+        _error = error;
+        _loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_preview?.CanDelete != true || _submitting) return;
+        _submitting = true;
+        _error = null;
+        var (request, error) = await Deletions.RequestAsync(
+            _preview.SurveyType, _preview.SurveyId, _deleteLinkedLabResults);
+        _submitting = false;
+        if (request is null)
+        {
+            _error = error ?? "The deletion request could not be created.";
+            return;
+        }
+        _visible = false;
+        await Requested.InvokeAsync(request);
+    }
+
+    private void Close() => _visible = false;
+    private static string TypeName(MetaGrowSurveyType type) => type == MetaGrowSurveyType.MultiCrop ? "Multi-crop" : type.ToString();
+    private static string ImpactText(SampleSurveyDeletionPreviewDto preview) => preview.SurveyType switch
+    {
+        MetaGrowSurveyType.Banana => $"Impact: {preview.SampleCount} leaf records, {preview.PhotoCount} photos and {preview.ActionCount} recommendations.",
+        MetaGrowSurveyType.MultiCrop => $"Impact: {preview.SampleCount} blocks, {preview.PhotoCount} photos and {preview.ActionCount} recommendations.",
+        _ => $"Impact: {preview.SampleCount} samples, {preview.PhotoCount} photos, {preview.ActionCount} actions and {preview.LinkedLabResultCount} linked lab results."
+    };
+}

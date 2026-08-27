@@ -1,10 +1,12 @@
 @page "/surveys/samples"
 @using ApiModels
 @using ApiModels.MetaGrow
+@using ApiModels.Realtime
 @using MetaGrow.Shared
 @using MetaGrow.Web.Services
 @using Metagen.Shared.Services
 @using System.Text.Json
+@implements IDisposable
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist + "," + MetaGrowRoles.Accountant)]
 @inject ITgsApiService TgsApi
 @inject IJSRuntime JS
@@ -12,6 +14,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject SampleSurveyDeletionApiClient Deletions
 @inject IToastNotificationService ToastService
+@inject IRealtimeChangeNotifier RealtimeChanges
 
 <PageTitle>Sample surveys | MetaGrow</PageTitle>
 
@@ -50,15 +53,15 @@
                 {
                     <article class="deletion-queue-row">
                         <div>
-                            <strong>@request.PropertyName · survey @request.SurveyId</strong>
-                            <span>@request.SurveyDate.ToString("dd MMM yyyy") · @request.SampleCount samples · @LabResultQueueText(request) · requested by @request.RequestedByEmail</span>
+                            <strong>@SurveyTypeName(request.SurveyType) · @request.PropertyName · survey @request.SurveyId</strong>
+                            <span>@request.SurveyDate.ToString("dd MMM yyyy") · requested by @request.RequestedByEmail</span>
                             @if (!string.IsNullOrWhiteSpace(request.LastError))
                             {
                                 <small>Last attempt: @request.LastError</small>
                             }
                         </div>
                         <div class="deletion-queue-actions">
-                            <a href="@EditorUrl(request.SurveyId)">Open survey</a>
+                            <a href="@EditorUrl(request)">Open survey</a>
                             @if (_busyDeletionId == request.Id)
                             {
                                 <span class="queue-progress"><DxWaitIndicator Visible="true" /> Processing…</span>
@@ -246,6 +249,8 @@
                                     {
                                         <a class="mg-grid-link" href="@ImportUrl(survey)">Import</a>
                                     }
+                                    <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
+                                              Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.Sample, survey.SurveyId))" />
                                 </div>
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
@@ -274,6 +279,8 @@
                             {
                                 <a class="btn btn-outline-secondary" href="@ImportUrl(survey)">Import</a>
                             }
+                            <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger"
+                                      Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.Sample, survey.SurveyId))" />
                         </div>
                     </article>
                 }
@@ -283,6 +290,7 @@
 </div>
 
 <ConfirmDialog @ref="_confirm" />
+<SurveyDeletionRequestPopup @ref="_deletionPopup" Requested="OnDeletionRequestedAsync" />
 
 @code {
     private const string FilterCookieName = "metagrow.samples.filters";
@@ -309,6 +317,10 @@
     private List<MetaGrowSampleSurveyDeletionDto> _deletionRequests = [];
     private Guid? _busyDeletionId;
     private ConfirmDialog? _confirm;
+    private readonly SemaphoreSlim _loadGate = new(1, 1);
+    private IDisposable? _realtimeSubscription;
+    private CancellationTokenSource? _realtimeRefreshCancellation;
+    private SurveyDeletionRequestPopup? _deletionPopup;
 
     private sealed record FilterOption(int Id, string Name);
     private sealed record LaneAction(SampleSurveyWorkflowAction Action, string Label);
@@ -319,7 +331,11 @@
     private IReadOnlyList<SampleSurveySummaryDto> FilteredSurveys => SampleSurveyFilter.Apply(_surveys, _propertySearch, _agronomistId, _category, _workflow, _labId, _testTypeId);
     private string ResultSummary => FilteredSurveys.Count == _surveys.Count ? $"{_surveys.Count} survey{(_surveys.Count == 1 ? string.Empty : "s")}" : $"{FilteredSurveys.Count} of {_surveys.Count} surveys";
 
-    protected override void OnInitialized() => ApplyFilters(SampleSurveyFilterPreferences.CreateDefault(_today));
+    protected override void OnInitialized()
+    {
+        ApplyFilters(SampleSurveyFilterPreferences.CreateDefault(_today));
+        _realtimeSubscription = RealtimeChanges.Subscribe(HandleRealtimeChangeAsync);
+    }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -340,17 +356,51 @@
     private async Task LoadSurveysAsync()
     {
         if (_appliedEndDate.Date < _appliedStartDate.Date) { _errorMessage = "The end date must be on or after the start date."; return; }
-        _loading = true;
-        _errorMessage = null;
+        await _loadGate.WaitAsync();
         try
         {
-            var surveys = await TgsApi.GetSampleSurveySummaries(_appliedStartDate.Date, _appliedEndDate.Date);
-            _surveys = (surveys ?? [])
-                .Where(SampleSurveyFilter.IsVisibleOnFinder)
-                .ToList();
-            _errorMessage = surveys is null ? TgsApi.ErrorMessage ?? "The Sample surveys could not be loaded from the TGS API." : null;
+            _loading = true;
+            _errorMessage = null;
+            try
+            {
+                var surveys = await TgsApi.GetSampleSurveySummaries(_appliedStartDate.Date, _appliedEndDate.Date);
+                _surveys = (surveys ?? [])
+                    .Where(SampleSurveyFilter.IsVisibleOnFinder)
+                    .ToList();
+                _errorMessage = surveys is null ? TgsApi.ErrorMessage ?? "The Sample surveys could not be loaded from the TGS API." : null;
+            }
+            finally { _loading = false; }
         }
-        finally { _loading = false; }
+        finally { _loadGate.Release(); }
+    }
+
+    private Task HandleRealtimeChangeAsync(RealtimeEventEnvelope message)
+    {
+        if (!RealtimeEventFilters.IsSurveyChangeFor(message, RealtimeSurveyTypes.Sample))
+            return Task.CompletedTask;
+
+        var cancellation = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref _realtimeRefreshCancellation, cancellation);
+        previous?.Cancel();
+        previous?.Dispose();
+        _ = RefreshAfterRealtimeChangeAsync(cancellation.Token);
+        return Task.CompletedTask;
+    }
+
+    private async Task RefreshAfterRealtimeChangeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+            await InvokeAsync(async () =>
+            {
+                await Task.WhenAll(LoadSurveysAsync(), LoadDeletionRequestsAsync());
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
     }
 
     private async Task SearchAsync()
@@ -375,6 +425,14 @@
             ShowToast("Deletion requests could not be loaded", error, ToastRenderStyle.Danger);
     }
 
+    private async Task OnDeletionRequestedAsync(MetaGrowSampleSurveyDeletionDto request)
+    {
+        _deletionRequests.RemoveAll(item => item.Id == request.Id);
+        _deletionRequests.Add(request);
+        ShowToast("Deletion requested", "The request is now waiting in the approval queue.", ToastRenderStyle.Success);
+        await InvokeAsync(StateHasChanged);
+    }
+
     private static bool IsOwnRequest(MetaGrowSampleSurveyDeletionDto request) =>
         request.IsRequestedByCurrentUser;
 
@@ -384,9 +442,15 @@
     private async Task ApproveDeletionAsync(MetaGrowSampleSurveyDeletionDto request)
     {
         if (_confirm is null || _busyDeletionId is not null) return;
+        var (preview, previewError) = await Deletions.PreviewAsync(request.SurveyType, request.SurveyId);
+        if (preview is null)
+        {
+            ShowToast("Deletion preview failed", previewError ?? "The live deletion impact could not be loaded.", ToastRenderStyle.Danger);
+            return;
+        }
         if (!await _confirm.ShowAsync(
-                $"Permanently delete Sample survey {request.SurveyId} for {request.PropertyName}?{LabResultPreservationText(request)} Live safety and concurrency checks will run again first.",
-                "Approve Sample survey deletion",
+                $"Permanently delete {SurveyTypeName(request.SurveyType)} survey {request.SurveyId} for {preview.PropertyName}? {LiveImpactText(preview)}{LabResultPreservationText(request)} A final concurrency check will run during deletion.",
+                $"Approve {SurveyTypeName(request.SurveyType)} survey deletion",
                 "Approve and delete",
                 true)) return;
         _busyDeletionId = request.Id;
@@ -572,7 +636,19 @@
         string.Equals(_busyLane, LaneKey(surveyId, category), StringComparison.Ordinal);
     private static string LaneKey(int surveyId, SampleSurveyCategory category) => $"{surveyId}:{category}";
     private static string EditorUrl(SampleSurveySummaryDto survey) => $"/surveys/samples/{survey.SurveyId}/edit";
-    private static string EditorUrl(int surveyId) => $"/surveys/samples/{surveyId}/edit";
+    private static string EditorUrl(MetaGrowSampleSurveyDeletionDto request) => request.SurveyType switch
+    {
+        MetaGrowSurveyType.Banana => $"/surveys/banana/{request.SurveyId}/edit",
+        MetaGrowSurveyType.MultiCrop => $"/surveys/multicrop/{request.SurveyId}/edit",
+        _ => $"/surveys/samples/{request.SurveyId}/edit"
+    };
+    private static string SurveyTypeName(MetaGrowSurveyType type) => type == MetaGrowSurveyType.MultiCrop ? "Multi-crop" : type.ToString();
+    private static string LiveImpactText(SampleSurveyDeletionPreviewDto preview) => preview.SurveyType switch
+    {
+        MetaGrowSurveyType.Banana => $"Live impact: {preview.SampleCount} leaf records, {preview.PhotoCount} photos and {preview.ActionCount} recommendations.",
+        MetaGrowSurveyType.MultiCrop => $"Live impact: {preview.SampleCount} blocks, {preview.PhotoCount} photos and {preview.ActionCount} recommendations.",
+        _ => $"Live impact: {preview.SampleCount} samples, {preview.PhotoCount} photos and {preview.LinkedLabResultCount} linked lab results."
+    };
     private static string LabResultsUrl(SampleSurveySummaryDto survey) => $"/surveys/samples/{survey.SurveyId}/lab-results";
     private static string ImportUrl(SampleSurveySummaryDto survey) => $"/surveys/samples/{survey.SurveyId}/import";
     private static string LabResultPreservationText(MetaGrowSampleSurveyDeletionDto request) =>
@@ -599,4 +675,12 @@
         RenderStyle = style,
         DisplayTime = TimeSpan.FromSeconds(10)
     });
+
+    public void Dispose()
+    {
+        _realtimeSubscription?.Dispose();
+        var cancellation = Interlocked.Exchange(ref _realtimeRefreshCancellation, null);
+        cancellation?.Cancel();
+        cancellation?.Dispose();
+    }
 }

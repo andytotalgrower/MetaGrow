@@ -15,7 +15,20 @@ public sealed class SampleSurveyDeletionApiClient(
     public Task<(MetaGrowSampleSurveyDeletionDto[]?, string?)> GetPendingAsync() =>
         SendAuthenticated<MetaGrowSampleSurveyDeletionDto[]>(HttpMethod.Get, "sample-survey-deletions/pending");
 
+    public Task<(SampleSurveyDeletionPreviewDto?, string?)> PreviewAsync(
+        MetaGrowSurveyType surveyType,
+        int surveyId) =>
+        SendAuthenticated<SampleSurveyDeletionPreviewDto>(
+            HttpMethod.Get,
+            $"sample-survey-deletions/preview/{surveyType}/{surveyId}");
+
     public Task<(MetaGrowSampleSurveyDeletionDto?, string?)> RequestAsync(
+        int surveyId,
+        bool deleteLinkedLabResults = false) =>
+        RequestAsync(MetaGrowSurveyType.Sample, surveyId, deleteLinkedLabResults);
+
+    public Task<(MetaGrowSampleSurveyDeletionDto?, string?)> RequestAsync(
+        MetaGrowSurveyType surveyType,
         int surveyId,
         bool deleteLinkedLabResults = false) =>
         SendAuthenticated<MetaGrowSampleSurveyDeletionDto>(
@@ -23,6 +36,7 @@ public sealed class SampleSurveyDeletionApiClient(
             "sample-survey-deletions",
             new MetaGrowSampleSurveyDeletionCreateRequest
             {
+                SurveyType = surveyType,
                 SurveyId = surveyId,
                 DeleteLinkedLabResults = deleteLinkedLabResults
             });

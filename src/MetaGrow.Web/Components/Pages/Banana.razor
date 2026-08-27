@@ -1,12 +1,16 @@
 @page "/surveys/banana"
 @using ApiModels
 @using ApiModels.MetaGrow
+@using ApiModels.Realtime
 @using MetaGrow.Shared
+@using MetaGrow.Web.Services
 @using Metagen.Shared.Services
 @using System.Text.Json
+@implements IDisposable
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
 @inject ITgsApiService TgsApi
 @inject IJSRuntime JS
+@inject IRealtimeChangeNotifier RealtimeChanges
 
 <PageTitle>Banana surveys | MetaGrow</PageTitle>
 
@@ -131,6 +135,8 @@
                                     <a class="mg-grid-link" href="@EditSurveyUrl(survey)">Edit</a>
                                     <a class="mg-grid-link" href="@OnlineReportUrl(survey)">Online</a>
                                     <a class="mg-grid-link" href="@PrintReportUrl(survey)">Print</a>
+                                    <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
+                                              Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.Banana, survey.SurveyId))" />
                                 </div>
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
@@ -159,6 +165,8 @@
                             <a class="btn btn-primary" href="@EditSurveyUrl(survey)">Edit survey</a>
                             <a class="btn btn-outline-secondary" href="@OnlineReportUrl(survey)">Online report</a>
                             <a class="btn btn-outline-secondary" href="@PrintReportUrl(survey)">Print report</a>
+                            <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger"
+                                      Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.Banana, survey.SurveyId))" />
                         </div>
                     </article>
                 }
@@ -166,6 +174,8 @@
         }
     }
 </div>
+
+<SurveyDeletionRequestPopup @ref="_deletionPopup" />
 
 @code {
     [SupplyParameterFromQuery(Name = "property")]
@@ -184,6 +194,10 @@
     private bool _loading = true;
     private string? _errorMessage;
     private List<BananaSurveySummaryDto> _surveys = [];
+    private readonly SemaphoreSlim _loadGate = new(1, 1);
+    private IDisposable? _realtimeSubscription;
+    private CancellationTokenSource? _realtimeRefreshCancellation;
+    private SurveyDeletionRequestPopup? _deletionPopup;
 
     private sealed record StatusOption(int StatusId, string StatusName);
 
@@ -202,8 +216,11 @@
         ? $"{_surveys.Count} survey{(_surveys.Count == 1 ? string.Empty : "s")}"
         : $"{FilteredSurveys.Count} of {_surveys.Count} surveys";
 
-    protected override void OnInitialized() =>
+    protected override void OnInitialized()
+    {
         ApplyFilters(BananaSurveyFilterPreferences.CreateDefault(_today));
+        _realtimeSubscription = RealtimeChanges.Subscribe(HandleRealtimeChangeAsync);
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -232,19 +249,56 @@
             return;
         }
 
-        _loading = true;
-        _errorMessage = null;
+        await _loadGate.WaitAsync();
         try
         {
-            var surveys = await TgsApi.GetBananaSurveySummaries(_startDate.Date, _endDate.Date);
-            _surveys = surveys ?? [];
-            _errorMessage = surveys is null
-                ? TgsApi.ErrorMessage ?? "The banana surveys could not be loaded from the TGS API."
-                : null;
+            _loading = true;
+            _errorMessage = null;
+            try
+            {
+                var surveys = await TgsApi.GetBananaSurveySummaries(_startDate.Date, _endDate.Date);
+                _surveys = surveys ?? [];
+                _errorMessage = surveys is null
+                    ? TgsApi.ErrorMessage ?? "The banana surveys could not be loaded from the TGS API."
+                    : null;
+            }
+            finally
+            {
+                _loading = false;
+            }
         }
         finally
         {
-            _loading = false;
+            _loadGate.Release();
+        }
+    }
+
+    private Task HandleRealtimeChangeAsync(RealtimeEventEnvelope message)
+    {
+        if (!RealtimeEventFilters.IsSurveyChangeFor(message, RealtimeSurveyTypes.Banana))
+            return Task.CompletedTask;
+
+        var cancellation = new CancellationTokenSource();
+        var previous = Interlocked.Exchange(ref _realtimeRefreshCancellation, cancellation);
+        previous?.Cancel();
+        previous?.Dispose();
+        _ = RefreshAfterRealtimeChangeAsync(cancellation.Token);
+        return Task.CompletedTask;
+    }
+
+    private async Task RefreshAfterRealtimeChangeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+            await InvokeAsync(async () =>
+            {
+                await LoadSurveysAsync();
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
     }
 
@@ -323,5 +377,13 @@
         if (survey.IsPhmbSurvey) types.Add("PHMB");
         if (survey.IsSoilHealthSurvey) types.Add("Soil health");
         return types.Count == 0 ? "Standard" : string.Join(", ", types);
+    }
+
+    public void Dispose()
+    {
+        _realtimeSubscription?.Dispose();
+        var cancellation = Interlocked.Exchange(ref _realtimeRefreshCancellation, null);
+        cancellation?.Cancel();
+        cancellation?.Dispose();
     }
 }

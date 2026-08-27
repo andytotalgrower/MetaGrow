@@ -3,10 +3,14 @@
 @using ApiModels.MetaGrow
 @using MetaGrow.Shared
 @using MetaGrow.Web.Components.Pages.Index
+@using MetaGrow.Web.Services
+@using ApiModels.Realtime
 @using Metagen.Shared.Services
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist + "," + MetaGrowRoles.Accountant)]
+@implements IAsyncDisposable
 @inject ITgsApiService TgsApi
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IRealtimeChangeNotifier RealtimeChanges
 
 <PageTitle>MetaGrow</PageTitle>
 
@@ -146,6 +150,8 @@
                                         <a class="mg-grid-link" href="@IncompleteSurveyNavigation.EditUrl(survey)">Edit</a>
                                         <a class="mg-grid-link" href="@IncompleteSurveyNavigation.OnlineReportUrl(survey)">Online</a>
                                         <a class="mg-grid-link" href="@IncompleteSurveyNavigation.PrintReportUrl(survey)">Print</a>
+                                        <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
+                                                  Click="@(() => _deletionPopup!.ShowAsync(SurveyType(survey), survey.SurveyId))" />
                                     </div>
                                 </CellDisplayTemplate>
                             </DxGridDataColumn>
@@ -174,6 +180,8 @@
                                 <a class="btn btn-primary" href="@IncompleteSurveyNavigation.EditUrl(survey)">Edit survey</a>
                                 <a class="btn btn-outline-secondary" href="@IncompleteSurveyNavigation.OnlineReportUrl(survey)">Online report</a>
                                 <a class="btn btn-outline-secondary" href="@IncompleteSurveyNavigation.PrintReportUrl(survey)">Print report</a>
+                                <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger"
+                                          Click="@(() => _deletionPopup!.ShowAsync(SurveyType(survey), survey.SurveyId))" />
                             </div>
                         </article>
                     }
@@ -192,6 +200,8 @@
     </div>
 </div>
 
+<SurveyDeletionRequestPopup @ref="_deletionPopup" />
+
 @code {
     private static readonly AreaOption[] AreaOptions =
     [
@@ -206,6 +216,14 @@
     private int? _statusId;
     private int? _agronomistId;
     private List<IncompleteSurveySummaryDto> _surveys = [];
+    private readonly SemaphoreSlim _refreshGate = new(1, 1);
+    private readonly CancellationTokenSource _lifetimeCancellation = new();
+    private CancellationTokenSource? _debounceCancellation;
+    private IDisposable? _realtimeSubscription;
+    private Task? _reconciliationTask;
+    private SurveyDeletionRequestPopup? _deletionPopup;
+    private static MetaGrowSurveyType SurveyType(IncompleteSurveySummaryDto survey) =>
+        survey.Area == IncompleteSurveyArea.Banana ? MetaGrowSurveyType.Banana : MetaGrowSurveyType.MultiCrop;
 
     private sealed record AreaOption(IncompleteSurveyArea Area, string Name);
     private sealed record StatusOption(int Id, string Name, int Priority);
@@ -242,17 +260,77 @@
             return;
         }
 
+        _realtimeSubscription = RealtimeChanges.Subscribe(HandleRealtimeChangeAsync);
+        _reconciliationTask = ReconcilePeriodicallyAsync(_lifetimeCancellation.Token);
+        await LoadSurveysAsync(isInitialLoad: true, _lifetimeCancellation.Token);
+    }
+
+    private async Task LoadSurveysAsync(bool isInitialLoad, CancellationToken cancellationToken)
+    {
+        await _refreshGate.WaitAsync(cancellationToken);
         try
         {
             var surveys = await TgsApi.GetIncompleteSurveySummaries();
-            _surveys = surveys ?? [];
-            _errorMessage = surveys is null
-                ? TgsApi.ErrorMessage ?? "The incomplete survey work queue could not be loaded from the TGS API."
-                : null;
+            if (cancellationToken.IsCancellationRequested) return;
+
+            await InvokeAsync(() =>
+            {
+                _surveys = surveys ?? [];
+                _errorMessage = surveys is null
+                    ? TgsApi.ErrorMessage ?? "The incomplete survey work queue could not be loaded from the TGS API."
+                    : null;
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            await InvokeAsync(() => _errorMessage = exception.Message);
         }
         finally
         {
-            _loading = false;
+            if (isInitialLoad)
+                await InvokeAsync(() => _loading = false);
+            _refreshGate.Release();
+        }
+    }
+
+    private Task HandleRealtimeChangeAsync(RealtimeEventEnvelope message)
+    {
+        if (message.EventType != RealtimeEventTypes.SurveyChangedV1)
+            return Task.CompletedTask;
+
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCancellation.Token);
+        var previous = Interlocked.Exchange(ref _debounceCancellation, cancellation);
+        previous?.Cancel();
+        previous?.Dispose();
+        _ = RefreshAfterDebounceAsync(cancellation.Token);
+        return Task.CompletedTask;
+    }
+
+    private async Task RefreshAfterDebounceAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+            await LoadSurveysAsync(isInitialLoad: false, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task ReconcilePeriodicallyAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+                await LoadSurveysAsync(isInitialLoad: false, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
     }
 
@@ -268,4 +346,20 @@
         @<span class="area-badge @IncompleteSurveyFilter.AreaBadgeClass(survey.Area)">@survey.AreaName</span>;
 
     private static string SurveyText(int count) => count == 1 ? "survey" : "surveys";
+
+    public async ValueTask DisposeAsync()
+    {
+        _realtimeSubscription?.Dispose();
+        _lifetimeCancellation.Cancel();
+        _debounceCancellation?.Cancel();
+
+        if (_reconciliationTask is not null)
+        {
+            try { await _reconciliationTask; }
+            catch (OperationCanceledException) { }
+        }
+
+        _debounceCancellation?.Dispose();
+        _lifetimeCancellation.Dispose();
+    }
 }

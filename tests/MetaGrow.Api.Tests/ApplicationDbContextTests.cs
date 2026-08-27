@@ -152,6 +152,25 @@ public sealed class ApplicationDbContextTests
     }
 
     [Fact]
+    public async Task Same_numeric_survey_id_is_allowed_for_different_survey_types()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>().UseSqlite(connection).Options;
+        await using var database = new ApplicationDbContext(options);
+        await database.Database.EnsureCreatedAsync();
+
+        var banana = SampleDeletionRequest(MetaGrowSampleSurveyDeletionStatus.Pending);
+        banana.SurveyType = MetaGrowSurveyType.Banana;
+        var multiCrop = SampleDeletionRequest(MetaGrowSampleSurveyDeletionStatus.Pending);
+        multiCrop.SurveyType = MetaGrowSurveyType.MultiCrop;
+        database.SampleSurveyDeletionRequests.AddRange(banana, multiCrop);
+
+        await database.SaveChangesAsync();
+        Assert.Equal(2, await database.SampleSurveyDeletionRequests.CountAsync());
+    }
+
+    [Fact]
     public async Task Sample_survey_deletion_request_locks_in_lab_counts_and_destructive_choice()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");

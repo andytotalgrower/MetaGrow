@@ -99,7 +99,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(request => request.ReviewNote).HasMaxLength(500);
             entity.Property(request => request.LastError).HasMaxLength(1000);
             entity.HasIndex(request => new { request.Status, request.RequestedUtc });
-            entity.HasIndex(request => request.SurveyId)
+            entity.HasIndex(request => new { request.SurveyType, request.SurveyId })
                 .HasFilter("[Status] IN (0, 1)")
                 .IsUnique();
         });

@@ -56,6 +56,8 @@ builder.Services.AddScoped<MetaGrow.Web.Components.Account.IdentityRedirectManag
 builder.Services.AddScoped<EncryptionService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddScoped<IStringSimilarityService, StringSimilarityService>();
+builder.Services.AddSingleton<IRealtimeChangeNotifier, RealtimeChangeNotifier>();
+builder.Services.AddHostedService<RealtimeHubListener>();
 builder.Services.AddHttpClient<ITgsApiService, TgsApiService>(client =>
 {
     var developmentBaseUrl = builder.Configuration["TgsApi:DevelopmentBaseUrl"];

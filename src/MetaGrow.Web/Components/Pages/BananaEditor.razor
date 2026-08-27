@@ -31,6 +31,8 @@
                 <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
                 <DxButton Text="View report" RenderStyle="ButtonRenderStyle.Secondary" Click="ViewReport" />
                 <DxButton Text="Survey images" RenderStyle="ButtonRenderStyle.Secondary" Click="EditImages" />
+                <DxButton Text="Request deletion" RenderStyle="ButtonRenderStyle.Danger"
+                          Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.Banana, SurveyId))" />
             </div>
             <DxButton Text="Save changes" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="SaveAsync" />
         </div>
@@ -290,6 +292,8 @@
         </footer>
     }
 </div>
+
+<SurveyDeletionRequestPopup @ref="_deletionPopup" />
 
 @code {
     [Parameter] public int SurveyId { get; set; }
@@ -559,6 +563,7 @@
     private void ViewReport() => Navigation.NavigateTo($"/surveys/banana/{SurveyId}/report");
     private void EditImages() => Navigation.NavigateTo($"/surveys/banana/{SurveyId}/photos");
 
+    private SurveyDeletionRequestPopup? _deletionPopup;
     private static string RecommendationItemText(BananaSurveyRecommendationItemDto item) =>
         item.SprayProductRefId > 0
             ? $"{item.ProductName} {item.ApplicationRate:0.###} {item.ApplicationUnit}".Trim()
