@@ -35,6 +35,42 @@ public class ResponsiveLayoutTests
     }
 
     [Fact]
+    public void Main_layout_keeps_navigation_interactive_on_static_account_pages()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var layout = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "MetaGrow.Web",
+            "Components",
+            "Layout",
+            "MainLayout.razor"));
+
+        Assert.Contains("<NavMenu @rendermode=\"InteractiveServer\" />", layout);
+        Assert.Contains("!HttpContext.AcceptsInteractiveRouting()", layout);
+    }
+
+    [Fact]
+    public void Home_queue_uses_uniform_accessible_icon_actions()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var homePage = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "MetaGrow.Web",
+            "Components",
+            "Pages",
+            "Home.razor"));
+
+        Assert.Equal(4, homePage.Split("CssClass=\"queue-icon-button\"").Length - 1);
+        Assert.Contains("aria-label=\"Edit survey\" title=\"Edit survey\"", homePage);
+        Assert.Contains("aria-label=\"View online report\" title=\"View online report\"", homePage);
+        Assert.Contains("aria-label=\"Print report\" title=\"Print report\"", homePage);
+        Assert.Contains("aria-label=\"Delete survey\" title=\"Delete survey\"", homePage);
+        Assert.Contains("IconCssClass=\"oi oi-trash\"", homePage);
+    }
+
+    [Fact]
     public void Page_width_breakpoints_use_page_content_container()
     {
         var repositoryRoot = FindRepositoryRoot();

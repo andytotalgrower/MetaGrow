@@ -132,6 +132,14 @@ body.mantine-dark .release-note { background: rgb(from var(--mg-blue, #007cba) r
 .status-badge.status-completed { background: #198754; color: #fff; }
 .status-badge.status-cancelled { background: #6c757d; color: #fff; }
 
+::deep .queue-icon-button {
+    flex: 0 0 1.875rem;
+    height: 1.875rem;
+    min-width: 1.875rem;
+    padding: 0;
+    width: 1.875rem;
+}
+
 .queue-mobile { display: none; }
 .queue-card {
     border: 1px solid var(--dxds-color-border-neutral-subdued-rest);

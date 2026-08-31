@@ -5,8 +5,10 @@
     <DxMenu Orientation="Orientation.Vertical" CssClass="menu">
         <Items>
             <DxMenuItem NavigateUrl="/" Text="Home" CssClass="@MenuItemCssClass("/")" IconCssClass="icon icon-home" />
-            <DxMenuItem NavigateUrl="/surveys/multicrop" Text="Multi-crop" CssClass="@MenuItemCssClass("/surveys/multicrop")" IconCssClass="icon icon-chart" />
-            <DxMenuItem NavigateUrl="/surveys/banana" Text="Banana" CssClass="@MenuItemCssClass("/surveys/banana")" IconCssClass="icon icon-banana" />
+            <AuthorizeView>
+                <DxMenuItem NavigateUrl="/surveys/multicrop" Text="Multi-crop" CssClass="@MenuItemCssClass("/surveys/multicrop")" IconCssClass="icon icon-chart" />
+                <DxMenuItem NavigateUrl="/surveys/banana" Text="Banana" CssClass="@MenuItemCssClass("/surveys/banana")" IconCssClass="icon icon-banana" />
+            </AuthorizeView>
             <AuthorizeView Roles="@(ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager + "," + ApiModels.MetaGrow.MetaGrowRoles.Agronomist + "," + ApiModels.MetaGrow.MetaGrowRoles.Accountant)">
                 <DxMenuItem NavigateUrl="/surveys/samples" Text="Samples" CssClass="@MenuItemCssClass("/surveys/samples")" IconCssClass="icon icon-flask" />
             </AuthorizeView>
@@ -18,6 +20,7 @@
             </AuthorizeView>
         </Items>
     </DxMenu>
+    <AuthorizeView Context="authState">
     <hr class="menu-separator" />
     <DxMenu Orientation="Orientation.Vertical" CssClass="menu">
         <Items>
@@ -48,6 +51,7 @@
             </AuthorizeView>
         </Items>
     </DxMenu>
+    </AuthorizeView>
 </div>
 
 @code {

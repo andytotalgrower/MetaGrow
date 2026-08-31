@@ -7,10 +7,10 @@
     @if (error is not null) { <div class="alert alert-danger">@error</div> }
     @if (status is not null) {
         <p>Authenticator: <strong>@(status.TwoFactorEnabled ? "Enabled" : "Disabled")</strong></p><p>Recovery codes remaining: <strong>@status.RecoveryCodesLeft</strong></p>
-        <div style="display:flex; flex-direction:column; align-items:flex-start; gap:0.75rem;">
-            <DxButton NavigateUrl="/Account/Manage/GenerateRecoveryCodes" Text="Generate new recovery codes" RenderStyle="ButtonRenderStyle.Secondary" />
-            <DxButton NavigateUrl="/Account/Manage/ResetAuthenticator" Text="Reset authenticator" RenderStyle="ButtonRenderStyle.Danger" />
-            @if (MfaFlow.ReadDeviceToken(HttpContext) is not null) { <EditForm Model="forgetModel" method="post" OnValidSubmit="Forget" FormName="forget-device"><DxButton SubmitFormOnClick="true" Text="Forget this browser" RenderStyle="ButtonRenderStyle.Secondary" /></EditForm> }
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(12rem, 1fr)); gap:0.75rem; align-items:start;">
+            <DxButton NavigateUrl="/Account/Manage/GenerateRecoveryCodes" Text="Create Recovery Codes" RenderStyle="ButtonRenderStyle.Primary" CssClass="w-100" />
+            <DxButton NavigateUrl="/Account/Manage/ResetAuthenticator" Text="Reset authenticator" RenderStyle="ButtonRenderStyle.Danger" CssClass="w-100" />
+            @if (MfaFlow.ReadDeviceToken(HttpContext) is not null) { <EditForm Model="forgetModel" method="post" OnValidSubmit="Forget" FormName="forget-device"><DxButton SubmitFormOnClick="true" Text="Forget this browser" RenderStyle="ButtonRenderStyle.Warning" CssClass="w-100" /></EditForm> }
         </div>
     }
 </div></div>

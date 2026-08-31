@@ -143,14 +143,25 @@
                             </DxGridDataColumn>
                             <DxGridDataColumn FieldName="@nameof(IncompleteSurveySummaryDto.LastModified)" Caption="Modified" Width="110px" DisplayFormat="dd/MM/yyyy" />
                             <DxGridDataColumn FieldName="@nameof(IncompleteSurveySummaryDto.PhotoCount)" Caption="Photos" Width="75px" />
-                            <DxGridDataColumn Caption="Actions" Width="155px" AllowSort="false">
+                            <DxGridDataColumn Caption="Actions" Width="170px" AllowSort="false">
                                 <CellDisplayTemplate Context="cell">
                                     @{ var survey = (IncompleteSurveySummaryDto)cell.DataItem; }
-                                    <div class="mg-grid-actions">
-                                        <a class="mg-grid-link" href="@IncompleteSurveyNavigation.EditUrl(survey)">Edit</a>
-                                        <a class="mg-grid-link" href="@IncompleteSurveyNavigation.OnlineReportUrl(survey)">Online</a>
-                                        <a class="mg-grid-link" href="@IncompleteSurveyNavigation.PrintReportUrl(survey)">Print</a>
-                                        <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
+                                    <div class="mg-grid-actions" role="group" aria-label="Survey actions">
+                                        <DxButton NavigateUrl="@IncompleteSurveyNavigation.EditUrl(survey)"
+                                                  aria-label="Edit survey" title="Edit survey"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  SizeMode="SizeMode.Small" CssClass="queue-icon-button" IconCssClass="oi oi-pencil" />
+                                        <DxButton NavigateUrl="@IncompleteSurveyNavigation.OnlineReportUrl(survey)"
+                                                  aria-label="View online report" title="View online report"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  SizeMode="SizeMode.Small" CssClass="queue-icon-button" IconCssClass="oi oi-external-link" />
+                                        <DxButton NavigateUrl="@IncompleteSurveyNavigation.PrintReportUrl(survey)"
+                                                  aria-label="Print report" title="Print report"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  SizeMode="SizeMode.Small" CssClass="queue-icon-button" IconCssClass="oi oi-print" />
+                                        <DxButton aria-label="Delete survey" title="Delete survey"
+                                                  RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  SizeMode="SizeMode.Small" CssClass="queue-icon-button" IconCssClass="oi oi-trash"
                                                   Click="@(() => _deletionPopup!.ShowAsync(SurveyType(survey), survey.SurveyId))" />
                                     </div>
                                 </CellDisplayTemplate>

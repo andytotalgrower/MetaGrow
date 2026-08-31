@@ -16,7 +16,16 @@
             </div>
         </HeaderTemplate>
         <BodyTemplate>
-            <div class="w-100"><NavMenu /></div>
+            <div class="w-100">
+                @if (RequiresInteractiveNavigationIsland)
+                {
+                    <NavMenu @rendermode="InteractiveServer" />
+                }
+                else
+                {
+                    <NavMenu />
+                }
+            </div>
         </BodyTemplate>
         <FooterTemplate>
             <div class="navigation-drawer-footer">
@@ -71,5 +80,11 @@
 </div>
 
 @code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     private string LocalPath => new Uri(NavigationManager.Uri).LocalPath;
+
+    private bool RequiresInteractiveNavigationIsland =>
+        HttpContext is not null && !HttpContext.AcceptsInteractiveRouting();
 }
