@@ -1,0 +1,55 @@
+.passkey-page {
+    max-width: 44rem;
+}
+
+.passkey-list {
+    display: grid;
+    gap: 1rem;
+    margin: 1.5rem 0 2rem;
+}
+
+.passkey-list > h4,
+.passkey-add-card > h4 {
+    margin: 0;
+}
+
+.passkey-card {
+    background: var(--dxds-color-surface-neutral-rest, #fff);
+    border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
+    border-radius: .6rem;
+    box-shadow: 0 .3rem 1rem rgba(14, 40, 65, .055);
+    padding: 1.15rem;
+}
+
+.passkey-card-heading {
+    color: var(--dxds-color-content-neutral-subdued-rest);
+    font-size: .875rem;
+    font-weight: 600;
+    margin-bottom: .5rem;
+}
+
+.passkey-field {
+    margin-bottom: 1rem;
+}
+
+.passkey-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+}
+
+.passkey-add-card {
+    margin-top: 1.5rem;
+}
+
+.passkey-add-card > p {
+    color: var(--dxds-color-content-neutral-subdued-rest);
+    margin: .35rem 0 1rem;
+}
+
+@media (max-width: 34rem) {
+    .passkey-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}

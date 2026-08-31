@@ -2,7 +2,10 @@
 @layout MetaGrow.Web.Components.Layout.MainLayout
 @inject NavigationManager Navigation
 
-@if (HttpContext is not null) { @Body }
+@if (HttpContext is not null) {
+    @Body
+    <PasskeyToast />
+}
 
 @code {
     [CascadingParameter] private HttpContext? HttpContext { get; set; }

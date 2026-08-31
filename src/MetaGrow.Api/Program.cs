@@ -34,10 +34,25 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     options.User.RequireUniqueEmail = true;
+    options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
+    options.Stores.MaxLengthForKeys = 450;
 })
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
+    .AddSignInManager()
     .AddDefaultTokenProviders();
+
+var passkeyWebUri = new Uri(builder.Configuration["WebBaseUrl"]
+    ?? throw new InvalidOperationException("WebBaseUrl must be configured for passkeys."));
+var passkeyOrigin = passkeyWebUri.GetLeftPart(UriPartial.Authority);
+builder.Services.Configure<IdentityPasskeyOptions>(options =>
+{
+    options.ServerDomain = passkeyWebUri.Host;
+    options.UserVerificationRequirement = "required";
+    options.ResidentKeyRequirement = "preferred";
+    options.ValidateOrigin = context => ValueTask.FromResult(
+        string.Equals(context.Origin, passkeyOrigin, StringComparison.OrdinalIgnoreCase));
+});
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
@@ -59,6 +74,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 });
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<PasskeyService>();
 builder.Services.AddScoped<IReportShareTokenService, ReportShareTokenService>();
 
 var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys");

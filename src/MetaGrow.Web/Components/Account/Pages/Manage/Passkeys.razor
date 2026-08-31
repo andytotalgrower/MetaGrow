@@ -1,0 +1,58 @@
+@page "/Account/Manage/Passkeys"
+@using ApiModels.Passkeys
+@using Microsoft.AspNetCore.Antiforgery
+@attribute [Authorize]
+@inject AccountApiClient Account
+@inject IAntiforgery Antiforgery
+
+<PageTitle>Passkeys</PageTitle>
+<div class="main-content"><div class="block-content passkey-page">
+    <div class="title"><div class="title-header-text">Passkeys</div><div class="title-content-text">Use a device passkey to sign in without your password.</div></div>
+    @if (loadError is not null) { <div class="alert alert-danger">@loadError</div> }
+    <div data-passkey-management request-token-name="@tokens.HeaderName" request-token-value="@tokens.RequestToken">
+    @if (passkeys is not null) {
+        @if (passkeys is { Length: > 0 }) {
+            <section class="passkey-list" aria-labelledby="registered-passkeys-heading">
+                <h4 id="registered-passkeys-heading">Registered passkeys</h4>
+                @foreach (var passkey in passkeys) {
+                    <form data-passkey-update-form class="passkey-card">
+                        <AntiforgeryToken /><input type="hidden" name="CredentialId" value="@passkey.CredentialId" />
+                        <div class="passkey-card-heading">Passkey name</div>
+                        <div class="passkey-field"><DxTextBox @bind-Text="passkey.DisplayName" Attributes="@DisplayNameAttributes" /></div>
+                        <div class="passkey-actions">
+                            <DxButton Text="Rename" RenderStyle="ButtonRenderStyle.Secondary" SubmitFormOnClick="true" Attributes="@RenameButtonAttributes" />
+                            <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger" SubmitFormOnClick="true" Attributes="@DeleteButtonAttributes" />
+                        </div>
+                    </form>
+                }
+            </section>
+        }
+        @if (passkeys.Length < 10) {
+            <section class="passkey-card passkey-add-card" aria-labelledby="add-passkey-heading">
+                <h4 id="add-passkey-heading">Add a passkey</h4>
+                <p>Choose a memorable name for this device or authenticator.</p>
+                <EditForm Model="Input" FormName="add-passkey" method="post">
+                    <AntiforgeryToken />
+                    <div class="passkey-field"><DxTextBox @bind-Text="Input.DisplayName" NullText="Passkey name" Attributes="@NewPasskeyNameAttributes" /></div>
+                    <PasskeySubmit Operation="PasskeyOperation.Create" Name="Input.Passkey" DisplayNameName="Input.DisplayName" UseDevExpressButton="true">Add passkey</PasskeySubmit>
+                </EditForm>
+            </section>
+        }
+    }
+    </div>
+</div></div>
+@code {
+    private PasskeySummary[]? passkeys; private string? loadError;
+    private AntiforgeryTokenSet tokens = default!;
+    private AddInput Input { get; set; } = new();
+    private static readonly Dictionary<string, object> DisplayNameAttributes = new() { ["name"] = "DisplayName", ["maxlength"] = "64" };
+    private static readonly Dictionary<string, object> NewPasskeyNameAttributes = new() { ["name"] = "Input.DisplayName", ["maxlength"] = "64" };
+    private static readonly Dictionary<string, object> RenameButtonAttributes = new() { ["name"] = "Action", ["value"] = "rename" };
+    private static readonly Dictionary<string, object> DeleteButtonAttributes = new() { ["name"] = "Action", ["value"] = "delete" };
+    protected override async Task OnInitializedAsync() {
+        tokens = Antiforgery.GetAndStoreTokens(HttpContext);
+        var result = await Account.GetPasskeysAsync(); passkeys = result.Item1; loadError = result.Item2;
+    }
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    private sealed class AddInput { public string DisplayName { get; set; } = string.Empty; public PasskeyFormInput? Passkey { get; set; } }
+}

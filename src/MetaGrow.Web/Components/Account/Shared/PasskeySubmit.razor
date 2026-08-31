@@ -1,0 +1,30 @@
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Antiforgery
+@if (UseDevExpressButton)
+{
+    <DxButton CssClass="@CssClass" SubmitFormOnClick="true" Attributes="@DevExpressButtonAttributes">@ChildContent</DxButton>
+}
+else
+{
+    <button type="submit" name="__passkeySubmit" @attributes="AdditionalAttributes">@ChildContent</button>
+}
+<passkey-submit operation="@Operation" name="@Name" email-name="@EmailName" display-name-name="@DisplayNameName"
+                request-token-name="@tokens?.HeaderName" request-token-value="@tokens?.RequestToken"
+                form-token-name="@tokens?.FormFieldName"></passkey-submit>
+@code {
+    private AntiforgeryTokenSet? tokens;
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [Parameter, EditorRequired] public PasskeyOperation Operation { get; set; }
+    [Parameter, EditorRequired] public string Name { get; set; } = default!;
+    [Parameter] public string? EmailName { get; set; }
+    [Parameter] public string? DisplayNameName { get; set; }
+    [Parameter] public bool UseDevExpressButton { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? AdditionalAttributes { get; set; }
+    private Dictionary<string, object> DevExpressButtonAttributes => new()
+    {
+        ["name"] = "__passkeySubmit"
+    };
+    protected override void OnInitialized() => tokens = Antiforgery.GetAndStoreTokens(HttpContext);
+}

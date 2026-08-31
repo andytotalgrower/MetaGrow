@@ -96,6 +96,18 @@ The development settings point the Web app to the local MetaGrow and TGS APIs. O
 
 The API applies its EF Core migrations and ensures the four application roles exist when it starts. The Web app creates its SQL-backed token-cache table when required.
 
+### Database migrations
+
+`MetaGrow.Api` is the sole owner of its Identity, approval and report-sharing database schema. Changes to that schema must be represented by a checked-in EF Core migration and are applied by the API at startup:
+
+```powershell
+cd src\MetaGrow.Api
+dotnet ef migrations add DescriptiveMigrationName
+dotnet ef migrations has-pending-model-changes
+```
+
+Do not create a second release script for the same MetaGrow-owned schema change. Changes to the separate TotalGS operational database—tables, stored procedures, outbox objects and survey data—belong in the `Database-totalgs` repository and must include both the individual object definition and a repeatable release script. MetaGrow EF migrations must never contain TotalGS objects.
+
 ## Tests
 
 Run the complete suite from the repository root:

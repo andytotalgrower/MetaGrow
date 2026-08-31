@@ -17,6 +17,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     {
         base.OnModelCreating(builder);
 
+        if (Database.IsSqlServer())
+        {
+            var phoneNumber = builder.Entity<ApplicationUser>().Property(user => user.PhoneNumber).HasColumnType("nvarchar(max)");
+            phoneNumber.Metadata.SetMaxLength(null);
+        }
+
         builder.Entity<RefreshToken>(entity =>
         {
             entity.HasIndex(token => token.TokenHash).IsUnique();

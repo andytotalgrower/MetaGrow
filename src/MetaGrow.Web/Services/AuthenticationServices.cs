@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using ApiModels.MetaGrow;
+using ApiModels.Passkeys;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
@@ -51,6 +53,8 @@ public sealed class AuthApiClient(IHttpClientFactory clients, ILogger<AuthApiCli
     public const string HttpClientName = "MetaGrowApi";
     private HttpClient Client => clients.CreateClient(HttpClientName);
     public Task<(MetaGrowLoginResponse?, string[])> LoginAsync(MetaGrowLoginRequest value) => Post<MetaGrowLoginRequest, MetaGrowLoginResponse>("auth/login", value);
+    public Task<(PasskeyOptionsResponse?, string[])> PasskeyRequestOptionsAsync(PasskeyRequestOptionsRequest value) => Post<PasskeyRequestOptionsRequest, PasskeyOptionsResponse>("auth/passkeys/request-options", value);
+    public Task<(MetaGrowAuthResponse?, string[])> PasskeyLoginAsync(PasskeyAssertionRequest value) => Post<PasskeyAssertionRequest, MetaGrowAuthResponse>("auth/passkeys/login", value);
     public Task<(MetaGrowRegisterResponse?, string[])> RegisterAsync(MetaGrowRegisterRequest value) => Post<MetaGrowRegisterRequest, MetaGrowRegisterResponse>("auth/register", value);
     public Task<(MetaGrowMfaSetupInfo?, string[])> MfaSetupInfoAsync(string token) => Post<MetaGrowMfaChallengeRequest, MetaGrowMfaSetupInfo>("auth/mfa/setup-info", new() { ChallengeToken = token });
     public Task<(MetaGrowMfaSetupResponse?, string[])> MfaSetupAsync(string token, string code) => Post<MetaGrowMfaSetupRequest, MetaGrowMfaSetupResponse>("auth/mfa/setup", new() { ChallengeToken = token, Code = code });
@@ -148,6 +152,12 @@ public sealed class AccountApiClient(
         Send<MetaGrowRecoveryCodesResponse>(HttpMethod.Post, "auth/mfa/recovery-codes", new { });
     public Task<string?> DisableMfaAsync() => SendWithoutResult(HttpMethod.Post, "auth/mfa/disable", new { });
     public Task<string?> ResetAuthenticatorAsync() => SendWithoutResult(HttpMethod.Post, "auth/mfa/reset-authenticator", new { });
+    public Task<(PasskeySummary[]?, string?)> GetPasskeysAsync() => Send<PasskeySummary[]>(HttpMethod.Get, "auth/passkeys");
+    public Task<(PasskeyOptionsResponse?, string?)> PasskeyCreationOptionsAsync(string name) =>
+        Send<PasskeyOptionsResponse>(HttpMethod.Post, "auth/passkeys/creation-options", new PasskeyCreationOptionsRequest { DisplayName = name });
+    public Task<string?> RegisterPasskeyAsync(PasskeyAttestationRequest value) => SendWithoutResult(HttpMethod.Post, "auth/passkeys/register", value);
+    public Task<string?> RenamePasskeyAsync(string id, string name) => SendWithoutResult(HttpMethod.Put, $"auth/passkeys/{Uri.EscapeDataString(id)}", new RenamePasskeyRequest { DisplayName = name });
+    public Task<string?> DeletePasskeyAsync(string id) => SendWithoutResult(HttpMethod.Delete, $"auth/passkeys/{Uri.EscapeDataString(id)}", new { });
 
     private async Task<(T?, string?)> Send<T>(HttpMethod method, string path, object? body = null)
     {
@@ -247,6 +257,44 @@ public static class AccountEndpoints
     public static IEndpointConventionBuilder MapAccountEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/Account");
+        group.MapPost("/Passkeys/RequestOptions", async (HttpContext context, IAntiforgery antiforgery, AuthApiClient auth, PasskeyRequestOptionsRequest request) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var (response, errors) = await auth.PasskeyRequestOptionsAsync(request);
+            return response is null ? Results.BadRequest(string.Join(" ", errors)) : Results.Json(response);
+        });
+        group.MapPost("/Passkeys/CreationOptions", async (HttpContext context, IAntiforgery antiforgery, AccountApiClient account, PasskeyCreationOptionsRequest request) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var (response, error) = await account.PasskeyCreationOptionsAsync(request.DisplayName);
+            return response is null ? Results.BadRequest(error) : Results.Json(response);
+        }).RequireAuthorization();
+        group.MapPost("/Passkeys/Register", async (HttpContext context, IAntiforgery antiforgery, AccountApiClient account, PasskeyAttestationRequest request) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var error = await account.RegisterPasskeyAsync(request);
+            return error is null
+                ? Results.Ok(new { message = "Passkey added." })
+                : Results.BadRequest(new PasskeyErrorResponse { Errors = [error] });
+        }).RequireAuthorization();
+        group.MapPut("/Passkeys/{credentialId}", async (HttpContext context, IAntiforgery antiforgery, AccountApiClient account, string credentialId, RenamePasskeyRequest request) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            if (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Length > 64)
+                return Results.BadRequest(new PasskeyErrorResponse { Errors = ["Enter a passkey name of 1 to 64 characters."] });
+            var error = await account.RenamePasskeyAsync(credentialId, request.DisplayName.Trim());
+            return error is null
+                ? Results.Ok(new { message = "Passkey renamed." })
+                : Results.BadRequest(new PasskeyErrorResponse { Errors = [error] });
+        }).RequireAuthorization();
+        group.MapDelete("/Passkeys/{credentialId}", async (HttpContext context, IAntiforgery antiforgery, AccountApiClient account, string credentialId) =>
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            var error = await account.DeletePasskeyAsync(credentialId);
+            return error is null
+                ? Results.Ok(new { message = "Passkey deleted." })
+                : Results.BadRequest(new PasskeyErrorResponse { Errors = [error] });
+        }).RequireAuthorization();
         group.MapGet("/Logout", Logout);
         group.MapPost("/Logout", Logout);
         return group;

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text;
 using ApiModels.MetaGrow;
+using ApiModels.Passkeys;
 using MetaGrow.Api.Auth;
 using MetaGrow.Api.Data;
 using MetaGrow.Api.Services;
@@ -21,6 +22,7 @@ public sealed class AuthController(
     UserManager<ApplicationUser> userManager,
     ApplicationDbContext db,
     ITokenService tokenService,
+    PasskeyService passkeys,
     ITgsApiService tgsApi,
     ISettingsService settings,
     IGraphMailService graphMail,
@@ -158,6 +160,68 @@ public sealed class AuthController(
         }
 
         return new MetaGrowLoginResponse { Status = MetaGrowLoginStatus.Ok, Auth = await BuildAuthResponse(user) };
+    }
+
+    [HttpPost("passkeys/request-options")]
+    public async Task<ActionResult<PasskeyOptionsResponse>> PasskeyRequestOptions(PasskeyRequestOptionsRequest request) =>
+        await passkeys.MakeRequestOptionsAsync(request.Username, HttpContext);
+
+    [HttpPost("passkeys/login")]
+    public async Task<ActionResult<MetaGrowAuthResponse>> PasskeyLogin(PasskeyAssertionRequest request)
+    {
+        var (user, error) = await passkeys.AssertAsync(request, HttpContext);
+        if (user is null) return Unauthorized(Error(error ?? "Invalid passkey."));
+        if (await userManager.IsLockedOutAsync(user)) return Unauthorized(Error("Account is locked out. Try again later."));
+        if (!user.EmailConfirmed) return Unauthorized(Error("Please confirm your email address first."));
+        logger.LogInformation("Passkey login: {Email} from {Ip}", user.Email, ClientIp);
+        return await BuildAuthResponse(user);
+    }
+
+    [HttpGet("passkeys"), Authorize, DisableRateLimiting]
+    public async Task<ActionResult<PasskeySummary[]>> GetPasskeys()
+    {
+        var user = await CurrentUser();
+        return user is null ? Unauthorized() : await passkeys.ListAsync(user);
+    }
+
+    [HttpPost("passkeys/creation-options"), Authorize]
+    public async Task<ActionResult<PasskeyOptionsResponse>> PasskeyCreationOptions(PasskeyCreationOptionsRequest request)
+    {
+        var user = await CurrentUser();
+        if (user is null) return Unauthorized();
+        var (response, error) = await passkeys.MakeCreationOptionsAsync(user, request.DisplayName, HttpContext);
+        return response is null ? AuthBadRequest(error!) : response;
+    }
+
+    [HttpPost("passkeys/register"), Authorize]
+    public async Task<IActionResult> RegisterPasskey(PasskeyAttestationRequest request)
+    {
+        var user = await CurrentUser();
+        if (user is null) return Unauthorized();
+        var error = await passkeys.AttestAsync(user, request, HttpContext);
+        if (error is not null) return AuthBadRequest(error);
+        logger.LogInformation("Passkey registered for {Email}", user.Email);
+        return NoContent();
+    }
+
+    [HttpPut("passkeys/{credentialId}"), Authorize]
+    public async Task<IActionResult> RenamePasskey(string credentialId, RenamePasskeyRequest request)
+    {
+        var user = await CurrentUser();
+        if (user is null) return Unauthorized();
+        var error = await passkeys.RenameAsync(user, credentialId, request.DisplayName);
+        return error is null ? NoContent() : AuthBadRequest(error);
+    }
+
+    [HttpDelete("passkeys/{credentialId}"), Authorize]
+    public async Task<IActionResult> DeletePasskey(string credentialId)
+    {
+        var user = await CurrentUser();
+        if (user is null) return Unauthorized();
+        var error = await passkeys.DeleteAsync(user, credentialId);
+        if (error is not null) return AuthBadRequest(error);
+        logger.LogInformation("Passkey deleted for {Email}", user.Email);
+        return NoContent();
     }
 
     [HttpPost("mfa/setup-info")]

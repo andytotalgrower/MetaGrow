@@ -19,6 +19,22 @@ public class ResponsiveLayoutTests
     }
 
     [Fact]
+    public void Main_layout_links_authenticated_user_to_account_management()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var layout = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "MetaGrow.Web",
+            "Components",
+            "Layout",
+            "MainLayout.razor"));
+
+        Assert.Contains("@AddDrawerStateToUrl(\"/Account/Manage/EmailAddresses\")", layout);
+        Assert.Contains("@auth.User.Identity?.Name</NavLink>", layout);
+    }
+
+    [Fact]
     public void Page_width_breakpoints_use_page_content_container()
     {
         var repositoryRoot = FindRepositoryRoot();

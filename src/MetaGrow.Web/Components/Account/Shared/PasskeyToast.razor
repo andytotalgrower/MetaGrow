@@ -1,0 +1,63 @@
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<DxToastProvider Name="PasskeyMessages" MaxToastCount="3"
+                 AnimationType="ToastAnimationType.Slide"
+                 HorizontalAlignment="HorizontalAlignment.Right"
+                 StickToViewport="true" DisplayTime="TimeSpan.FromSeconds(5)" Width="410px" />
+
+@code {
+    private DotNetObjectReference<PasskeyToast>? reference;
+    private IJSObjectReference? module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        reference = DotNetObjectReference.Create(this);
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Account/Shared/PasskeyToast.razor.js");
+        await module.InvokeVoidAsync("register", reference);
+    }
+
+    [JSInvokable]
+    public void Show(string message, string style)
+    {
+        var renderStyle = style switch
+        {
+            "success" => ToastRenderStyle.Success,
+            "warning" => ToastRenderStyle.Warning,
+            "info" => ToastRenderStyle.Info,
+            _ => ToastRenderStyle.Danger
+        };
+        var title = style switch
+        {
+            "success" => "Passkey updated",
+            "warning" => "Passkey cancelled",
+            _ => "Passkey action failed"
+        };
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "PasskeyMessages",
+            Title = title,
+            Text = message,
+            RenderStyle = renderStyle,
+            DisplayTime = TimeSpan.FromSeconds(5)
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try
+            {
+                await module.InvokeVoidAsync("unregister", reference);
+                await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { }
+            catch (ObjectDisposedException) { }
+        }
+        reference?.Dispose();
+    }
+}
