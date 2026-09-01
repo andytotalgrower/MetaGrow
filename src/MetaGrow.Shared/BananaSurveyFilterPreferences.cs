@@ -9,7 +9,7 @@ public sealed record BananaSurveyFilterPreferences(
     public static BananaSurveyFilterPreferences CreateDefault(DateTime today)
     {
         var date = today.Date;
-        return new(date.AddMonths(-2), date, null, null);
+        return new(date.AddMonths(-3), date, null, null);
     }
 
     public bool HasValidDateRange =>

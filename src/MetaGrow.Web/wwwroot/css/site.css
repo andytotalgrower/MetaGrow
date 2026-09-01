@@ -106,6 +106,15 @@ html, body {
     white-space: nowrap;
 }
 
+/* Square icon-only action buttons used in dashboard grid Actions columns. */
+.mg-grid-icon-button {
+    flex: 0 0 1.875rem;
+    height: 1.875rem;
+    min-width: 1.875rem;
+    padding: 0;
+    width: 1.875rem;
+}
+
 .mg-grid-link:hover {
     background: var(--dxds-color-surface-neutral-default-hovered);
     color: var(--mg-link, #0d8ecb);
@@ -115,6 +124,12 @@ html, body {
 .mg-grid-link:focus-visible {
     outline: 2px solid var(--mg-blue, #007cba);
     outline-offset: 1px;
+}
+
+/* FocusOnNavigate focuses the page h1 after each navigation. Hide the resulting
+   focus ring for programmatic/mouse focus while keeping it for keyboard users. */
+h1:focus:not(:focus-visible) {
+    outline: none;
 }
 
 .mg-grid-action-button {

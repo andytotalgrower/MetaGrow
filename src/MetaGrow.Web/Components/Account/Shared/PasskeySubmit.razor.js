@@ -63,7 +63,8 @@ customElements.define('passkey-submit', class extends HTMLElement {
             if (!supported) throw new Error('Passkeys are not supported by this browser.');
             const form = new FormData(this.internals.form), operation = this.getAttribute('operation');
             const displayName = operation === 'Create' ? form.get(this.getAttribute('display-name-name')) : null;
-            const body = operation === 'Create' ? { displayName } : { username: form.get(this.getAttribute('email-name')) };
+            const username = operation === 'Create' ? null : (form.get(this.getAttribute('email-name')) || '').trim();
+            const body = operation === 'Create' ? { displayName } : (username ? { username } : {});
             const url = operation === 'Create' ? '/Account/Passkeys/CreationOptions' : '/Account/Passkeys/RequestOptions';
             const response = await fetch(url, { method: 'POST', credentials: 'include', signal: this.controller.signal,
                 headers: { 'Content-Type': 'application/json', [this.tokenName]: this.tokenValue }, body: JSON.stringify(body) });

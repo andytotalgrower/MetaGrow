@@ -10,7 +10,7 @@ public sealed record MultiCropSurveyFilterPreferences(
     public static MultiCropSurveyFilterPreferences CreateDefault(DateTime today)
     {
         var date = today.Date;
-        return new(date.AddMonths(-2), date, null, null, null);
+        return new(date.AddMonths(-3), date, null, null, null);
     }
 
     public bool HasValidDateRange =>

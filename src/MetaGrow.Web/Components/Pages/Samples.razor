@@ -236,20 +236,31 @@
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
                         <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.NutritionSampleCount)" Caption="Chemistry samples" Width="125px" Visible="false" />
-                        <DxGridDataColumn Caption="Actions" Width="165px" AllowSort="false">
+                        <DxGridDataColumn Caption="Actions" Width="150px" AllowSort="false">
                             <CellDisplayTemplate Context="cell">
                                 @{ var survey = (SampleSurveySummaryDto)cell.DataItem; }
-                                <div class="mg-grid-actions">
-                                    <a class="mg-grid-link" href="@EditorUrl(survey)">Open survey</a>
+                                <div class="mg-grid-actions" role="group" aria-label="Survey actions">
+                                    <DxButton NavigateUrl="@EditorUrl(survey)"
+                                              aria-label="Open survey" title="Open survey"
+                                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-pencil" />
                                     @if (survey.HasImportedLabData)
                                     {
-                                        <a class="mg-grid-link" href="@LabResultsUrl(survey)">Lab data</a>
+                                        <DxButton NavigateUrl="@LabResultsUrl(survey)"
+                                                  aria-label="View lab data" title="View lab data"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-spreadsheet" />
                                     }
                                     @if (SampleSurveyFilter.CanImportLabData(survey))
                                     {
-                                        <a class="mg-grid-link" href="@ImportUrl(survey)">Import</a>
+                                        <DxButton NavigateUrl="@ImportUrl(survey)"
+                                                  aria-label="Import lab data" title="Import lab data"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-data-transfer-upload" />
                                     }
-                                    <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger" SizeMode="SizeMode.Small"
+                                    <DxButton aria-label="Delete survey" title="Delete survey"
+                                              RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-trash"
                                               Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.Sample, survey.SurveyId))" />
                                 </div>
                             </CellDisplayTemplate>
@@ -527,16 +538,12 @@
         _testTypeId = null;
         await SaveFiltersAsync();
     }
-    private async Task RestoreFiltersAsync()
+    // Saved filters are still written to the cookie, but they are no longer restored:
+    // a stale end date made the dashboard look empty on the next visit.
+    private Task RestoreFiltersAsync()
     {
-        try
-        {
-            var json = await JS.InvokeAsync<string?>("metaGrowFilterPreferences.get", FilterCookieName);
-            if (string.IsNullOrWhiteSpace(json)) return;
-            var filters = JsonSerializer.Deserialize<SampleSurveyFilterPreferences>(json);
-            if (filters?.HasValidDateRange == true) ApplyFilters(filters);
-        }
-        catch (JsonException) { ApplyFilters(SampleSurveyFilterPreferences.CreateDefault(_today)); }
+        ApplyFilters(SampleSurveyFilterPreferences.CreateDefault(_today));
+        return Task.CompletedTask;
     }
     private async Task SaveFiltersAsync()
     {

@@ -260,6 +260,7 @@ public static class AccountEndpoints
         group.MapPost("/Passkeys/RequestOptions", async (HttpContext context, IAntiforgery antiforgery, AuthApiClient auth, PasskeyRequestOptionsRequest request) =>
         {
             await antiforgery.ValidateRequestAsync(context);
+            if (string.IsNullOrWhiteSpace(request.Username)) request.Username = null;
             var (response, errors) = await auth.PasskeyRequestOptionsAsync(request);
             return response is null ? Results.BadRequest(string.Join(" ", errors)) : Results.Json(response);
         });
