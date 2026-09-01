@@ -3,9 +3,26 @@
 @inject AccountApiClient Api
 @inject MfaFlowState MfaFlow
 <PageTitle>Reset authenticator | MetaGrow</PageTitle>
-<div class="main-content"><div class="block-content"><div class="title"><div class="title-header-text">Reset authenticator</div></div>
-    <div class="alert alert-warning">You will be required to set up an authenticator again at your next login.</div>
-    @if(error is not null){<div class="alert alert-danger">@error</div>} @if(done){<div class="alert alert-success">Authenticator reset. <a href="Account/Logout">Log out</a> to complete setup again.</div>}
-    else {<EditForm Model="model" method="post" OnValidSubmit="Reset" FormName="reset-authenticator"><DxButton SubmitFormOnClick="true" Text="Reset authenticator" RenderStyle="ButtonRenderStyle.Danger" /></EditForm>}
-</div></div>
+
+<a class="settings-back-link" href="Account/Manage/TwoFactorAuthentication"><span class="icon icon-back" aria-hidden="true"></span> Back to two-factor authentication</a>
+<h3>Reset authenticator</h3>
+<p class="settings-page-intro">Replace the authenticator currently connected to your account.</p>
+<div class="alert alert-warning">
+    <strong>Your current authenticator will stop working.</strong>
+    You will be required to set up an authenticator again at your next login.
+</div>
+@if (error is not null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+@if (done)
+{
+    <div class="alert alert-success">Authenticator reset. <a href="Account/Logout">Log out</a> to complete setup again.</div>
+}
+else
+{
+    <EditForm Model="model" method="post" OnValidSubmit="Reset" FormName="reset-authenticator">
+        <DxButton SubmitFormOnClick="true" Text="Reset authenticator" RenderStyle="ButtonRenderStyle.Danger" />
+    </EditForm>
+}
 @code { [CascadingParameter] private HttpContext HttpContext {get;set;}=default!; private readonly object model=new();private bool done;private string? error;private async Task Reset(){error=await Api.ResetAuthenticatorAsync();done=error is null;if(done)MfaFlow.ClearDeviceToken(HttpContext);} }

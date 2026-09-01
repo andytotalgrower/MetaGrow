@@ -1,0 +1,31 @@
+@inherits LayoutComponentBase
+@layout AccountLayout
+
+<main class="account-settings-page">
+    <header class="account-settings-hero">
+        <div>
+            <span class="account-settings-eyebrow">Your account</span>
+            <h1>Account settings</h1>
+            <p>Manage your sign-in details and account security.</p>
+            <hr class="account-settings-keyline" />
+        </div>
+        <span class="secure-area-pill">
+            <span class="icon icon-manage-two-factor" aria-hidden="true"></span>
+            Secure account area
+        </span>
+    </header>
+
+    <div class="account-settings-shell">
+        <aside class="account-settings-sidebar" aria-label="Account settings navigation">
+            <div class="settings-nav-heading">
+                <span>Settings</span>
+                <small>Choose what you want to manage</small>
+            </div>
+            <ManageNavMenu />
+        </aside>
+
+        <section class="account-settings-content" aria-label="Selected account setting">
+            @Body
+        </section>
+    </div>
+</main>

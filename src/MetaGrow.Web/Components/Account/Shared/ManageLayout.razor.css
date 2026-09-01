@@ -1,0 +1,344 @@
+.account-settings-page {
+    --settings-blue: #007cba;
+    --settings-blue-dark: #015682;
+    --settings-blue-soft: #e5f4fb;
+    --settings-red: #d1242b;
+    --settings-ink: #26343d;
+    --settings-muted: #667681;
+    --settings-border: #dce3e7;
+    --settings-surface: #fff;
+    --settings-surface-soft: #f6f9fa;
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin: 0 auto;
+    max-width: 72rem;
+    min-width: 0;
+    padding: 1.25rem 0 2.5rem;
+    width: 100%;
+}
+
+.account-settings-hero {
+    align-items: flex-start;
+    display: flex;
+    gap: 1.5rem;
+    justify-content: space-between;
+}
+
+.account-settings-hero > div { max-width: 52rem; }
+
+.account-settings-eyebrow {
+    color: var(--settings-blue);
+    display: block;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+}
+
+.account-settings-hero h1 {
+    color: var(--settings-ink);
+    font-size: clamp(2rem, 4vw, 2.75rem);
+    font-weight: 600;
+    letter-spacing: -.035em;
+    margin: .35rem 0 .55rem;
+}
+
+.account-settings-hero p {
+    color: var(--settings-muted);
+    font-size: 1.05rem;
+    line-height: 1.6;
+    margin: 0 0 1.1rem;
+}
+
+.account-settings-keyline {
+    border: 0;
+    border-top: 3px solid var(--settings-red);
+    margin: 0;
+    opacity: 1;
+    width: 5rem;
+}
+
+.secure-area-pill {
+    align-items: center;
+    background: var(--settings-blue-soft);
+    border-radius: 999px;
+    color: var(--settings-blue-dark);
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: .75rem;
+    font-weight: 700;
+    gap: .4rem;
+    margin-top: .25rem;
+    padding: .42rem .75rem;
+}
+
+.secure-area-pill .icon { height: 1rem; width: 1rem; }
+
+.account-settings-shell {
+    align-items: start;
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: minmax(13.5rem, 17rem) minmax(0, 1fr);
+}
+
+.account-settings-sidebar,
+.account-settings-content {
+    background: var(--settings-surface);
+    border: 1px solid var(--settings-border);
+    border-radius: .75rem;
+    box-shadow: 0 .35rem 1.2rem rgba(14, 40, 65, .055);
+    min-width: 0;
+}
+
+.account-settings-sidebar {
+    overflow: hidden;
+    position: sticky;
+    top: 1rem;
+}
+
+.settings-nav-heading {
+    background: var(--settings-surface-soft);
+    border-bottom: 1px solid var(--settings-border);
+    display: flex;
+    flex-direction: column;
+    padding: .9rem 1rem;
+}
+
+.settings-nav-heading span { color: var(--settings-ink); font-size: .88rem; font-weight: 700; }
+.settings-nav-heading small { color: var(--settings-muted); font-size: .72rem; margin-top: .1rem; }
+.account-settings-content { min-height: 24rem; padding: 1.35rem; }
+
+.account-settings-sidebar ::deep .settings-nav {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    list-style: none;
+    margin: 0;
+    padding: .55rem;
+}
+
+.account-settings-sidebar ::deep .settings-nav .nav-link {
+    align-items: center;
+    border-radius: .55rem;
+    color: var(--settings-muted);
+    display: flex;
+    gap: .7rem;
+    min-width: 0;
+    padding: .68rem .72rem;
+    text-decoration: none;
+    transition: background-color .15s ease, color .15s ease;
+}
+
+.account-settings-sidebar ::deep .settings-nav .nav-link:hover {
+    background: var(--settings-surface-soft);
+    color: var(--settings-blue-dark);
+}
+
+.account-settings-sidebar ::deep .settings-nav .nav-link.active {
+    background: var(--settings-blue-soft);
+    box-shadow: inset 3px 0 0 var(--settings-blue);
+    color: var(--settings-blue-dark);
+}
+
+.account-settings-sidebar ::deep .settings-nav .icon {
+    flex: 0 0 1.25rem;
+}
+
+.account-settings-sidebar ::deep .settings-nav .nav-link > span:last-child {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.account-settings-sidebar ::deep .settings-nav strong { color: inherit; font-size: .84rem; font-weight: 700; line-height: 1.2; }
+.account-settings-sidebar ::deep .settings-nav small { color: var(--settings-muted); font-size: .68rem; line-height: 1.25; margin-top: .14rem; }
+
+.account-settings-content ::deep h3 {
+    color: var(--settings-ink);
+    font-size: 1.45rem;
+    font-weight: 650;
+    letter-spacing: -.02em;
+    margin: 0 0 .45rem;
+}
+
+.account-settings-content ::deep .settings-back-link {
+    align-items: center;
+    color: var(--settings-blue-dark);
+    display: inline-flex;
+    font-size: .78rem;
+    font-weight: 700;
+    gap: .35rem;
+    margin-bottom: .75rem;
+    text-decoration: none;
+}
+
+.account-settings-content ::deep .settings-back-link:hover { color: var(--settings-blue); text-decoration: underline; }
+.account-settings-content ::deep .settings-back-link .icon { height: .9rem; width: .9rem; }
+
+.account-settings-content ::deep .settings-page-intro {
+    color: var(--settings-muted);
+    line-height: 1.55;
+    margin: 0 0 1.1rem;
+    max-width: 42rem;
+}
+
+.account-settings-content ::deep h4 {
+    color: var(--settings-ink);
+    font-size: 1.05rem;
+    font-weight: 650;
+    margin: 1.25rem 0 .65rem;
+}
+
+.account-settings-content ::deep .settings-form { max-width: 40rem; }
+.account-settings-content ::deep .form-control { border-color: #cfd9de; border-radius: .5rem; }
+.account-settings-content ::deep .form-control:focus { border-color: var(--settings-blue); box-shadow: 0 0 0 .2rem rgba(0, 124, 186, .13); }
+.account-settings-content ::deep .alert { border-radius: .6rem; line-height: 1.5; margin: .9rem 0 1.1rem; max-width: 46rem; padding: .85rem 1rem; }
+.account-settings-content ::deep .alert strong { color: inherit; }
+.account-settings-content ::deep .alert-success { background: #eff9f4; border-color: #cfe7dc; color: #14623c; }
+.account-settings-content ::deep .alert-warning { background: #fff9e8; border-color: #f2d98d; color: #6c5510; }
+.account-settings-content ::deep .alert-danger { background: #fff0f1; border-color: #edc9cb; color: #861b21; }
+
+.account-settings-content ::deep .table {
+    border: 1px solid var(--settings-border);
+    border-collapse: separate;
+    border-radius: .55rem;
+    border-spacing: 0;
+    margin: 1rem 0 1.25rem;
+    max-width: 46rem;
+    overflow: hidden;
+    width: 100%;
+}
+
+.account-settings-content ::deep .table th {
+    background: var(--settings-surface-soft);
+    color: var(--settings-muted);
+    font-size: .72rem;
+    letter-spacing: .04em;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.account-settings-content ::deep .table th,
+.account-settings-content ::deep .table td { border-bottom: 1px solid var(--settings-border); padding: .75rem; vertical-align: middle; }
+.account-settings-content ::deep .table tbody tr:last-child td { border-bottom: 0; }
+
+.account-settings-content ::deep .email-status-pill {
+    align-items: center;
+    background: #dff3e8;
+    border-radius: 999px;
+    color: #14623c;
+    display: inline-flex;
+    font-size: .72rem;
+    font-weight: 700;
+    padding: .32rem .58rem;
+}
+
+.account-settings-content ::deep .email-status-pill.is-pending { background: #fff3cd; color: #735500; }
+
+.account-settings-content ::deep .security-summary {
+    align-items: center;
+    background: var(--settings-surface-soft);
+    border: 1px solid var(--settings-border);
+    border-radius: .65rem;
+    display: flex;
+    gap: .75rem;
+    margin: 1rem 0;
+    max-width: 46rem;
+    padding: .9rem 1rem;
+}
+
+.account-settings-content ::deep .security-summary > span {
+    align-items: center;
+    background: #e9eef1;
+    border-radius: 50%;
+    color: var(--settings-muted);
+    display: inline-flex;
+    flex: 0 0 2.35rem;
+    height: 2.35rem;
+    justify-content: center;
+}
+
+.account-settings-content ::deep .security-summary > span .icon { height: 1.15rem; width: 1.15rem; }
+.account-settings-content ::deep .security-summary > div { display: flex; flex-direction: column; }
+.account-settings-content ::deep .security-summary strong { color: var(--settings-ink); }
+.account-settings-content ::deep .security-summary small { color: var(--settings-muted); }
+.account-settings-content ::deep .security-summary.is-enabled { background: #eff9f4; border-color: #cfe7dc; }
+.account-settings-content ::deep .security-summary.is-enabled > span { background: #d9ece7; color: #14623c; }
+
+.account-settings-content ::deep .settings-action-grid {
+    display: grid;
+    gap: .8rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 1rem;
+    max-width: 46rem;
+}
+
+.account-settings-content ::deep .settings-action-card {
+    align-items: flex-start;
+    background: var(--settings-surface-soft);
+    border: 1px solid var(--settings-border);
+    border-radius: .65rem;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    min-width: 0;
+    padding: 1rem;
+}
+
+.account-settings-content ::deep .settings-action-card h4 { margin: 0 0 .25rem; }
+.account-settings-content ::deep .settings-action-card p { color: var(--settings-muted); font-size: .86rem; margin: 0; }
+.account-settings-content ::deep .settings-action-card > div { flex: 1 1 auto; }
+.account-settings-content ::deep .settings-danger-card { background: #fffafa; border-color: #edc9cb; }
+
+.account-settings-content ::deep .settings-button-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .55rem;
+    margin: .75rem 0 1rem;
+}
+
+.account-settings-content ::deep .settings-button-row form { margin: 0; }
+
+.account-settings-content ::deep .recovery-code-list {
+    display: grid;
+    gap: .5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    list-style: none;
+    margin: 1rem 0 0;
+    max-width: 32rem;
+    padding: 0;
+}
+
+.account-settings-content ::deep kbd {
+    background: var(--settings-ink);
+    border-radius: .4rem;
+    color: #fff;
+    display: block;
+    font-size: .82rem;
+    overflow-wrap: anywhere;
+    padding: .55rem .7rem;
+    text-align: center;
+    white-space: normal;
+}
+
+@container (max-width: 52rem) {
+    .account-settings-shell { grid-template-columns: 1fr; }
+    .account-settings-sidebar { position: static; }
+    .account-settings-sidebar ::deep .settings-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .account-settings-content ::deep .settings-action-grid { grid-template-columns: 1fr; }
+}
+
+@container (max-width: 38rem) {
+    .account-settings-page { gap: 1.15rem; padding-top: .75rem; }
+    .account-settings-hero { flex-direction: column; gap: .75rem; }
+    .secure-area-pill { margin-top: 0; }
+    .account-settings-content { padding: 1rem; }
+    .account-settings-sidebar ::deep .settings-nav { grid-template-columns: 1fr; }
+    .account-settings-content ::deep .settings-button-row { align-items: stretch; flex-direction: column; }
+    .account-settings-content ::deep .settings-button-row > *,
+    .account-settings-content ::deep .settings-button-row form { width: 100%; }
+    .account-settings-content ::deep .recovery-code-list { grid-template-columns: 1fr; }
+}

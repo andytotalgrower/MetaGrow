@@ -6,8 +6,9 @@
 @inject IAntiforgery Antiforgery
 
 <PageTitle>Passkeys</PageTitle>
-<div class="main-content"><div class="block-content passkey-page">
-    <div class="title"><div class="title-header-text">Passkeys</div><div class="title-content-text">Use a device passkey to sign in without your password.</div></div>
+<div class="passkey-page">
+    <h3>Passkeys</h3>
+    <p class="settings-page-intro">Use a device passkey to sign in without your password.</p>
     @if (loadError is not null) { <div class="alert alert-danger">@loadError</div> }
     <div data-passkey-management request-token-name="@tokens.HeaderName" request-token-value="@tokens.RequestToken">
     @if (passkeys is not null) {
@@ -40,7 +41,7 @@
         }
     }
     </div>
-</div></div>
+</div>
 @code {
     private PasskeySummary[]? passkeys; private string? loadError;
     private AntiforgeryTokenSet tokens = default!;

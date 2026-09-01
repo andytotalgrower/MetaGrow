@@ -150,6 +150,58 @@ h1:focus:not(:focus-visible) {
     max-width: 100%;
 }
 
+/* Account settings use an isolated layout stylesheet. These theme overrides
+   stay global because the dark-mode class is applied to the body element. */
+body.mantine-dark .account-settings-page {
+    --settings-blue: #47b5e7;
+    --settings-blue-dark: #9bd8f3;
+    --settings-blue-soft: #173c4d;
+    --settings-ink: #eef3f5;
+    --settings-muted: #abb9c1;
+    --settings-border: #3b4850;
+    --settings-surface: #252d32;
+    --settings-surface-soft: #30393f;
+}
+
+body.mantine-dark .account-settings-content .alert-success,
+body.mantine-dark .account-settings-content .security-summary.is-enabled {
+    background: #173b2c;
+    border-color: #286147;
+    color: #a9e2c4;
+}
+
+body.mantine-dark .account-settings-content .security-summary.is-enabled > span {
+    background: #24523e;
+    color: #a9e2c4;
+}
+
+body.mantine-dark .account-settings-content .alert-warning {
+    background: #463b1d;
+    border-color: #735f27;
+    color: #f2dc9c;
+}
+
+body.mantine-dark .account-settings-content .alert-danger {
+    background: #482326;
+    border-color: #74373c;
+    color: #f2b8bc;
+}
+
+body.mantine-dark .account-settings-content .settings-danger-card {
+    background: #35282b;
+    border-color: #74373c;
+}
+
+body.mantine-dark .account-settings-content .email-status-pill {
+    background: #24523e;
+    color: #a9e2c4;
+}
+
+body.mantine-dark .account-settings-content .email-status-pill.is-pending {
+    background: #51451f;
+    color: #f2dc9c;
+}
+
 .form-control {
     display: block;
     width: 100%;

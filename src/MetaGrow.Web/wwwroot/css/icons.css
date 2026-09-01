@@ -65,3 +65,18 @@
 .icon-settings {
     --icon-mask-image: url("/images/account/settings.svg");
 }
+.icon-manage-email {
+    --icon-mask-image: url("/images/account/manage-email.svg");
+}
+.icon-manage-password {
+    --icon-mask-image: url("/images/account/manage-password.svg");
+}
+.icon-manage-profile {
+    --icon-mask-image: url("/images/account/manage-profile.svg");
+}
+.icon-manage-personal {
+    --icon-mask-image: url("/images/account/manage-personal.svg");
+}
+.icon-manage-two-factor {
+    --icon-mask-image: url("/images/account/manage-two-factor.svg");
+}

@@ -3,17 +3,50 @@
 @inject AccountApiClient Api
 @inject MfaFlowState MfaFlow
 <PageTitle>Two-factor authentication | MetaGrow</PageTitle>
-<div class="main-content"><div class="block-content" style="width:40rem"><div class="title"><div class="title-header-text">Two-factor authentication</div></div>
-    @if (error is not null) { <div class="alert alert-danger">@error</div> }
-    @if (status is not null) {
-        <p>Authenticator: <strong>@(status.TwoFactorEnabled ? "Enabled" : "Disabled")</strong></p><p>Recovery codes remaining: <strong>@status.RecoveryCodesLeft</strong></p>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(12rem, 1fr)); gap:0.75rem; align-items:start;">
-            <DxButton NavigateUrl="/Account/Manage/GenerateRecoveryCodes" Text="Create Recovery Codes" RenderStyle="ButtonRenderStyle.Primary" CssClass="w-100" />
-            <DxButton NavigateUrl="/Account/Manage/ResetAuthenticator" Text="Reset authenticator" RenderStyle="ButtonRenderStyle.Danger" CssClass="w-100" />
-            @if (MfaFlow.ReadDeviceToken(HttpContext) is not null) { <EditForm Model="forgetModel" method="post" OnValidSubmit="Forget" FormName="forget-device"><DxButton SubmitFormOnClick="true" Text="Forget this browser" RenderStyle="ButtonRenderStyle.Warning" CssClass="w-100" /></EditForm> }
+
+<h3>Two-factor authentication</h3>
+<p class="settings-page-intro">Add a second sign-in step to protect your account if your password is compromised.</p>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+@if (status is not null)
+{
+    <div class="security-summary @(status.TwoFactorEnabled ? "is-enabled" : null)">
+        <span><span class="icon icon-manage-two-factor" aria-hidden="true"></span></span>
+        <div>
+            <strong>@(status.TwoFactorEnabled ? "Two-factor authentication is enabled" : "Two-factor authentication is not enabled")</strong>
+            <small>@(status.TwoFactorEnabled ? "Your account has an additional sign-in check." : "Set up an authenticator for stronger account protection.")</small>
+        </div>
+    </div>
+
+    <div class="settings-action-grid">
+        <section class="settings-action-card">
+            <div>
+                <h4>Recovery codes</h4>
+                <p>@status.RecoveryCodesLeft recovery codes remaining. Generate a new set for emergency account access.</p>
+            </div>
+            <DxButton NavigateUrl="/Account/Manage/GenerateRecoveryCodes" Text="Create recovery codes" RenderStyle="ButtonRenderStyle.Primary" />
+        </section>
+        <section class="settings-action-card settings-danger-card">
+            <div>
+                <h4>Authenticator app</h4>
+                <p>Replace the authenticator currently connected to your account.</p>
+            </div>
+            <DxButton NavigateUrl="/Account/Manage/ResetAuthenticator" Text="Reset authenticator" RenderStyle="ButtonRenderStyle.Danger" />
+        </section>
+    </div>
+
+    @if (MfaFlow.ReadDeviceToken(HttpContext) is not null)
+    {
+        <div class="settings-button-row">
+            <EditForm Model="forgetModel" method="post" OnValidSubmit="Forget" FormName="forget-device">
+                <DxButton SubmitFormOnClick="true" Text="Forget this browser" RenderStyle="ButtonRenderStyle.Warning" />
+            </EditForm>
         </div>
     }
-</div></div>
+}
 @code {
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!; private MetaGrowMfaStatusResponse? status; private string? error; private readonly object forgetModel=new();
     protected override async Task OnInitializedAsync(){var result=await Api.GetMfaStatusAsync();status=result.Item1;error=result.Item2;}
