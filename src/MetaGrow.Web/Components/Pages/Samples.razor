@@ -24,19 +24,14 @@
                  StickToViewport="true" DisplayTime="TimeSpan.FromSeconds(10)" Width="410px" />
 
 <div class="samples-page">
+    <FarmSurveyContext PropertyId="RequestedPropertyId" PropertyName="@RequestedProperty" Label="Samples" AllRecordsUrl="/surveys/samples" />
+
     <div class="title">
         <div class="title-header-text">Sample surveys</div>
         <div class="title-content-text">Find one survey across all laboratories and sample categories.</div>
     </div>
 
-    <nav class="sample-nav" aria-label="Sample survey area">
-        <a class="active" href="/surveys/samples">Surveys</a>
-        <a href="/surveys/samples/lab-results">Lab results</a>
-        <a href="/surveys/samples/lab-results/historical">Legacy data</a>
-        <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)">
-            <a href="/surveys/samples/generate-from-csv">Generate from CSV</a>
-        </AuthorizeView>
-    </nav>
+    <SampleAreaNavigation ActivePage="surveys" GuideRequested="@(() => _importGuideRequest++)" />
 
     @if (_deletionRequests.Count > 0)
     {
@@ -95,6 +90,8 @@
         </section>
     }
 
+    <SampleImportGuideTarget Destination="surveys" Label="Find your existing sample survey" RequestVersion="_importGuideRequest" Ready="@(!_loading)"
+                             Instruction="Find your survey below, then select Import beside it. Set the survey-date range and press Search, then narrow the results by property if needed.">
     <section class="filter-panel search-panel" aria-labelledby="sample-search-heading">
         <div class="filter-heading">
             <div>
@@ -117,6 +114,8 @@
             </div>
         </div>
     </section>
+
+    </SampleImportGuideTarget>
 
     <section class="filter-panel live-filter-panel" aria-labelledby="sample-filter-heading">
         <div class="filter-heading">
@@ -304,6 +303,13 @@
 <SurveyDeletionRequestPopup @ref="_deletionPopup" Requested="OnDeletionRequestedAsync" />
 
 @code {
+    [SupplyParameterFromQuery(Name = "property")]
+    public string? RequestedProperty { get; set; }
+
+    [SupplyParameterFromQuery(Name = "propertyId")]
+    public int? RequestedPropertyId { get; set; }
+
+    private int _importGuideRequest;
     private const string FilterCookieName = "metagrow.samples.filters";
     private static readonly string[] CategoryOptions = [SampleSurveyFilter.MetagenCategory, SampleSurveyFilter.ChemistryCategory];
     private readonly DateTime _today = DateTime.Today;
@@ -339,7 +345,7 @@
     private IReadOnlyList<FilterOption> LaboratoryOptions => _surveys.SelectMany(item => item.Laboratories).GroupBy(item => item.Id).Select(group => new FilterOption(group.Key, group.First().Name)).OrderBy(item => item.Name).ToList();
     private IReadOnlyList<FilterOption> TestTypeOptions => _surveys.SelectMany(item => item.TestTypes).GroupBy(item => item.Id).Select(group => new FilterOption(group.Key, group.First().Name)).OrderBy(item => item.Name).ToList();
     private IReadOnlyList<string> WorkflowOptions => _surveys.SelectMany(item => new[] { item.MetagenWorkflowName, item.NutritionWorkflowName }).Where(item => !string.IsNullOrWhiteSpace(item)).Select(item => item!).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(item => item).ToList();
-    private IReadOnlyList<SampleSurveySummaryDto> FilteredSurveys => SampleSurveyFilter.Apply(_surveys, _propertySearch, _agronomistId, _category, _workflow, _labId, _testTypeId);
+    private IReadOnlyList<SampleSurveySummaryDto> FilteredSurveys => SampleSurveyFilter.Apply(_surveys, _propertySearch, _agronomistId, _category, _workflow, _labId, _testTypeId).Where(survey => RequestedPropertyId is null || survey.PropertyId == RequestedPropertyId).ToList();
     private string ResultSummary => FilteredSurveys.Count == _surveys.Count ? $"{_surveys.Count} survey{(_surveys.Count == 1 ? string.Empty : "s")}" : $"{FilteredSurveys.Count} of {_surveys.Count} surveys";
 
     protected override void OnInitialized()
@@ -360,8 +366,35 @@
         _canApproveOwnDeletion = authenticationState.User.IsInRole(MetaGrowRoles.Admin) ||
             authenticationState.User.IsInRole(MetaGrowRoles.AgricultureManager);
         await RestoreFiltersAsync();
+        ApplyLinkedPropertyFilter();
+        _linkedFiltersReady = true;
         await Task.WhenAll(LoadSurveysAsync(), LoadDeletionRequestsAsync());
         await InvokeAsync(StateHasChanged);
+    }
+
+    private bool _linkedFiltersReady;
+    private (int? Id, string? Name) _lastLinkedProperty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var linkedProperty = (RequestedPropertyId, RequestedProperty);
+        if (_lastLinkedProperty == linkedProperty) return;
+        _lastLinkedProperty = linkedProperty;
+        if (!_linkedFiltersReady) return;
+        ApplyFilters(SampleSurveyFilterPreferences.CreateDefault(_today));
+        ApplyLinkedPropertyFilter();
+        await LoadSurveysAsync();
+    }
+
+    private void ApplyLinkedPropertyFilter()
+    {
+        if (RequestedPropertyId is null && string.IsNullOrWhiteSpace(RequestedProperty)) return;
+        _startDate = _appliedStartDate = new DateTime(1990, 1, 1);
+        _endDate = _appliedEndDate = _today;
+        _propertySearch = RequestedPropertyId.HasValue ? null : RequestedProperty?.Trim();
+        _agronomistId = null;
+        _category = _workflow = null;
+        _labId = _testTypeId = null;
     }
 
     private async Task LoadSurveysAsync()

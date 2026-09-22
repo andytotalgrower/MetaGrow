@@ -1,0 +1,19 @@
+@page "/Account/SettingsPreview"
+@page "/Account/SettingsPreview/{*Section}"
+@attribute [Authorize]
+@attribute [ExcludeFromInteractiveRouting]
+@inject NavigationManager Navigation
+
+@code {
+    [Parameter]
+    public string? Section { get; set; }
+
+    protected override void OnInitialized()
+    {
+        var target = string.IsNullOrWhiteSpace(Section)
+            ? "/Account/Manage"
+            : $"/Account/Manage/{Section.TrimStart('/')}";
+
+        Navigation.NavigateTo(target, replace: true);
+    }
+}

@@ -622,7 +622,8 @@
     private bool CanEditKeyFindings => _canEditOperations && !KeyFindingsLocked;
     private string KeyFindingEditorTitle => _keyFindingDraftId.HasValue ? "Edit key finding" : "Add key finding";
     private bool HasImportedResults => _importedLabResults.Count > 0;
-    private bool CanImportResults => _editor?.Samples.Any(item => item.LabId != 6 && item.LabStatusId < 100) == true;
+    private bool CanImportResults => _editor?.Samples.Any(item => item.LabId != 6 && item.LabStatusId < 100 &&
+        SampleLaboratoryResultType.IsImportSupported(_editor.LabTestTypes.FirstOrDefault(test => test.LabTestTypeId == item.TestTypeId)?.TestTypeId ?? 0)) == true;
     private string ImportResultsButtonText => HasImportedResults ? "Import more results" : "Import results";
     private IReadOnlyList<UnifiedLabResultRow> SortedImportedLabResults => _importedLabResults
         .OrderByDescending(result => result.DateReceived ?? result.SurveyDate)

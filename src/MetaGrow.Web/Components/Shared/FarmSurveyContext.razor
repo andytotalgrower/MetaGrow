@@ -1,0 +1,19 @@
+@if (PropertyId.HasValue)
+{
+    <section class="farm-survey-context" aria-label="Selected farm">
+        <strong>@Label for @(string.IsNullOrWhiteSpace(PropertyName) ? $"farm {PropertyId}" : PropertyName)</strong>
+        <nav aria-label="Farm navigation">
+            <AuthorizeView Roles="@(ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager)">
+                <a href="@($"/farms?propertyId={PropertyId}")">Back to farm</a>
+            </AuthorizeView>
+            <a href="@AllRecordsUrl">View all farms&#8217; records</a>
+        </nav>
+    </section>
+}
+
+@code {
+    [Parameter] public int? PropertyId { get; set; }
+    [Parameter] public string? PropertyName { get; set; }
+    [Parameter] public string Label { get; set; } = "Surveys";
+    [Parameter] public string AllRecordsUrl { get; set; } = string.Empty;
+}

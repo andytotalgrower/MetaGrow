@@ -1,9 +1,4 @@
 .historical-soil-page { display: flex; flex-direction: column; gap: 1rem; padding-bottom: 2rem; }
-.sample-nav { align-items: center; border-bottom: 1px solid var(--dxds-color-border-neutral-subdued-rest); display: flex; gap: .25rem; }
-.sample-nav a, .sample-nav span { border-bottom: 3px solid transparent; color: inherit; padding: .65rem .9rem; text-decoration: none; white-space: nowrap; }
-.sample-nav a:hover { background: var(--dxds-color-surface-neutral-subdued-rest); }
-.sample-nav .active { border-bottom-color: var(--mg-blue, #007cba); color: var(--mg-link, #0d8ecb); font-weight: 650; }
-.sample-nav .disabled { color: var(--dxds-color-content-neutral-subdued-rest); cursor: not-allowed; }
 .dialog-error { background: #f8d7da; border-left: 4px solid #dc3545; color: #842029; padding: .7rem .85rem; }
 .filter-panel { background: var(--dxds-color-surface-neutral-subdued-rest); border: 1px solid var(--dxds-color-border-neutral-subdued-rest); border-radius: .5rem; padding: 1rem; }
 .search-panel { border-left: 4px solid var(--mg-blue, #007cba); }
@@ -130,4 +125,4 @@
 @container page-content (max-width: 48rem) { .desktop-results { display: none; } .mobile-results { display: grid; gap: .75rem; } .result-detail { padding: .6rem 0; } }
 @container page-content (max-width: 48rem) { .mapping-row, .batch-crop-editor { align-items: stretch; grid-template-columns: 1fr; } .mapping-row-status { min-height: 0; } }
 @container page-content (max-width: 48rem) { .bulk-controls { grid-template-columns: 1fr; } .bulk-receipt { align-items: start; grid-template-columns: 1fr; } }
-@container page-content (max-width: 38rem) { .filter-heading, .result-heading, .detail-heading { align-items: stretch; flex-direction: column; } .filter-actions { display: grid; grid-template-columns: 1fr 1fr; } .filter-grid, .search-grid, .dialog-fields, .raw-map-summary, .generation-banner, .bulk-summary { grid-template-columns: 1fr; } .generation-test-field { grid-column: auto; } .generation-block-row { align-items: flex-start; } .sample-nav { overflow-x: auto; } .dialog-footer { flex-wrap: wrap; } }
+@container page-content (max-width: 38rem) { .filter-heading, .result-heading, .detail-heading { align-items: stretch; flex-direction: column; } .filter-actions { display: grid; grid-template-columns: 1fr 1fr; } .filter-grid, .search-grid, .dialog-fields, .raw-map-summary, .generation-banner, .bulk-summary { grid-template-columns: 1fr; } .generation-test-field { grid-column: auto; } .generation-block-row { align-items: flex-start; } .dialog-footer { flex-wrap: wrap; } }

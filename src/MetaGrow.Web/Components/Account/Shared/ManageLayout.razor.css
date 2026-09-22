@@ -83,6 +83,10 @@
     grid-template-columns: minmax(13.5rem, 17rem) minmax(0, 1fr);
 }
 
+.account-settings-shell--standalone {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .account-settings-sidebar,
 .account-settings-content {
     background: var(--settings-surface);

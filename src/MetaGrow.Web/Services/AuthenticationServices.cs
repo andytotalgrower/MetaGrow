@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Distributed;
+using Metagen.AccountSettings.Razor.Backend;
+using Metagen.AccountSettings.Razor.Models;
 
 namespace MetaGrow.Web.Services;
 
@@ -146,33 +148,66 @@ public sealed class AccountApiClient(
         Send<MetaGrowUserEmailDto>(HttpMethod.Post, "auth/emails", new MetaGrowAddEmailRequest { Email = email });
     public Task<string?> ConfirmEmailAsync(long id, string code) =>
         SendWithoutResult(HttpMethod.Post, "auth/emails/confirm", new MetaGrowConfirmAdditionalEmailRequest { EmailAddressId = id, Code = code });
-    public Task<(MetaGrowMfaStatusResponse?, string?)> GetMfaStatusAsync() =>
-        Send<MetaGrowMfaStatusResponse>(HttpMethod.Get, "auth/mfa/status");
-    public Task<(MetaGrowRecoveryCodesResponse?, string?)> NewRecoveryCodesAsync() =>
-        Send<MetaGrowRecoveryCodesResponse>(HttpMethod.Post, "auth/mfa/recovery-codes", new { });
-    public Task<string?> DisableMfaAsync() => SendWithoutResult(HttpMethod.Post, "auth/mfa/disable", new { });
-    public Task<string?> ResetAuthenticatorAsync() => SendWithoutResult(HttpMethod.Post, "auth/mfa/reset-authenticator", new { });
-    public Task<(PasskeySummary[]?, string?)> GetPasskeysAsync() => Send<PasskeySummary[]>(HttpMethod.Get, "auth/passkeys");
-    public Task<(PasskeyOptionsResponse?, string?)> PasskeyCreationOptionsAsync(string name) =>
-        Send<PasskeyOptionsResponse>(HttpMethod.Post, "auth/passkeys/creation-options", new PasskeyCreationOptionsRequest { DisplayName = name });
-    public Task<string?> RegisterPasskeyAsync(PasskeyAttestationRequest value) => SendWithoutResult(HttpMethod.Post, "auth/passkeys/register", value);
-    public Task<string?> RenamePasskeyAsync(string id, string name) => SendWithoutResult(HttpMethod.Put, $"auth/passkeys/{Uri.EscapeDataString(id)}", new RenamePasskeyRequest { DisplayName = name });
-    public Task<string?> DeletePasskeyAsync(string id) => SendWithoutResult(HttpMethod.Delete, $"auth/passkeys/{Uri.EscapeDataString(id)}", new { });
+    public Task<(MetaGrowMfaStatusResponse?, string?)> GetMfaStatusAsync(
+        CancellationToken cancellationToken = default) =>
+        Send<MetaGrowMfaStatusResponse>(HttpMethod.Get, "auth/mfa/status", cancellationToken: cancellationToken);
+    public Task<(MetaGrowRecoveryCodesResponse?, string?)> NewRecoveryCodesAsync(
+        CancellationToken cancellationToken = default) =>
+        Send<MetaGrowRecoveryCodesResponse>(HttpMethod.Post, "auth/mfa/recovery-codes", new { }, cancellationToken);
+    public Task<(MetaGrowMfaSetupInfo?, string?)> ManageMfaSetupInfoAsync(
+        CancellationToken cancellationToken = default) =>
+        Send<MetaGrowMfaSetupInfo>(HttpMethod.Post, "auth/mfa/manage/setup-info", new { }, cancellationToken);
+    public Task<(MetaGrowRecoveryCodesResponse?, string?)> ManageMfaSetupAsync(
+        string code,
+        CancellationToken cancellationToken = default) =>
+        Send<MetaGrowRecoveryCodesResponse>(HttpMethod.Post, "auth/mfa/manage/setup", new MetaGrowMfaManageSetupRequest { Code = code }, cancellationToken);
+    public Task<string?> DisableMfaAsync(CancellationToken cancellationToken = default) =>
+        SendWithoutResult(HttpMethod.Post, "auth/mfa/disable", new { }, cancellationToken);
+    public Task<string?> ResetAuthenticatorAsync(CancellationToken cancellationToken = default) =>
+        SendWithoutResult(HttpMethod.Post, "auth/mfa/reset-authenticator", new { }, cancellationToken);
+    public Task<(PasskeySummary[]?, string?)> GetPasskeysAsync(
+        CancellationToken cancellationToken = default) =>
+        Send<PasskeySummary[]>(HttpMethod.Get, "auth/passkeys", cancellationToken: cancellationToken);
+    public Task<(PasskeyOptionsResponse?, string?)> PasskeyCreationOptionsAsync(
+        string name,
+        CancellationToken cancellationToken = default) =>
+        Send<PasskeyOptionsResponse>(HttpMethod.Post, "auth/passkeys/creation-options", new PasskeyCreationOptionsRequest { DisplayName = name }, cancellationToken);
+    public Task<string?> RegisterPasskeyAsync(
+        PasskeyAttestationRequest value,
+        CancellationToken cancellationToken = default) =>
+        SendWithoutResult(HttpMethod.Post, "auth/passkeys/register", value, cancellationToken);
+    public Task<string?> RenamePasskeyAsync(
+        string id,
+        string name,
+        CancellationToken cancellationToken = default) =>
+        SendWithoutResult(HttpMethod.Put, $"auth/passkeys/{Uri.EscapeDataString(id)}", new RenamePasskeyRequest { DisplayName = name }, cancellationToken);
+    public Task<string?> DeletePasskeyAsync(
+        string id,
+        CancellationToken cancellationToken = default) =>
+        SendWithoutResult(HttpMethod.Delete, $"auth/passkeys/{Uri.EscapeDataString(id)}", new { }, cancellationToken);
 
-    private async Task<(T?, string?)> Send<T>(HttpMethod method, string path, object? body = null)
+    private async Task<(T?, string?)> Send<T>(
+        HttpMethod method,
+        string path,
+        object? body = null,
+        CancellationToken cancellationToken = default)
     {
         var request = await CreateRequest(method, path, body);
         if (request is null) return (default, "Your session has expired. Please log in again.");
-        var response = await Client.SendAsync(request);
+        var response = await Client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode) return (default, await ReadError(response));
-        return (await response.Content.ReadFromJsonAsync<T>(), null);
+        return (await response.Content.ReadFromJsonAsync<T>(cancellationToken), null);
     }
 
-    private async Task<string?> SendWithoutResult(HttpMethod method, string path, object body)
+    private async Task<string?> SendWithoutResult(
+        HttpMethod method,
+        string path,
+        object body,
+        CancellationToken cancellationToken = default)
     {
         var request = await CreateRequest(method, path, body);
         if (request is null) return "Your session has expired. Please log in again.";
-        var response = await Client.SendAsync(request);
+        var response = await Client.SendAsync(request, cancellationToken);
         return response.IsSuccessStatusCode ? null : await ReadError(response);
     }
 
@@ -264,37 +299,41 @@ public static class AccountEndpoints
             var (response, errors) = await auth.PasskeyRequestOptionsAsync(request);
             return response is null ? Results.BadRequest(string.Join(" ", errors)) : Results.Json(response);
         });
-        group.MapPost("/Passkeys/CreationOptions", async (HttpContext context, IAntiforgery antiforgery, AccountApiClient account, PasskeyCreationOptionsRequest request) =>
+        group.MapPost("/Passkeys/CreationOptions", async (HttpContext context, IAntiforgery antiforgery, IAccountSettingsBackend account, PasskeyCreationOptionsRequest request) =>
         {
             await antiforgery.ValidateRequestAsync(context);
-            var (response, error) = await account.PasskeyCreationOptionsAsync(request.DisplayName);
-            return response is null ? Results.BadRequest(error) : Results.Json(response);
+            var result = await account.BeginPasskeyCreationAsync(request.DisplayName, context.RequestAborted);
+            return result.Succeeded && result.Value is not null
+                ? Results.Json(result.Value)
+                : Results.BadRequest(new PasskeyErrorResponse { Errors = [result.Message ?? "Passkey setup could not start."] });
         }).RequireAuthorization();
-        group.MapPost("/Passkeys/Register", async (HttpContext context, IAntiforgery antiforgery, AccountApiClient account, PasskeyAttestationRequest request) =>
+        group.MapPost("/Passkeys/Register", async (HttpContext context, IAntiforgery antiforgery, IAccountSettingsBackend account, PasskeyAttestationRequest request) =>
         {
             await antiforgery.ValidateRequestAsync(context);
-            var error = await account.RegisterPasskeyAsync(request);
-            return error is null
-                ? Results.Ok(new { message = "Passkey added." })
-                : Results.BadRequest(new PasskeyErrorResponse { Errors = [error] });
+            var result = await account.CompletePasskeyCreationAsync(
+                new AccountPasskeyAttestation(request.CeremonyId, request.CredentialJson, request.DisplayName),
+                context.RequestAborted);
+            return result.Succeeded
+                ? Results.Ok(new { message = result.Message ?? "Passkey added." })
+                : Results.BadRequest(new PasskeyErrorResponse { Errors = [result.Message ?? "The passkey could not be saved."] });
         }).RequireAuthorization();
-        group.MapPut("/Passkeys/{credentialId}", async (HttpContext context, IAntiforgery antiforgery, AccountApiClient account, string credentialId, RenamePasskeyRequest request) =>
+        group.MapPut("/Passkeys/{credentialId}", async (HttpContext context, IAntiforgery antiforgery, IAccountSettingsBackend account, string credentialId, RenamePasskeyRequest request) =>
         {
             await antiforgery.ValidateRequestAsync(context);
             if (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Length > 64)
                 return Results.BadRequest(new PasskeyErrorResponse { Errors = ["Enter a passkey name of 1 to 64 characters."] });
-            var error = await account.RenamePasskeyAsync(credentialId, request.DisplayName.Trim());
-            return error is null
-                ? Results.Ok(new { message = "Passkey renamed." })
-                : Results.BadRequest(new PasskeyErrorResponse { Errors = [error] });
+            var result = await account.RenamePasskeyAsync(credentialId, request.DisplayName.Trim(), context.RequestAborted);
+            return result.Succeeded
+                ? Results.Ok(new { message = result.Message ?? "Passkey renamed." })
+                : Results.BadRequest(new PasskeyErrorResponse { Errors = [result.Message ?? "The passkey could not be renamed."] });
         }).RequireAuthorization();
-        group.MapDelete("/Passkeys/{credentialId}", async (HttpContext context, IAntiforgery antiforgery, AccountApiClient account, string credentialId) =>
+        group.MapDelete("/Passkeys/{credentialId}", async (HttpContext context, IAntiforgery antiforgery, IAccountSettingsBackend account, string credentialId) =>
         {
             await antiforgery.ValidateRequestAsync(context);
-            var error = await account.DeletePasskeyAsync(credentialId);
-            return error is null
-                ? Results.Ok(new { message = "Passkey deleted." })
-                : Results.BadRequest(new PasskeyErrorResponse { Errors = [error] });
+            var result = await account.DeletePasskeyAsync(credentialId, context.RequestAborted);
+            return result.Succeeded
+                ? Results.Ok(new { message = result.Message ?? "Passkey deleted." })
+                : Results.BadRequest(new PasskeyErrorResponse { Errors = [result.Message ?? "The passkey could not be deleted."] });
         }).RequireAuthorization();
         group.MapGet("/Logout", Logout);
         group.MapPost("/Logout", Logout);

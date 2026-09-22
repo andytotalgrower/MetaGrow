@@ -22,7 +22,6 @@
             <DxFormLayout CaptionPosition="CaptionPosition.Vertical"><DxFormLayoutItem Caption="Verification code" ColSpanMd="12"><InputText class="form-control" @bind-Value="Input.Code" name="Input.Code" /></DxFormLayoutItem>
             <DxFormLayoutItem ColSpanMd="12"><DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Verify" /></DxFormLayoutItem></DxFormLayout>
         </EditForm>
-        <script src="scripts/qrcode.min.js"></script>
         <script>
             (function () {
                 var data = document.getElementById('qrCodeData');

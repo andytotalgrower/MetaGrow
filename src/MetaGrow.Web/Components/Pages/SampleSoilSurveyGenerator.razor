@@ -8,7 +8,6 @@
 @inject ApiTokenService ApiTokens
 @inject AccountApiClient AccountApi
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject IStringSimilarityService Similarity
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 
@@ -35,6 +34,8 @@
             <strong>Then move on to final generation</strong>
         </div>
     </header>
+
+    <SampleAreaNavigation ActivePage="generate" ShowGuide="@(_receipt is null)" GuideRequested="@(() => _importGuideRequest++)" />
 
     @if (_loading)
     {
@@ -67,6 +68,8 @@
     }
     else
     {
+        <SampleImportGuideTarget Destination="generate" Label="Create a sample survey from CSV" RequestVersion="_importGuideRequest"
+                                 Instruction="Start by choosing the farm, agronomist and result family below. Then select your CSV file to preview the surveys and results.">
         <section class="setup-card" aria-labelledby="generation-setup-heading">
             <div class="section-heading">
                 <span class="step-number">1</span>
@@ -98,10 +101,6 @@
                                 TextFieldName="@nameof(ResultTypeOption.Name)" ValueFieldName="@nameof(ResultTypeOption.Id)"
                                 AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never"
                                 Enabled="@(!_uploading && !_committing)" />
-                    @if (_resultTypeId is SampleLaboratoryResultType.QuickSoil or SampleLaboratoryResultType.Sap)
-                    {
-                        <small>Quick Soil and Sap results use Multi-crop blocks.</small>
-                    }
                 </div>
             </div>
 
@@ -123,6 +122,8 @@
                          AcceptedFileTypes="@AcceptedFileTypes"
                          AllowMultiFileUpload="false" />
         </section>
+
+        </SampleImportGuideTarget>
 
         @if (_preview is not null)
         {
@@ -200,7 +201,12 @@
                     }
                 </div>
 
-                <div class="mapping-heading"><h3>Block and test reconciliation</h3><p>One selection applies to every result carrying the same lab block name. Suggested values remain editable.</p></div>
+                <SampleImportColumnReview Review="_preview.ColumnReview" Busy="_uploading" Applied="ReviewColumnsAsync" />
+                @if (HasDuplicateBlocks)
+                {
+                    <div class="review-message danger" role="alert">Duplicate blocks found. Select a different property block for each result row.</div>
+                }
+                <div class="mapping-heading"><h3>Block and test reconciliation</h3><p>Select one distinct property block per result row. Saved lab block mappings are preselected; other blocks require your selection.</p></div>
                 <div class="mapping-list">
                     @foreach (var mapping in _mappingRows)
                     {
@@ -208,7 +214,7 @@
                             <div class="raw-block">
                                 <span>Block name in file</span>
                                 <strong>@(string.IsNullOrWhiteSpace(mapping.RawBlockName) ? "(blank)" : mapping.RawBlockName)</strong>
-                                <small>@mapping.ResultCount result@(mapping.ResultCount == 1 ? string.Empty : "s")</small>
+                                <small>@mapping.RowLabel</small>
                             </div>
                             <span class="mapping-arrow" aria-hidden="true">→</span>
                             <div class="mapping-choice">
@@ -308,14 +314,13 @@
 </DxPopup>
 
 @code {
+    private int _importGuideRequest;
     private const int MaxFileBytes = 20 * 1024 * 1024;
     private static readonly List<string> AcceptedFileTypes = [".csv"];
     private static readonly List<ResultTypeOption> ResultTypeOptions =
     [
         new(SampleLaboratoryResultType.Soil, SampleLaboratoryResultType.Name(SampleLaboratoryResultType.Soil)),
-        new(SampleLaboratoryResultType.Tissue, SampleLaboratoryResultType.Name(SampleLaboratoryResultType.Tissue)),
-        new(SampleLaboratoryResultType.QuickSoil, SampleLaboratoryResultType.Name(SampleLaboratoryResultType.QuickSoil)),
-        new(SampleLaboratoryResultType.Sap, SampleLaboratoryResultType.Name(SampleLaboratoryResultType.Sap))
+        new(SampleLaboratoryResultType.Tissue, SampleLaboratoryResultType.Name(SampleLaboratoryResultType.Tissue))
     ];
 
     private DxFileInput? _fileInput;
@@ -338,19 +343,20 @@
     private string? _commitError;
 
     private string ResultTypeName => SampleLaboratoryResultType.Name(_resultTypeId);
-    private IReadOnlyList<BlockChoice> AvailableBlockChoices =>
-        _resultTypeId is SampleLaboratoryResultType.QuickSoil or SampleLaboratoryResultType.Sap
-            ? _blockChoices.Where(choice => NormalizeBlockType(choice.MatchBlock.BlockType) == "mcs").ToList()
-            : _blockChoices;
+    private IReadOnlyList<BlockChoice> AvailableBlockChoices => _blockChoices;
+    private bool HasDuplicateBlocks => _mappingRows.Where(row => !string.IsNullOrWhiteSpace(row.BlockKey))
+        .GroupBy(row => row.BlockKey.Split(':').Last()).Any(group => group.Count() > 1);
     private bool CanUpload => _propertyId > 0 && _agronomistId > 0 &&
-        SampleLaboratoryResultType.IsSupported(_resultTypeId) && !_loading;
-    private bool CanCommit => _preview?.CanGenerate == true &&
+        SampleLaboratoryResultType.IsImportSupported(_resultTypeId) && !_loading;
+    private bool CanCommit => _preview?.CanGenerate == true && !HasDuplicateBlocks &&
         (!_preview.PropertyNameOverrideRequired || _propertyOverrideAccepted) &&
         !_uploading && !_committing &&
         _mappingRows.Count > 0 && _mappingRows.All(row =>
             !string.IsNullOrWhiteSpace(row.BlockKey) &&
             _testTypeChoices.Any(test => test.Id == row.LabTestTypeId));
-    private string CommitReadinessText => _preview is null || !_preview.CanGenerate
+    private string CommitReadinessText => HasDuplicateBlocks
+        ? "Select a different block for each result row"
+        : _preview is null || !_preview.CanGenerate
         ? "Resolve the blocked checks before generating"
         : _preview.PropertyNameOverrideRequired && !_propertyOverrideAccepted
             ? "Confirm the farm name override before generating"
@@ -487,11 +493,6 @@
                 ? $"{NormalizeBlockType(mapping.SuggestedBlockType)}:{mapping.SuggestedBlockId}"
                 : string.Empty;
             var choice = AvailableBlockChoices.FirstOrDefault(item => item.Key.Equals(suggestedKey, StringComparison.OrdinalIgnoreCase));
-            if (choice is null)
-            {
-                var best = Similarity.FindBestMatchingBlock(mapping.RawBlockName, AvailableBlockChoices.Select(item => item.MatchBlock));
-                choice = best is null ? null : AvailableBlockChoices.FirstOrDefault(item => ReferenceEquals(item.MatchBlock, best));
-            }
             var testId = _preview.LabTestTypes.Any(test => test.LabTestTypeId == mapping.SuggestedLabTestTypeId)
                 ? mapping.SuggestedLabTestTypeId
                 : 0;
@@ -500,6 +501,7 @@
                 BlockControlId = $"generation-block-{index}",
                 TestControlId = $"generation-test-{index}",
                 MappingKey = mapping.MappingKey,
+                RowLabel = $"CSV row {_preview.Rows.FirstOrDefault(row => row.MappingKey == mapping.MappingKey)?.RowNumber}",
                 RawBlockName = mapping.RawBlockName,
                 ResultCount = mapping.ResultCount,
                 BlockKey = choice?.Key ?? string.Empty,
@@ -507,6 +509,26 @@
                 LabTestTypeId = testId
             };
         }).ToList();
+    }
+
+    private async Task ReviewColumnsAsync(List<SampleImportColumnSelectionDto> columns)
+    {
+        if (_preview is null || _uploading) return;
+        _uploading = true;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var token = await ApiTokens.GetAccessTokenAsync(state.User);
+            if (string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException("Sign in again before reviewing columns.");
+            var preview = await TgsApi.ReviewSampleChemistryGenerationColumns(
+                new SampleImportColumnReviewRequest { PreviewToken = _preview.PreviewToken, Columns = columns }, token);
+            if (preview is null) throw new InvalidOperationException(TgsApi.ErrorMessage ?? "Column review failed.");
+            _preview = preview;
+            _propertyOverrideAccepted = false;
+            BuildMappingRows();
+        }
+        catch (Exception exception) { ShowToast("Column review failed", exception.Message, ToastRenderStyle.Danger); }
+        finally { _uploading = false; }
     }
 
     private void OpenConfirmation()
@@ -610,6 +632,7 @@
     private sealed record ResultTypeOption(int Id, string Name);
     private sealed class MappingRow
     {
+        public string RowLabel { get; init; } = string.Empty;
         public string BlockControlId { get; init; } = string.Empty;
         public string TestControlId { get; init; } = string.Empty;
         public string MappingKey { get; init; } = string.Empty;

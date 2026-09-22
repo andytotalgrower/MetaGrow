@@ -1,0 +1,62 @@
+@using ApiModels.MetaGrow
+@inject NavigationManager Navigation
+
+@if (ShowGuide)
+{
+    <section class="import-guide" aria-labelledby="sample-import-question">
+        <span class="guide-kicker">Importing lab results? Start here</span>
+        <h2 id="sample-import-question">Have you already created a sample survey?</h2>
+        <div class="guide-choices">
+            <button type="button" class="guide-choice" @onclick="@(() => ChooseAsync("surveys"))">
+                <strong>Yes — find my survey <span aria-hidden="true">→</span></strong>
+                <span>Find your existing survey, then select Import beside it.</span>
+            </button>
+            <AuthorizeView Roles="@GenerationRoles">
+                <Authorized>
+                    <button type="button" class="guide-choice" @onclick="@(() => ChooseAsync("generate"))">
+                        <strong>No — create from CSV <span aria-hidden="true">→</span></strong>
+                        <span>Create a survey and import your lab results from a CSV file.</span>
+                    </button>
+                </Authorized>
+                <NotAuthorized>
+                    <div class="guide-unavailable">
+                        <strong>No — I need a new survey</strong>
+                        <span>Ask an agronomist, agriculture manager or administrator to create it from your CSV.</span>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </section>
+}
+
+<nav class="sample-nav" aria-label="Sample survey area">
+    <a class="@ActiveClass("surveys")" aria-current="@CurrentPage("surveys")" href="/surveys/samples">Surveys</a>
+    <a class="@ActiveClass("results")" aria-current="@CurrentPage("results")" href="/surveys/samples/lab-results">Lab results</a>
+    <a class="@ActiveClass("legacy")" aria-current="@CurrentPage("legacy")" href="/surveys/samples/lab-results/historical">Legacy data</a>
+    <AuthorizeView Roles="@GenerationRoles">
+        <a class="@ActiveClass("generate")" aria-current="@CurrentPage("generate")" href="/surveys/samples/generate-from-csv">Generate from CSV</a>
+    </AuthorizeView>
+</nav>
+
+@code {
+    private const string GenerationRoles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist;
+
+    [Parameter] public string ActivePage { get; set; } = "surveys";
+    [Parameter] public bool ShowGuide { get; set; } = true;
+    [Parameter] public EventCallback GuideRequested { get; set; }
+
+    private string? ActiveClass(string page) => ActivePage == page ? "active" : null;
+    private string? CurrentPage(string page) => ActivePage == page ? "page" : null;
+
+    private async Task ChooseAsync(string destination)
+    {
+        if (ActivePage == destination && GuideRequested.HasDelegate)
+        {
+            await GuideRequested.InvokeAsync();
+            return;
+        }
+
+        var path = destination == "surveys" ? "/surveys/samples" : "/surveys/samples/generate-from-csv";
+        Navigation.NavigateTo($"{path}?importGuide={destination}");
+    }
+}

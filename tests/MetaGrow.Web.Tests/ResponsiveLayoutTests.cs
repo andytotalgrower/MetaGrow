@@ -30,7 +30,7 @@ public class ResponsiveLayoutTests
             "Layout",
             "MainLayout.razor"));
 
-        Assert.Contains("@AddDrawerStateToUrl(\"/Account/Manage/EmailAddresses\")", layout);
+        Assert.Contains("@AddDrawerStateToUrl(\"/Account/Manage\")", layout);
         Assert.Contains("@auth.User.Identity?.Name</NavLink>", layout);
     }
 

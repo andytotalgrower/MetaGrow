@@ -14,8 +14,10 @@
     </script>
     @DxResourceManager.RegisterTheme(ActiveTheme)
     @DxResourceManager.RegisterScripts()
+    <script src="@Assets["_content/Metagen.AccountSettings.Razor/account-settings-authenticator-code.js"]"></script>
     <link rel="stylesheet" href="@Assets["css/site.css"]" />
     <link rel="stylesheet" href="@Assets["MetaGrow.Web.styles.css"]" />
+    <link rel="stylesheet" href="@Assets["_content/Metagen.AccountSettings.Razor/metagen-account-settings.css"]" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
@@ -32,7 +34,6 @@
     </script>
     <Routes @rendermode="PageRenderMode" />
     <ReconnectModal />
-    <script src="@Assets["scripts/qrcode.min.js"]"></script>
     <script src="@Assets["scripts/report-sharing.js"]"></script>
     <script src="@Assets["scripts/report-printing.js"]"></script>
     <script src="@Assets["scripts/filter-preferences.js"]"></script>
@@ -41,6 +42,7 @@
     <script src="@Assets["_framework/blazor.web.js"]"></script>
     <script src="@Assets["Components/Account/Shared/PasskeySubmit.razor.js"]" type="module"></script>
     <script src="@Assets["scripts/passkey-management.js"]" type="module"></script>
+    <script src="@Assets["_content/Metagen.AccountSettings.Razor/account-settings.js"]" type="module"></script>
 </body>
 
 </html>

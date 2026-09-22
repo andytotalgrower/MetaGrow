@@ -12,6 +12,7 @@
     </PackageReference>
     <ProjectReference Include="..\MetaGrow.Shared\MetaGrow.Shared.csproj" />
     <ProjectReference Include="..\..\..\Metagen.Shared\Metagen.Shared.csproj" />
+    <ProjectReference Include="..\..\..\Metagen.AccountSettings.Razor\Metagen.AccountSettings.Razor.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

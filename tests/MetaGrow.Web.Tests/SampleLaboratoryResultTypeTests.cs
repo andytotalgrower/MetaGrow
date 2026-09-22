@@ -4,6 +4,15 @@ namespace MetaGrow.Web.Tests;
 
 public sealed class SampleLaboratoryResultTypeTests
 {
+    [Theory]
+    [InlineData(10, true)]
+    [InlineData(20, true)]
+    [InlineData(30, false)]
+    [InlineData(40, false)]
+    [InlineData(0, false)]
+    public void Only_soil_and_tissue_are_importable(int type, bool expected) =>
+        Assert.Equal(expected, SampleLaboratoryResultType.IsImportSupported(type));
+
     public static TheoryData<int, string, string> SupportedTypes => new()
     {
         { SampleLaboratoryResultType.Soil, "Soil", "soil" },

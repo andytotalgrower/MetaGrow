@@ -7,7 +7,6 @@
 @inject ITgsApiService TgsApi
 @inject ApiTokenService ApiTokens
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject IStringSimilarityService Similarity
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 
@@ -50,7 +49,7 @@
             <div>
                 <span class="import-kicker">Result family</span>
                 <h2 id="result-type-heading">Choose what this file contains</h2>
-                <p>Only result types represented by outstanding collected samples are available.</p>
+                <p>Soil and Tissue imports are available for outstanding collected samples.</p>
             </div>
             <DxComboBox Data="@AvailableResultTypes" @bind-Value="_resultTypeId" @bind-Value:after="ResultTypeChanged"
                         TextFieldName="@nameof(ResultTypeOption.Name)" ValueFieldName="@nameof(ResultTypeOption.Id)"
@@ -143,12 +142,17 @@
                     </div>
                 }
 
-                <div class="mapping-heading"><h3>Block reconciliation</h3><p>One selection applies to every row with the same lab block name. Suggestions remain editable.</p></div>
+                <SampleImportColumnReview Review="_preview.ColumnReview" Busy="_uploading" Applied="ReviewColumnsAsync" />
+                @if (HasDuplicateBlocks)
+                {
+                    <div class="review-message danger" role="alert">Duplicate blocks found. Select a different property block for each result row.</div>
+                }
+                <div class="mapping-heading"><h3>Block reconciliation</h3><p>Select one distinct property block per result row. Saved lab block mappings are preselected; other blocks require your selection.</p></div>
                 <div class="mapping-list">
                     @foreach (var mapping in _mappingRows)
                     {
                         <div class="mapping-row">
-                            <div class="raw-block"><span>Lab block</span><strong>@(string.IsNullOrWhiteSpace(mapping.RawBlockName) ? "(blank)" : mapping.RawBlockName)</strong><small>@mapping.ResultCount result@(mapping.ResultCount == 1 ? string.Empty : "s")</small></div>
+                            <div class="raw-block"><span>Lab block · @mapping.RowLabel</span><strong>@(string.IsNullOrWhiteSpace(mapping.RawBlockName) ? "(blank)" : mapping.RawBlockName)</strong><small>@mapping.ResultCount result@(mapping.ResultCount == 1 ? string.Empty : "s")</small></div>
                             <span class="mapping-arrow" aria-hidden="true">→</span>
                             <div class="block-choice">
                                 <label for="@mapping.ControlId">Property block</label>
@@ -192,7 +196,7 @@
                 </div>
 
                 <div class="commit-bar">
-                    <div><strong>@(_preview.CanImport ? "Ready for final confirmation" : "Resolve the blocked checks before importing")</strong><span>The commit is atomic: either all rows import or none do.</span></div>
+                    <div><strong>@(CanCommit ? "Ready for final confirmation" : "Resolve the checks and block selections before importing")</strong><span>The commit is atomic: either all rows import or none do.</span></div>
                     <DxButton Text="@($"Import {ResultTypeName} results")" RenderStyle="ButtonRenderStyle.Primary" Enabled="@CanCommit" Click="OpenConfirmation" />
                 </div>
             </section>
@@ -251,7 +255,7 @@
             var ids = _editor.Samples
                 .Where(item => item.LabId != 6 && item.LabStatusId < 100)
                 .Select(item => _editor.LabTestTypes.FirstOrDefault(test => test.LabTestTypeId == item.TestTypeId)?.TestTypeId ?? 0)
-                .Where(SampleLaboratoryResultType.IsSupported)
+                .Where(SampleLaboratoryResultType.IsImportSupported)
                 .Distinct()
                 .OrderBy(id => id)
                 .ToList();
@@ -263,14 +267,13 @@
     private int UnmatchedRows => _preview?.Rows.Count(row => !row.SampleItemId.HasValue) ?? 0;
     private bool HasUnmatchedRows => UnmatchedRows > 0;
     private bool CanUpload => AvailableResultTypes.Any(option => option.Id == _resultTypeId);
-    private IReadOnlyList<BlockChoice> AvailableBlockChoices =>
-        _resultTypeId is SampleLaboratoryResultType.QuickSoil or SampleLaboratoryResultType.Sap
-            ? _blockChoices.Where(choice => NormalizeBlockType(choice.MatchBlock.BlockType) == "mcs").ToList()
-            : _blockChoices;
+    private IReadOnlyList<BlockChoice> AvailableBlockChoices => _blockChoices;
+    private bool HasDuplicateBlocks => _mappingRows.Where(row => !string.IsNullOrWhiteSpace(row.BlockKey))
+        .GroupBy(row => row.BlockKey.Split(':').Last()).Any(group => group.Count() > 1);
     private IReadOnlyList<LabTestType> FallbackTests => _editor?.LabTestTypes
         .Where(test => _preview is not null && test.LabId == _preview.LabId && test.TestTypeId == _resultTypeId)
         .OrderBy(test => test.TestName).ToList() ?? [];
-    private bool CanCommit => _preview?.CanImport == true && !_committing && !_uploading &&
+    private bool CanCommit => _preview?.CanImport == true && !_committing && !_uploading && !HasDuplicateBlocks &&
         _mappingRows.Count > 0 && _mappingRows.All(row => !string.IsNullOrWhiteSpace(row.BlockKey)) &&
         (!HasUnmatchedRows || FallbackTests.Any(test => test.LabTestTypeId == _fallbackLabTestTypeId));
 
@@ -360,21 +363,37 @@
                 ? $"{NormalizeBlockType(mapping.SuggestedBlockType)}:{mapping.SuggestedBlockId}"
                 : string.Empty;
             var choice = AvailableBlockChoices.FirstOrDefault(item => item.Key.Equals(suggestedKey, StringComparison.OrdinalIgnoreCase));
-            if (choice is null)
-            {
-                var best = Similarity.FindBestMatchingBlock(mapping.RawBlockName, AvailableBlockChoices.Select(item => item.MatchBlock));
-                choice = best is null ? null : AvailableBlockChoices.FirstOrDefault(item => ReferenceEquals(item.MatchBlock, best));
-            }
             return new MappingRow
             {
                 ControlId = $"soil-mapping-{index}",
                 MappingKey = mapping.MappingKey,
+                RowLabel = $"CSV row {_preview.Rows.FirstOrDefault(row => row.MappingKey == mapping.MappingKey)?.RowNumber}",
                 RawBlockName = mapping.RawBlockName,
                 ResultCount = mapping.ResultCount,
                 BlockKey = choice?.Key ?? string.Empty,
                 WasSuggested = choice is not null
             };
         }).ToList();
+    }
+
+    private async Task ReviewColumnsAsync(List<SampleImportColumnSelectionDto> columns)
+    {
+        if (_preview is null || _uploading) return;
+        _uploading = true;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var token = await ApiTokens.GetAccessTokenAsync(state.User);
+            if (string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException("Sign in again before reviewing columns.");
+            var preview = await TgsApi.ReviewSampleChemistryImportColumns(SurveyId,
+                new SampleImportColumnReviewRequest { PreviewToken = _preview.PreviewToken, Columns = columns }, token);
+            if (preview is null) throw new InvalidOperationException(TgsApi.ErrorMessage ?? "Column review failed.");
+            _preview = preview;
+            _fallbackLabTestTypeId = preview.LabTestTypeId;
+            BuildMappingRows();
+        }
+        catch (Exception exception) { ShowToast("Column review failed", exception.Message, ToastRenderStyle.Danger); }
+        finally { _uploading = false; }
     }
 
     private void OpenConfirmation() { if (CanCommit) _confirmVisible = true; }
@@ -447,6 +466,7 @@
     private sealed record BlockChoice(string Key, string Label, Block MatchBlock);
     private sealed class MappingRow
     {
+        public string RowLabel { get; init; } = string.Empty;
         public string ControlId { get; init; } = string.Empty;
         public string MappingKey { get; init; } = string.Empty;
         public string RawBlockName { get; init; } = string.Empty;

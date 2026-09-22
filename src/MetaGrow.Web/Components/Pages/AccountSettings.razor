@@ -1,0 +1,16 @@
+@page "/Account/Manage"
+@page "/Account/Manage/{*Section}"
+@using MetaGrow.Web.Components.Account.Shared
+@using Metagen.AccountSettings.Razor.Components
+@layout AccountLayout
+@attribute [Authorize]
+@attribute [ExcludeFromInteractiveRouting]
+
+<PageTitle>Account settings | MetaGrow</PageTitle>
+
+<AccountSettingsHost Section="@Section" />
+
+@code {
+    [Parameter]
+    public string? Section { get; set; }
+}

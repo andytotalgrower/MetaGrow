@@ -1,5 +1,6 @@
 @page "/farms"
 @attribute [Authorize(Roles = ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager)]
+@using MetaGrow.Web.Services
 @using ApiModels
 @using Metagen.Shared.Services
 @inject ITgsApiService TgsApi
@@ -107,6 +108,19 @@
                         <DxButton Text="Save property" RenderStyle="ButtonRenderStyle.Primary" Click="SavePropertyAsync" Enabled="@(!_busy)" />
                     </div>
 
+                    @if (_isNewProperty)
+                    {
+                        <p>Save this farm first to access its samples and surveys.</p>
+                    }
+                    else
+                    {
+                        <nav class="farm-record-links" aria-label="Farm samples and surveys">
+                            <a href="@FarmSurveyUrl("samples")">Samples</a>
+                            <a href="@FarmSurveyUrl("banana")">Banana surveys</a>
+                            <a href="@FarmSurveyUrl("multicrop")">Multi-crop surveys</a>
+                        </nav>
+                    }
+
                     <section class="detail-card" aria-labelledby="property-details-heading">
                         <div class="section-heading">
                             <span class="eyebrow">Property record</span>
@@ -116,7 +130,20 @@
                         <div class="form-grid property-general">
                             <div class="field wide">
                                 <label for="property-name">Property name *</label>
-                                <DxTextBox Id="property-name" @bind-Text="_property.PropertyName" />
+                                <DxTextBox Id="property-name" @bind-Text="_property.PropertyName" BindValueMode="BindValueMode.OnInput" Enabled="@(!_busy)" />
+                                @if (PropertySuggestions.Count > 0)
+                                {
+                                    <div class="name-suggestions" aria-live="polite">
+                                        <strong>Existing farms with similar names</strong>
+                                        @foreach (var match in PropertySuggestions)
+                                        {
+                                            <button type="button" disabled="@_busy" @onclick="@(() => SelectPropertyAsync(match.PropertyId))">
+                                                @match.PropertyName (ID @match.PropertyId) @(!match.IsActive ? "- inactive" : "")
+                                            </button>
+                                        }
+                                        <small>Select a farm to open its existing record instead. Unsaved changes will be discarded.</small>
+                                    </div>
+                                }
                             </div>
                             <div class="field check-field">
                                 <DxCheckBox @bind-Checked="_property.IsActive">Active property</DxCheckBox>
@@ -233,6 +260,73 @@
                                 </button>
                             </div>
 
+                            @if (_blockEditor is not null)
+                            {
+                                <div class="block-editor" id="block-editor" tabindex="-1" @ref="_blockEditorElement">
+                                    <div class="block-editor-heading">
+                                        <div>
+                                            <span class="eyebrow">@(_isNewBlock ? "New block" : "Edit block")</span>
+                                            <h4>@(_activeBlockType == BananaBlockType ? "Banana block" : "Multi-crop block")</h4>
+                                        </div>
+                                        <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseBlockEditor" />
+                                    </div>
+
+                                    <div class="form-grid block-form">
+                                        <div class="field wide">
+                                            <label for="block-name">Block name *</label>
+                                            <DxTextBox Id="block-name" @bind-Text="_blockEditor.BlockName" BindValueMode="BindValueMode.OnInput" Enabled="@(!_busy)" />
+                                            @if (BlockSuggestions.Count > 0)
+                                            {
+                                                <div class="name-suggestions" aria-live="polite">
+                                                    <strong>Similar blocks in this farm and block type</strong>
+                                                    @foreach (var match in BlockSuggestions)
+                                                    {
+                                                        <button type="button" disabled="@_busy" @onclick="@(() => EditBlock(match))">
+                                                            @match.BlockName (ID @match.BlockId) @(!match.IsActive ? "- inactive" : "")
+                                                        </button>
+                                                    }
+                                                    <small>Select a block to open it instead. Unsaved block changes will be discarded.</small>
+                                                </div>
+                                            }
+                                        </div>
+                                        <div class="field check-field"><DxCheckBox @bind-Checked="_blockEditor.IsActive">Active block</DxCheckBox></div>
+                                        @if (_activeBlockType == MultiCropBlockType)
+                                        {
+                                            <div class="field">
+                                                <label for="block-crop">Crop *</label>
+                                                <DxComboBox Id="block-crop" Data="@_crops" @bind-Value="_blockEditor.CropTypeId"
+                                                            TextFieldName="@nameof(CropType.CropTypeName)" ValueFieldName="@nameof(CropType.CropTypeId)"
+                                                            SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" />
+                                            </div>
+                                            <div class="field compact-field">
+                                                <label for="block-short-code">Short code</label>
+                                                <DxTextBox Id="block-short-code" @bind-Text="_blockEditor.ShortCode" />
+                                                <small>Maximum 5 characters.</small>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="field compact-field">
+                                                <label for="block-enviroscan">Enviroscan plant number</label>
+                                                <DxSpinEdit Id="block-enviroscan" @bind-Value="_blockEditor.EnviroscanPlantNo" MinValue="0" />
+                                            </div>
+                                        }
+                                        <div class="field compact-field">
+                                            <label for="block-plants">Number of plants</label>
+                                            <DxSpinEdit Id="block-plants" @bind-Value="_blockEditor.NoPlants" MinValue="0" />
+                                        </div>
+                                        <div class="field compact-field">
+                                            <label for="block-size">Size (ha)</label>
+                                            <DxSpinEdit Id="block-size" @bind-Value="_blockEditor.Size" MinValue="0" Increment="0.1" DisplayFormat="0.00" />
+                                        </div>
+                                    </div>
+                                    <div class="block-editor-actions">
+                                        <span>Report order: @_blockEditor.BlockOrder</span>
+                                        <DxButton Text="Save block" RenderStyle="ButtonRenderStyle.Primary" Click="SaveBlockAsync" Enabled="@(!_busy)" />
+                                    </div>
+                                </div>
+                            }
+
                             @if (ActiveBlockList.Count > 0)
                             {
                                 <div class="block-filter-row">
@@ -315,59 +409,6 @@
                                 </div>
                             }
 
-                            @if (_blockEditor is not null)
-                            {
-                                <div class="block-editor" id="block-editor">
-                                    <div class="block-editor-heading">
-                                        <div>
-                                            <span class="eyebrow">@(_isNewBlock ? "New block" : "Edit block")</span>
-                                            <h4>@(_activeBlockType == BananaBlockType ? "Banana block" : "Multi-crop block")</h4>
-                                        </div>
-                                        <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseBlockEditor" />
-                                    </div>
-
-                                    <div class="form-grid block-form">
-                                        <div class="field wide">
-                                            <label for="block-name">Block name *</label>
-                                            <DxTextBox Id="block-name" @bind-Text="_blockEditor.BlockName" />
-                                        </div>
-                                        <div class="field check-field"><DxCheckBox @bind-Checked="_blockEditor.IsActive">Active block</DxCheckBox></div>
-                                        @if (_activeBlockType == MultiCropBlockType)
-                                        {
-                                            <div class="field">
-                                                <label for="block-crop">Crop *</label>
-                                                <DxComboBox Id="block-crop" Data="@_crops" @bind-Value="_blockEditor.CropTypeId"
-                                                            TextFieldName="@nameof(CropType.CropTypeName)" ValueFieldName="@nameof(CropType.CropTypeId)"
-                                                            SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" />
-                                            </div>
-                                            <div class="field compact-field">
-                                                <label for="block-short-code">Short code</label>
-                                                <DxTextBox Id="block-short-code" @bind-Text="_blockEditor.ShortCode" />
-                                                <small>Maximum 5 characters.</small>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <div class="field compact-field">
-                                                <label for="block-enviroscan">Enviroscan plant number</label>
-                                                <DxSpinEdit Id="block-enviroscan" @bind-Value="_blockEditor.EnviroscanPlantNo" MinValue="0" />
-                                            </div>
-                                        }
-                                        <div class="field compact-field">
-                                            <label for="block-plants">Number of plants</label>
-                                            <DxSpinEdit Id="block-plants" @bind-Value="_blockEditor.NoPlants" MinValue="0" />
-                                        </div>
-                                        <div class="field compact-field">
-                                            <label for="block-size">Size (ha)</label>
-                                            <DxSpinEdit Id="block-size" @bind-Value="_blockEditor.Size" MinValue="0" Increment="0.1" DisplayFormat="0.00" />
-                                        </div>
-                                    </div>
-                                    <div class="block-editor-actions">
-                                        <span>Report order: @_blockEditor.BlockOrder</span>
-                                        <DxButton Text="Save block" RenderStyle="ButtonRenderStyle.Primary" Click="SaveBlockAsync" Enabled="@(!_busy)" />
-                                    </div>
-                                </div>
-                            }
                         </section>
                     }
                 }
@@ -376,10 +417,15 @@
     }
 </div>
 
+<ConfirmDialog @ref="_duplicateConfirmation" />
+
 @code {
     [Parameter]
     [SupplyParameterFromQuery(Name = "propertyId")]
     public int? RequestedPropertyId { get; set; }
+
+    private string FarmSurveyUrl(string area) =>
+        $"/surveys/{area}?propertyId={_property!.PropertyId}&property={Uri.EscapeDataString(_property.PropertyName ?? string.Empty)}";
 
     private void OpenDuplicateFarms() => Navigation.NavigateTo("/farms/duplicates");
     private void OpenReportingGroups() => Navigation.NavigateTo("/farms/report-groups");
@@ -389,6 +435,29 @@
     private const string PropertyFilterCookieName = "metagrow.farms.property-filter";
     private const int PropertyResultLimit = 100;
     private static readonly string[] States = ["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"];
+
+    private ConfirmDialog? _duplicateConfirmation;
+    private IReadOnlyList<ApiModels.Property> PropertySuggestions => _properties
+        .Where(item => item.PropertyId != _property?.PropertyId && RecordNameMatching.Suggest(_property?.PropertyName, item.PropertyName))
+        .OrderByDescending(item => RecordNameMatching.SameName(_property?.PropertyName, item.PropertyName))
+        .ThenByDescending(item => RecordNameMatching.LikelyDuplicate(_property?.PropertyName, item.PropertyName))
+        .ThenBy(item => item.PropertyName).Take(5).ToList();
+    private IReadOnlyList<Block> BlockSuggestions => ActiveBlockList
+        .Where(item => item.BlockId != _blockEditor?.BlockId && RecordNameMatching.Suggest(_blockEditor?.BlockName, item.BlockName))
+        .OrderByDescending(item => RecordNameMatching.SameName(_blockEditor?.BlockName, item.BlockName))
+        .ThenByDescending(item => RecordNameMatching.LikelyDuplicate(_blockEditor?.BlockName, item.BlockName))
+        .ThenBy(item => item.BlockName).Take(5).ToList();
+
+    private async Task<bool> ConfirmSimilarNamesAsync(string name, IEnumerable<string> matches)
+    {
+        var names = matches.ToList();
+        if (names.Count == 0) return true;
+        return _duplicateConfirmation is not null && await _duplicateConfirmation.ShowAsync(
+            $"'{name}' is similar to existing records: {string.Join("; ", names.Take(5))}. " +
+            (names.Count > 5 ? $"There are {names.Count - 5} more matches. " : "") +
+            "Cancel to check an existing record, or save anyway if this is a different record.",
+            "Possible duplicate", "Save anyway");
+    }
 
     private List<ApiModels.Property> _properties = [];
     private List<ListItemInt> _billingEntities = [];
@@ -412,6 +481,8 @@
     private bool _showInactiveBlocks;
     private bool _isNewProperty;
     private bool _isNewBlock;
+    private bool _focusBlockEditor;
+    private ElementReference _blockEditorElement;
 
     private IReadOnlyList<ApiModels.Property> MatchingProperties => _properties
         .Where(item => _showInactiveProperties || item.IsActive || item.PropertyId == _property?.PropertyId)
@@ -471,6 +542,12 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_focusBlockEditor && _blockEditor is not null)
+        {
+            _focusBlockEditor = false;
+            await _blockEditorElement.FocusAsync();
+        }
+
         if (!firstRender) return;
 
         try
@@ -503,7 +580,7 @@
 
     private async Task SelectPropertyAsync(int propertyId)
     {
-        if (_loadingProperty || (_property?.PropertyId == propertyId && !_isNewProperty)) return;
+        if (_busy || _loadingProperty || (_property?.PropertyId == propertyId && !_isNewProperty)) return;
 
         ClearMessage();
         _loadingProperty = true;
@@ -532,6 +609,7 @@
 
     private void NewProperty()
     {
+        if (_busy) return;
         ClearMessage();
         _property = new ApiModels.Property
         {
@@ -560,7 +638,27 @@
         ClearMessage();
         try
         {
+            // Refresh before checking so records created since opening the page are included.
+            var currentProperties = await TgsApi.GetProperties();
+            if (currentProperties is null)
+            {
+                SetMessage("Could not check existing farm names. Please try saving again. " + TgsApi.ErrorMessage, true);
+                return;
+            }
+            _properties = currentProperties.OrderBy(item => item.PropertyName).ToList();
             _property.PropertyName = _property.PropertyName.Trim();
+            var others = _properties.Where(item => item.PropertyId != _property.PropertyId).ToList();
+            var nameChanged = _isNewProperty || !RecordNameMatching.SameName(_property.PropertyName,
+                _properties.FirstOrDefault(item => item.PropertyId == _property.PropertyId)?.PropertyName);
+            var exact = others.FirstOrDefault(item => RecordNameMatching.SameName(_property.PropertyName, item.PropertyName));
+            if (nameChanged && exact is not null)
+            {
+                SetMessage($"A farm named '{exact.PropertyName}' already exists (ID {exact.PropertyId}{(!exact.IsActive ? ", inactive" : "")}). Open that record from the suggestions instead.", true);
+                return;
+            }
+            if (nameChanged && !await ConfirmSimilarNamesAsync(_property.PropertyName,
+                others.Where(item => RecordNameMatching.LikelyDuplicate(_property.PropertyName, item.PropertyName))
+                    .Select(item => $"{item.PropertyName} (ID {item.PropertyId}{(!item.IsActive ? ", inactive" : "")})"))) return;
             var result = _isNewProperty
                 ? await TgsApi.CreatePropertyForMaintenance(_property)
                 : await TgsApi.UpdatePropertyForMaintenance(_property);
@@ -585,6 +683,7 @@
 
     private void ChangeBlockType(string blockType)
     {
+        if (_busy) return;
         _activeBlockType = blockType;
         _blockFilter = null;
         _blockEditor = null;
@@ -594,7 +693,7 @@
 
     private void NewBlock()
     {
-        if (_property is null) return;
+        if (_property is null || _busy) return;
         ClearMessage();
         _blockEditor = new Block
         {
@@ -610,14 +709,17 @@
 
     private void EditBlock(Block block)
     {
+        if (_busy) return;
         ClearMessage();
         _blockEditor = CloneBlock(block);
         _blockEditor.ModifiedBy = _modifiedBy;
         _isNewBlock = false;
+        _focusBlockEditor = true;
     }
 
     private void CloseBlockEditor()
     {
+        if (_busy) return;
         _blockEditor = null;
         _isNewBlock = false;
     }
@@ -645,7 +747,23 @@
         ClearMessage();
         try
         {
+            var currentBlocks = _activeBlockType == BananaBlockType
+                ? await TgsApi.GetBananaBlocksForProperty(_property.PropertyId)
+                : await TgsApi.GetMultiCropBlocksForProperty(_property.PropertyId);
+            if (currentBlocks is null)
+            {
+                SetMessage("Could not check existing block names. Please try saving again. " + TgsApi.ErrorMessage, true);
+                return;
+            }
+            if (_activeBlockType == BananaBlockType) _bananaBlocks = currentBlocks;
+            else _multiCropBlocks = currentBlocks;
             _blockEditor.BlockName = _blockEditor.BlockName.Trim();
+            var nameChanged = _isNewBlock || !RecordNameMatching.SameName(_blockEditor.BlockName,
+                currentBlocks.FirstOrDefault(item => item.BlockId == _blockEditor.BlockId)?.BlockName);
+            if (nameChanged && !await ConfirmSimilarNamesAsync(_blockEditor.BlockName,
+                currentBlocks.Where(item => item.BlockId != _blockEditor.BlockId &&
+                    RecordNameMatching.LikelyDuplicate(_blockEditor.BlockName, item.BlockName))
+                    .Select(item => $"{item.BlockName} (ID {item.BlockId}{(!item.IsActive ? ", inactive" : "")})"))) return;
             _blockEditor.ShortCode = _blockEditor.ShortCode?.Trim();
             _blockEditor.PropertyId = _property.PropertyId;
             _blockEditor.ModifiedBy = _modifiedBy;

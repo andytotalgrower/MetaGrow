@@ -1,5 +1,8 @@
 using MetaGrow.Web.Components;
 using MetaGrow.Web.Services;
+using Metagen.AccountSettings.Razor.Backend;
+using Metagen.AccountSettings.Razor.Configuration;
+using Metagen.AccountSettings.Razor.Extensions;
 using Metagen.Shared.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
@@ -46,6 +49,13 @@ builder.Services.AddSingleton<ServerTokenStore>();
 builder.Services.AddScoped<AuthApiClient>();
 builder.Services.AddScoped<ApiTokenService>();
 builder.Services.AddScoped<AccountApiClient>();
+builder.Services.AddScoped<IAccountSettingsBackend, MetaGrowAccountSettingsBackend>();
+builder.Services.AddMetagenAccountSettings(options =>
+{
+    options.BasePath = "/Account/Manage";
+    options.VisualStyle = AccountSettingsVisualStyle.Fluent;
+    options.Features = MetaGrowAccountSettingsBackend.SupportedFeatureSet;
+});
 builder.Services.AddScoped<ReportShareApiClient>();
 builder.Services.AddScoped<PropertyDeletionApiClient>();
 builder.Services.AddScoped<PropertyMergeApiClient>();

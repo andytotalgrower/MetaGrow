@@ -15,6 +15,8 @@
 <PageTitle>Banana surveys | MetaGrow</PageTitle>
 
 <div class="banana-page">
+    <FarmSurveyContext PropertyId="RequestedPropertyId" PropertyName="@RequestedProperty" Label="Banana surveys" AllRecordsUrl="/surveys/banana" />
+
     <div class="title">
         <div class="title-header-text">Banana surveys</div>
         <div class="title-content-text">Find an existing banana survey and continue its review.</div>
@@ -238,17 +240,32 @@
         if (!firstRender) return;
         await RestoreFiltersAsync();
         ApplyLinkedPropertyFilter();
+        _linkedFiltersReady = true;
         await LoadSurveysAsync();
         await InvokeAsync(StateHasChanged);
     }
 
+    private bool _linkedFiltersReady;
+    private (int? Id, string? Name) _lastLinkedProperty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var linkedProperty = (RequestedPropertyId, RequestedProperty);
+        if (_lastLinkedProperty == linkedProperty) return;
+        _lastLinkedProperty = linkedProperty;
+        if (!_linkedFiltersReady) return;
+        ApplyFilters(BananaSurveyFilterPreferences.CreateDefault(_today));
+        ApplyLinkedPropertyFilter();
+        await LoadSurveysAsync();
+    }
+
     private void ApplyLinkedPropertyFilter()
     {
-        if (string.IsNullOrWhiteSpace(RequestedProperty)) return;
+        if (RequestedPropertyId is null && string.IsNullOrWhiteSpace(RequestedProperty)) return;
 
         _startDate = new DateTime(1990, 1, 1);
         _endDate = _today;
-        _propertySearch = RequestedProperty.Trim();
+        _propertySearch = RequestedPropertyId.HasValue ? null : RequestedProperty?.Trim();
         _statusId = null;
     }
 
@@ -327,15 +344,14 @@
 
     private async Task ClearFiltersAsync()
     {
-        RequestedPropertyId = null;
         ApplyFilters(BananaSurveyFilterPreferences.CreateDefault(_today));
+        ApplyLinkedPropertyFilter();
         await SaveFiltersAsync();
         await LoadSurveysAsync();
     }
 
     private async Task PropertySearchChangedAsync()
     {
-        RequestedPropertyId = null;
         await SaveFiltersAsync();
     }
 

@@ -299,7 +299,10 @@ public sealed class AuthController(
     public async Task<ActionResult<MetaGrowMfaSetupInfo>> ManageMfaSetupInfo()
     {
         var user = await CurrentUser();
-        return user is null ? Unauthorized() : await BuildSetupInfo(user);
+        if (user is null) return Unauthorized();
+        if (await userManager.GetTwoFactorEnabledAsync(user))
+            return AuthBadRequest("Two-factor authentication is already enabled. Reset the authenticator before setting it up again.");
+        return await BuildSetupInfo(user);
     }
 
     [HttpPost("mfa/manage/setup"), Authorize]
@@ -307,6 +310,8 @@ public sealed class AuthController(
     {
         var user = await CurrentUser();
         if (user is null) return Unauthorized();
+        if (await userManager.GetTwoFactorEnabledAsync(user))
+            return AuthBadRequest("Two-factor authentication is already enabled. Reset the authenticator before setting it up again.");
         if (!await VerifyAuthenticator(user, request.Code)) return AuthBadRequest("Verification code is invalid.");
         await userManager.SetTwoFactorEnabledAsync(user, true);
         var recoveryCodes = await userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);

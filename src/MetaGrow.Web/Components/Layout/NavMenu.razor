@@ -43,9 +43,8 @@
             <AuthorizeView>
                 <DxMenuItem Text="My account" CssClass="@MenuSectionCssClass("/Account/Manage")" IconCssClass="icon icon-user">
                     <Items>
+                        <DxMenuItem NavigateUrl="/Account/Manage" Text="Account settings" CssClass="@MenuItemCssClass("/Account/Manage")" />
                         <DxMenuItem NavigateUrl="/Account/Manage/EmailAddresses" Text="Email addresses" CssClass="@MenuItemCssClass("/Account/Manage/EmailAddresses")" />
-                        <DxMenuItem NavigateUrl="/Account/Manage/TwoFactorAuthentication" Text="Two-factor authentication" CssClass="@MenuItemCssClass("/Account/Manage/TwoFactorAuthentication")" />
-                        <DxMenuItem NavigateUrl="/Account/Manage/Passkeys" Text="Passkeys" CssClass="@MenuItemCssClass("/Account/Manage/Passkeys")" />
                     </Items>
                 </DxMenuItem>
             </AuthorizeView>

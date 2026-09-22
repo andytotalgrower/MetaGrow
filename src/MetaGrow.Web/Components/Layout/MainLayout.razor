@@ -51,7 +51,7 @@
                     <div class="switcher-panel"><ThemeToggle /></div>
                     <AuthorizeView>
                         <Authorized Context="auth">
-                            <NavLink href="@AddDrawerStateToUrl("/Account/Manage/EmailAddresses")"
+                            <NavLink href="@AddDrawerStateToUrl("/Account/Manage")"
                                      class="display-desktop mg-user-name">@auth.User.Identity?.Name</NavLink>
                             <form action="Account/Logout" method="post" class="display-desktop">
                                 <AntiforgeryToken />

@@ -16,7 +16,7 @@
         <div class="title-header-text">Lab results</div>
         <div class="title-content-text">Review Soil, Tissue, Quick Soil and Sap data in one place.</div>
     </div>
-    <nav class="sample-nav" aria-label="Sample survey area"><a href="/surveys/samples">Surveys</a><a class="active" href="/surveys/samples/lab-results">Lab results</a><a href="/surveys/samples/lab-results/historical">Legacy data</a><span class="disabled">Import activity</span></nav>
+    <SampleAreaNavigation ActivePage="results" ShowGuide="@(!SurveyId.HasValue)" />
 
     @if (SurveyId.HasValue)
     {

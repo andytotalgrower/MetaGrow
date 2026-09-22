@@ -1,0 +1,46 @@
+@using ApiModels.MetaGrow
+
+@if (Review.Required)
+{
+    <section class="column-review" aria-labelledby="column-review-heading">
+        <h3 id="column-review-heading">Review missing Hortus columns</h3>
+        <p>Match each missing result to a column in this CSV, or explicitly ignore an optional result. New column mappings are saved for future imports only when this import succeeds.</p>
+        @foreach (var column in Review.MissingColumns)
+        {
+            <div class="column-choice">
+                <label for="@($"lab-column-{column.ColumnId}")">@column.Name @(column.IsRequired ? "(required)" : string.Empty)</label>
+                <select id="@($"lab-column-{column.ColumnId}")" class="form-select" @bind="_choices[column.ColumnId]" disabled="@Busy">
+                    <option value="-2">Choose a CSV column…</option>
+                    @if (!column.IsRequired) { <option value="-1">IGNORE — do not import this result</option> }
+                    @for (var index = 0; index < Review.FileHeaders.Count; index++)
+                    {
+                        <option value="@index">@(index + 1): @Review.FileHeaders[index]</option>
+                    }
+                </select>
+            </div>
+        }
+        <button type="button" class="btn btn-primary" disabled="@(Busy || _choices.Values.Any(value => value < -1))" @onclick="ApplyAsync">
+            @(Busy ? "Checking columns…" : "Apply columns and preview")
+        </button>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public SampleImportColumnReviewDto Review { get; set; } = new();
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback<List<SampleImportColumnSelectionDto>> Applied { get; set; }
+    private SampleImportColumnReviewDto? _previousReview;
+    private Dictionary<int, int> _choices = [];
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_previousReview, Review)) return;
+        _previousReview = Review;
+        _choices = Review.MissingColumns.ToDictionary(column => column.ColumnId, _ => -2);
+    }
+
+    private Task ApplyAsync() => Applied.InvokeAsync(_choices.Select(choice => new SampleImportColumnSelectionDto
+    {
+        ColumnId = choice.Key, FileColumnIndex = choice.Value
+    }).ToList());
+}
