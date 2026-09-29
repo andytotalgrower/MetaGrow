@@ -6,6 +6,7 @@ using System.Text.Json;
 using ApiModels;
 using ApiModels.MetaGrow;
 using MetaGrow.Api.Data;
+using MetaGrow.Shared;
 using Metagen.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -96,8 +97,27 @@ public sealed class PropertyMergesController(
 
     [Authorize(Roles = ReviewerRoles)]
     [HttpPost("execute")]
-    public async Task<ActionResult<MetaGrowPropertyMergeRequestDto>> ExecuteImmediately(
-        MetaGrowPropertyMergeExecuteRequest request)
+    public Task<ActionResult<MetaGrowPropertyMergeRequestDto>> ExecuteImmediately(
+        MetaGrowPropertyMergeExecuteRequest request) => ExecuteDirect(request);
+
+    [Authorize(Roles = ReviewerRoles)]
+    [HttpGet("{id:guid}/status")]
+    public async Task<ActionResult<MetaGrowPropertyMergeRequestDto[]>> GetExecutionStatus(Guid id)
+    {
+        var request = await database.PropertyMergeRequests.AsNoTracking().SingleOrDefaultAsync(item => item.Id == id);
+        return Ok(request is null ? Array.Empty<MetaGrowPropertyMergeRequestDto>() : new[] { ToDto(request) });
+    }
+
+    [Authorize(Roles = ReviewerRoles)]
+    [HttpPost("execute-reviewed")]
+    public Task<ActionResult<MetaGrowPropertyMergeRequestDto>> ExecuteReviewed(ReviewedPropertyMergeRequest request) =>
+        ExecuteDirect(new MetaGrowPropertyMergeExecuteRequest
+        {
+            Plan = request.Plan, Note = "Merged from the duplicate farms batch review."
+        }, request);
+
+    private async Task<ActionResult<MetaGrowPropertyMergeRequestDto>> ExecuteDirect(
+        MetaGrowPropertyMergeExecuteRequest request, ReviewedPropertyMergeRequest? reviewed = null)
     {
         var reviewerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var reviewerEmail = User.FindFirstValue(ClaimTypes.Email) ?? User.Identity?.Name;
@@ -105,12 +125,35 @@ public sealed class PropertyMergesController(
         if (string.IsNullOrWhiteSpace(reviewerId) || string.IsNullOrWhiteSpace(reviewerEmail) || token is null)
             return Forbid();
 
+        if (reviewed is not null)
+        {
+            if (reviewed.RequestId == Guid.Empty || string.IsNullOrWhiteSpace(reviewed.PreviewHash))
+                return BadRequest(Error("Review the selected farm before merging."));
+            var previous = await database.PropertyMergeRequests.AsNoTracking()
+                .SingleOrDefaultAsync(item => item.Id == reviewed.RequestId);
+            if (previous is not null)
+            {
+                if (previous.SourcePropertyId != request.Plan.SourcePropertyId || previous.TargetPropertyId != request.Plan.TargetPropertyId)
+                    return Conflict(Error("This request belongs to a different merge."));
+                if (previous.Status == MetaGrowPropertyMergeStatus.Completed) return Ok(ToDto(previous));
+                return Conflict(Error("This merge was already submitted. Check its result before continuing."));
+            }
+            if (await database.PropertyMergeRequests.AnyAsync(item => item.SourcePropertyId == request.Plan.TargetPropertyId &&
+                    (item.Status == MetaGrowPropertyMergeStatus.Pending || item.Status == MetaGrowPropertyMergeStatus.Processing)))
+                return Conflict(Error("The destination farm has an outstanding merge request. Resolve that request first."));
+        }
+
         var preview = await tgsApi.GetPropertyMergePreview(request.Plan);
         if (preview is null)
             return StatusCode(StatusCodes.Status502BadGateway,
                 Error(tgsApi.ErrorMessage ?? "The live merge safety check could not be completed."));
         if (!preview.CanRequestMerge)
             return Conflict(Error("The merge plan has unresolved blocks or data collisions. Review it before merging."));
+
+        if (reviewed is not null &&
+            (reviewed.PreviewHash != PropertyMergeBatchReview.Fingerprint(preview) ||
+             preview.FieldDifferences.Any(field => field.FieldName == "PropertyName" && field.ValueSource != PropertyMergeFieldValue.Target)))
+            return Conflict(Error("The farm or its block matches changed. Review this farm again before merging."));
 
         var plan = CanonicalPlan(request.Plan, preview);
         var planJson = JsonSerializer.Serialize(plan, JsonOptions);
@@ -124,7 +167,7 @@ public sealed class PropertyMergesController(
         var now = DateTime.UtcNow;
         var mergeRequest = new PropertyMergeRequest
         {
-            Id = Guid.NewGuid(),
+            Id = reviewed?.RequestId ?? Guid.NewGuid(),
             SourcePropertyId = preview.Source.PropertyId,
             SourcePropertyName = preview.Source.PropertyName,
             TargetPropertyId = preview.Target.PropertyId,

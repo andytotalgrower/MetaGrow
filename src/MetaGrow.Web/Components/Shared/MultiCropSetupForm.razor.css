@@ -1,0 +1,8 @@
+.setup-fields { border: 0; padding: 0; display: flex; flex-direction: column; gap: .45rem; }
+label { margin-top: .5rem; font-weight: 600; font-size: .9rem; }
+input, select, textarea { width: 100%; box-sizing: border-box; padding: .55rem; border: 1px solid #bdcad4; border-radius: .3rem; background: #fff; color: #233247; }
+input[type=checkbox] { width: 1.2rem; height: 1.2rem; }
+.field-help { font-size: .85rem; color: #596b7a; }
+.form-actions { display: flex; gap: .6rem; margin-top: 1rem; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 3px solid var(--mg-blue); outline-offset: 2px; }
+::deep .validation-errors { padding: .8rem 1.5rem; background: #fcecef; color: #932633; border-radius: .3rem; }

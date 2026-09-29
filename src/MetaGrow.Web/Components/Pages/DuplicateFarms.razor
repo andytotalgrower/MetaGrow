@@ -232,11 +232,17 @@
 <ConfirmDialog @ref="_confirm" />
 <PropertyMergeReviewDialog @ref="_mergeDialog" IsReviewer="_isReviewer"
                            MergeRequested="MergeRequestedAsync" MergeCompleted="MergeCompletedAsync" />
+@if (_isReviewer)
+{
+    <PropertyBatchMergeDialog @ref="_batchMergeDialog" IsReviewer="_isReviewer" Properties="_properties"
+                             BlockCounts="_blockCounts" PendingRequests="_mergeRequests" Closed="LoadAsync" />
+}
 
 @code {
     private static readonly string[] ConfidenceOptions = ["All", "Very high", "Likely", "Possible"];
 
     private List<PropertyDuplicateCandidate> _candidates = [];
+    private List<ApiModels.Property> _properties = [];
     private Dictionary<int, PropertyBlockCount> _blockCounts = [];
     private Dictionary<int, PropertyDependencySummary> _dependencySummaries = [];
     private Dictionary<int, string> _propertyOperationErrors = [];
@@ -244,6 +250,7 @@
     private List<MetaGrowPropertyMergeRequestDto> _mergeRequests = [];
     private ConfirmDialog? _confirm;
     private PropertyMergeReviewDialog? _mergeDialog;
+    private PropertyBatchMergeDialog? _batchMergeDialog;
     private string? _nameFilter;
     private string _confidenceFilter = "All";
     private string? _error;
@@ -303,6 +310,7 @@
                 return;
             }
 
+            _properties = properties.ToList();
             _blockCounts = blockCounts.ToDictionary(item => item.PropertyId);
             _candidates = await Task.Run(() => Similarity.FindPotentialDuplicateProperties(properties));
 
@@ -363,6 +371,13 @@
             }
         </div>
         @BlockCounts(farm.PropertyId)
+        @if (_isReviewer)
+        {
+            <DxButton Text="Merge duplicates into this farm" RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                      Enabled="@(_busyPropertyId is null && PendingMerge(farm.PropertyId) is null)"
+                      Click="@(() => OpenBatchMergeAsync(farm))" />
+        }
         @DependencyAssessment(farm)
     </div>;
 
@@ -522,6 +537,12 @@
 
     private Task OpenMergeAsync(int sourcePropertyId, int targetPropertyId) =>
         _mergeDialog?.OpenAsync(sourcePropertyId, targetPropertyId) ?? Task.CompletedTask;
+
+    private Task OpenBatchMergeAsync(ApiModels.Property farm) =>
+        _batchMergeDialog?.OpenAsync(farm, _candidates
+            .Where(candidate => candidate.First.PropertyId == farm.PropertyId || candidate.Second.PropertyId == farm.PropertyId)
+            .Select(candidate => candidate.First.PropertyId == farm.PropertyId ? candidate.Second.PropertyId : candidate.First.PropertyId))
+        ?? Task.CompletedTask;
 
     private Task ReviewMergeAsync(MetaGrowPropertyMergeRequestDto request) =>
         _mergeDialog?.OpenAsync(request) ?? Task.CompletedTask;

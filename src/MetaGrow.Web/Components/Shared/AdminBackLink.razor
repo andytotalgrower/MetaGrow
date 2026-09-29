@@ -1,0 +1,14 @@
+@inherits DrawerStateComponentBase
+@inject NavigationManager Navigation
+
+<nav class="admin-back-link" aria-label="Administration navigation">
+    <DxButton Text="Back to Administration"
+              IconCssClass="icon icon-back"
+              RenderStyle="ButtonRenderStyle.Secondary"
+              RenderStyleMode="ButtonRenderStyleMode.Outline"
+              Click="GoToAdministration" />
+</nav>
+
+@code {
+    private void GoToAdministration() => Navigation.NavigateTo(AddDrawerStateToUrl("/admin"));
+}

@@ -1,4 +1,26 @@
 @page "/admin"
-@attribute [Authorize(Roles = ApiModels.MetaGrow.MetaGrowRoles.Admin)]
+@attribute [Authorize(Roles = ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager)]
+@using MetaGrow.Web.Components.Pages.Index
 <PageTitle>Administration | MetaGrow</PageTitle>
-<ModuleLanding Title="Administration" Description="Users, roles, MFA and application access will be managed here." />
+<div class="admin-page">
+    <header class="mg-hero">
+        <span class="mg-eyebrow">MetaGrow work area</span>
+        <h1>Administration</h1>
+        <p>Manage application settings and reference lists.</p>
+        <hr class="mg-keyline" />
+    </header>
+    <section aria-labelledby="survey-setup-heading">
+        <h2 id="survey-setup-heading">Survey configuration</h2>
+        <div class="tiles">
+            <IndexTile NavigateUrl="/admin/multicrop-setup" Title="Multi-crop survey setup" Description="Manage survey types, measurement groups, parameters and spray options." IconCssClass="icon-settings" />
+        </div>
+    </section>
+    <AuthorizeView Roles="@ApiModels.MetaGrow.MetaGrowRoles.Admin">
+        <section aria-labelledby="reference-heading">
+            <h2 id="reference-heading">Reference lists</h2>
+            <div class="tiles">
+                <IndexTile NavigateUrl="/admin/crop-types" Title="Crop types" Description="Maintain crops and their parent groups." IconCssClass="icon-settings" />
+            </div>
+        </section>
+    </AuthorizeView>
+</div>

@@ -12,6 +12,7 @@
 @inject ApiTokenService ApiTokens
 @inject IJSRuntime JS
 @inject IToastNotificationService ToastService
+@inject ILogger<HistoricalSoilResults> Logger
 
 <PageTitle>Legacy soil data | MetaGrow</PageTitle>
 
@@ -166,7 +167,7 @@
 </div>
 
 <DxPopup @bind-Visible="_mappingVisible" ShowFooter="true" HeaderText="Map historical batch"
-         AllowDrag="true" ShowCloseButton="@(!_mappingBusy)" CloseOnEscape="@(!_mappingBusy)"
+         AllowDrag="true" ShowCloseButton="@(!_mappingBusy && !_loadingMappingRows)" CloseOnEscape="@(!_mappingBusy && !_loadingMappingRows)"
          CloseOnOutsideClick="false" Width="min(980px, calc(100vw - 2rem))">
     <BodyContentTemplate>
         @if (_mappingGroup is not null)
@@ -177,7 +178,8 @@
                     <div><span>Received</span><strong>@(_mappingGroup.DateReceived?.ToString("dd MMM yyyy") ?? "—")</strong></div>
                     <div><span>Unmapped fields</span><strong>@_mappingRows.Count</strong></div>
                 </div>
-                <p class="mapping-scope">Choose the property once, then confirm a block for every raw field. Confident name matches are preselected. All mappings are saved together, or none are saved.</p>
+                <p class="mapping-scope">Choose the property once, then confirm a block for every raw field. Mappings apply to matching unlinked results across all dates, including results outside your search. All mappings are saved together, or none are saved.</p>
+                @if (_loadingMappingRows) { <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Checking matching results across all dates…</span></div> }
                 @if (_mappingWasSuggested)
                 {
                     <div class="property-suggestion"><strong>Best property guess</strong><span>@MappingPropertyName was matched from the lab customer name. Please confirm it before applying the mapping.</span></div>
@@ -190,10 +192,9 @@
                 {
                     <div class="batch-warning">This batch already contains conflicting property mappings. Resolve those mappings before applying the remaining fields as one batch.</div>
                 }
-                @if (!string.IsNullOrWhiteSpace(_dialogError)) { <div class="dialog-error" role="alert">@_dialogError</div> }
                 <div class="mapping-property-field filter-field">
                     <label for="mapping-property">Property</label>
-                    <DxComboBox Id="mapping-property" Data="@_properties" Value="@_mappingPropertyId" ValueChanged="@((int value) => MappingPropertyChangedAsync(value))" TextFieldName="@nameof(ApiModels.Property.PropertyName)" ValueFieldName="@nameof(ApiModels.Property.PropertyId)" NullText="Select a property" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_mappingBusy && !MappingPropertyLocked)" />
+                    <DxComboBox Id="mapping-property" Data="@_properties" Value="@_mappingPropertyId" ValueChanged="@((int value) => MappingPropertyChangedAsync(value))" TextFieldName="@nameof(ApiModels.Property.PropertyName)" ValueFieldName="@nameof(ApiModels.Property.PropertyId)" NullText="Select a property" AllowUserInput="false" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_mappingBusy && !_loadingMappingRows && _mappingRowsLoaded && !MappingPropertyLocked)" />
                 </div>
                 @if (_loadingBlocks) { <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Loading farm blocks…</span></div> }
                 else if (_mappingPropertyId > 0)
@@ -226,8 +227,9 @@
         }
     </BodyContentTemplate>
     <FooterContentTemplate>
+        @if (!string.IsNullOrWhiteSpace(_dialogError)) { <div class="dialog-error" role="alert">@_dialogError</div> }
         <div class="dialog-footer">
-            <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseMapping" Enabled="@(!_mappingBusy)" />
+            <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" Click="CloseMapping" Enabled="@(!_mappingBusy && !_loadingMappingRows)" />
             @if (_mappingBusy) { <div class="inline-progress"><DxWaitIndicator Visible="true" /><span>Applying @_mappingRows.Count mappings…</span></div> }
             <DxButton Text="Apply all mappings" RenderStyle="ButtonRenderStyle.Primary" Click="SaveMappingsAsync" Enabled="@CanSaveMappings" />
         </div>
@@ -473,6 +475,8 @@
 
     private bool _mappingVisible;
     private bool _mappingBusy;
+    private bool _loadingMappingRows;
+    private bool _mappingRowsLoaded;
     private bool _loadingBlocks;
     private HistoricalSoilResultGroupDto? _mappingGroup;
     private int _mappingPropertyId;
@@ -556,7 +560,7 @@
         .ToList();
 
     private bool MappingPropertyLocked => _mappingPropertyLocked;
-    private bool CanSaveMappings => !_mappingBusy && !_loadingBlocks && _mappingGroup is not null &&
+    private bool CanSaveMappings => !_mappingBusy && !_loadingMappingRows && _mappingRowsLoaded && !_loadingBlocks && _mappingGroup is not null &&
         !_mappingGroup.HasMixedProperties && _mappingPropertyId > 0 && _mappingRows.Count > 0 &&
         _mappingRows.All(row => !string.IsNullOrWhiteSpace(row.BlockKey));
     private string MappingPropertyName => _properties.FirstOrDefault(property => property.PropertyId == _mappingPropertyId)?.PropertyName ?? "The selected property";
@@ -765,7 +769,7 @@
                 var unmappedFieldCount = GetDistinctUnmappedResults(group).Count;
                 @if (unmappedFieldCount > 0)
                 {
-                    <DxButton Text="@($"Map {unmappedFieldCount} field{(unmappedFieldCount == 1 ? string.Empty : "s")}")" SizeMode="SizeMode.Small"
+                    <DxButton Text="@($"Map {unmappedFieldCount} Block{(unmappedFieldCount == 1 ? string.Empty : "s")}")" SizeMode="SizeMode.Small"
                               RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="@(() => OpenMappingAsync(group))" />
                 }
             }
@@ -903,32 +907,54 @@
         CaptureExpandedRows();
         _expandedGroupKeys.Add(group.GroupKey);
         _mappingGroup = group;
-        _mappingRows = GetDistinctUnmappedResults(group)
-            .Select((item, index) => new MappingRow
-            {
-                ControlId = $"mapping-block-{index}",
-                RawCustomerName = item.RawCustomerName,
-                RawFieldReference = item.RawFieldReference,
-                RawCropName = item.RawCropName,
-                ExpectedRowCount = CountMatchingRawRows(item)
-            })
-            .ToList();
-
-        var mappedPropertyIds = group.Results
-            .Where(item => item.IsPropertyMapped && item.PropertyId > 0)
-            .Select(item => item.PropertyId)
-            .Distinct()
-            .ToList();
-        _mappingPropertyLocked = mappedPropertyIds.Count == 1;
-        var suggestedProperty = mappedPropertyIds.Count == 0
-            ? Similarity.FindBestMatchingProperty(group.RawCustomerName, _properties)
-            : null;
-        _mappingPropertyId = _mappingPropertyLocked ? mappedPropertyIds[0] : suggestedProperty?.PropertyId ?? 0;
-        _mappingWasSuggested = suggestedProperty is not null;
-        _mappingBlocks = [];
-        _dialogError = null;
+        _mappingRows = [];
+        _mappingRowsLoaded = false;
+        _loadingMappingRows = true;
         _mappingVisible = true;
-        if (_mappingPropertyId > 0) await LoadBlocksAsync(_mappingPropertyId);
+        _dialogError = null;
+        try
+        {
+            // Reusable mappings are global; the visible date range cannot provide their row counts.
+            var allGroups = await TgsApi.GetUnlinkedSampleSoilResultGroups(null, null);
+            if (allGroups is null)
+            {
+                _dialogError = TgsApi.ErrorMessage ?? "Matching results could not be loaded. Close and reopen the mapping dialog to retry.";
+                return;
+            }
+            _mappingRows = GetDistinctUnmappedResults(group)
+                .Select((item, index) => new MappingRow
+                {
+                    ControlId = $"mapping-block-{index}",
+                    RawCustomerName = item.RawCustomerName,
+                    RawFieldReference = item.RawFieldReference,
+                    RawCropName = item.RawCropName,
+                    ExpectedRowCount = CountMatchingRawRows(allGroups, item)
+                })
+                .ToList();
+
+            var mappedPropertyIds = group.Results
+                .Where(item => item.IsPropertyMapped && item.PropertyId > 0)
+                .Select(item => item.PropertyId)
+                .Distinct()
+                .ToList();
+            _mappingPropertyLocked = mappedPropertyIds.Count == 1;
+            var suggestedProperty = mappedPropertyIds.Count == 0
+                ? Similarity.FindBestMatchingProperty(group.RawCustomerName, _properties)
+                : null;
+            _mappingPropertyId = _mappingPropertyLocked ? mappedPropertyIds[0] : suggestedProperty?.PropertyId ?? 0;
+            _mappingWasSuggested = suggestedProperty is not null;
+            _mappingBlocks = [];
+            _dialogError = null;
+            _mappingVisible = true;
+            if (_mappingPropertyId > 0) await LoadBlocksAsync(_mappingPropertyId);
+            _mappingRowsLoaded = true;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Failed to load historical Soil mapping rows");
+            _dialogError = "Matching results could not be loaded. Close and reopen the mapping dialog to retry.";
+        }
+        finally { _loadingMappingRows = false; }
     }
 
     private async Task MappingPropertyChangedAsync(int propertyId)
@@ -987,12 +1013,7 @@
 
     private async Task SaveMappingsAsync()
     {
-        if (_mappingGroup is null) return;
-        if (!_appliedAllDates)
-        {
-            _dialogError = "Search all dates before applying reusable mappings so MetaGrow can verify every matching row count.";
-            return;
-        }
+        if (!CanSaveMappings) return;
         if (_mappingRows.Any(row => _mappingBlocks.All(block => block.Key != row.BlockKey)))
         {
             _dialogError = "Select a valid block for every raw field.";
@@ -1029,6 +1050,11 @@
             _restoreExpandedRows = true;
             await LoadGroupsCoreAsync();
             ShowToast("Mappings applied", $"{result.MappingCount} mapping{(result.MappingCount == 1 ? string.Empty : "s")} applied to {result.MatchedRows} matching result{(result.MatchedRows == 1 ? string.Empty : "s")}; {result.UpdatedRows} row{(result.UpdatedRows == 1 ? string.Empty : "s")} changed.", ToastRenderStyle.Success);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Failed to apply historical Soil mappings");
+            _dialogError = "The mappings could not be applied. Please try again.";
         }
         finally { _mappingBusy = _busy = false; }
     }
@@ -1371,7 +1397,7 @@
         }
     }
 
-    private void CloseMapping() { if (!_mappingBusy) _mappingVisible = false; }
+    private void CloseMapping() { if (!_mappingBusy && !_loadingMappingRows) _mappingVisible = false; }
     private void CloseGeneration() { if (!_generationBusy) _generationVisible = false; }
     private void ShowToast(string title, string message, ToastRenderStyle renderStyle)
     {
@@ -1394,7 +1420,7 @@
         .ToList();
     private static string RawMappingKey(HistoricalSoilResultItemDto item) =>
         string.Join("\u001f", item.RawCustomerName?.Trim() ?? string.Empty, item.RawFieldReference?.Trim() ?? string.Empty, item.RawCropName?.Trim() ?? string.Empty);
-    private int CountMatchingRawRows(HistoricalSoilResultItemDto selected) => _groups
+    private static int CountMatchingRawRows(IEnumerable<HistoricalSoilResultGroupDto> groups, HistoricalSoilResultItemDto selected) => groups
         .SelectMany(group => group.Results)
         .Count(item => SameRawValue(item.RawCustomerName, selected.RawCustomerName) &&
                        SameRawValue(item.RawFieldReference, selected.RawFieldReference) &&

@@ -1,0 +1,271 @@
+@using ApiModels
+@using ApiModels.MetaGrow
+@using MetaGrow.Shared
+@using MetaGrow.Web.Services
+@using Metagen.Shared.Services
+@inject ITgsApiService TgsApi
+@inject PropertyMergeApiClient Merges
+@implements IDisposable
+
+<DxPopup @bind-Visible="_visible" @bind-Visible:after="VisibilityChanged" HeaderText="Merge duplicate farms"
+         Width="1200px" ShowFooter="true" ShowCloseButton="@(!_busy)" CloseOnEscape="@(!_busy)" CloseOnOutsideClick="false">
+    <BodyContentTemplate>@BatchContent</BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="batch-footer">
+            <DxButton Text="@(MergeComplete ? "Done" : "Close")"
+                      RenderStyle="@(MergeComplete ? ButtonRenderStyle.Primary : ButtonRenderStyle.Secondary)"
+                      RenderStyleMode="@(MergeComplete ? ButtonRenderStyleMode.Contained : ButtonRenderStyleMode.Outline)"
+                      Enabled="@(!_busy)" Click="CloseAsync" />
+            @if (_busy) { <DxWaitIndicator Visible="true" /> }
+            @if (_session is not null)
+            {
+                <span role="status">@(MergeComplete ? "All selected farms merged successfully" : $"{CompletedCount} completed · {RemainingCount} remaining")</span>
+                @if (!MergeComplete)
+                {
+                    <DxButton Text="Check selected farms" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Enabled="@(!_busy && _session.Items.Any(item => item.State == BatchMergeState.Selected))" Click="CheckSelectedAsync" />
+                    <DxButton Text="@($"Merge {RemainingCount} {(RemainingCount == 1 ? "farm" : "farms")} into {DestinationName}")"
+                              RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy && _session.CanRun && IsReviewer)" Click="RunAsync" />
+                }
+            }
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+<PropertyMergeReviewDialog @ref="_reviewDialog" IsReviewer="IsReviewer" />
+
+@code {
+    [Parameter] public bool IsReviewer { get; set; }
+    [Parameter] public IReadOnlyList<ApiModels.Property> Properties { get; set; } = [];
+    [Parameter] public IReadOnlyDictionary<int, PropertyBlockCount> BlockCounts { get; set; } = new Dictionary<int, PropertyBlockCount>();
+    [Parameter] public IReadOnlyList<MetaGrowPropertyMergeRequestDto> PendingRequests { get; set; } = [];
+    [Parameter] public EventCallback Closed { get; set; }
+
+    private ApiModels.Property? _target;
+    private PropertyMergeBatchSession? _session;
+    private PropertyMergeReviewDialog? _reviewDialog;
+    private HashSet<int> _suggested = [];
+    private string? _search;
+    private bool _showAll, _visible, _busy, _disposed, _notified;
+    private bool _hasRun;
+    private string DestinationName => _session?.Items.FirstOrDefault(item => item.Preview is not null)?.Preview?.Target.PropertyName ?? _target?.PropertyName ?? "selected farm";
+    private int RemainingCount => _session?.Items.Count(item => item.State != BatchMergeState.Completed) ?? 0;
+    private int CompletedCount => _session?.Items.Count(item => item.State == BatchMergeState.Completed) ?? 0;
+    private bool MergeComplete => _hasRun && !_busy && CompletedCount > 0 && RemainingCount == 0;
+    private BatchMergeItem? StoppedItem => _session?.Items.FirstOrDefault(item => item.State is BatchMergeState.NeedsReview or BatchMergeState.VerifyResult);
+    private string OutcomeTitle => MergeComplete ? "Merge completed successfully"
+        : StoppedItem?.State == BatchMergeState.VerifyResult ? "Merge stopped — result needs checking"
+        : _session?.CanRun == true ? "Ready to continue merging" : "Merge stopped — attention required";
+    private string OutcomeStyle => MergeComplete ? "alert-success"
+        : StoppedItem?.State == BatchMergeState.VerifyResult ? "alert-danger"
+        : _session?.CanRun == true ? "alert-info" : "alert-warning";
+    private List<ApiModels.Property> MatchingFarms => Properties.DistinctBy(farm => farm.PropertyId)
+        .Where(farm => farm.PropertyId != _target?.PropertyId)
+        .Where(farm => string.IsNullOrWhiteSpace(_search)
+            ? _showAll || _suggested.Contains(farm.PropertyId)
+            : (farm.PropertyName?.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase) ?? false) || farm.PropertyId.ToString() == _search.Trim())
+        .OrderByDescending(farm => _suggested.Contains(farm.PropertyId)).ThenBy(farm => farm.PropertyName).ToList();
+    private List<ApiModels.Property> VisibleFarms => MatchingFarms.Take(100).ToList();
+
+    public Task OpenAsync(ApiModels.Property target, IEnumerable<int> suggested)
+    {
+        if (!IsReviewer || _busy || Pending(target.PropertyId)) return Task.CompletedTask;
+        _session?.Stop();
+        _target = target;
+        _session = new(target.PropertyId, new PropertyMergeBatchGateway(TgsApi, Merges));
+        _suggested = suggested.Where(id => id != target.PropertyId).ToHashSet();
+        _search = null;
+        _showAll = false;
+        _notified = false;
+        _hasRun = false;
+        _visible = true;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private bool Pending(int id) => PendingRequests.Any(request => request.SourcePropertyId == id);
+    private bool IsSelected(int id) => _session?.Items.Any(item => item.SourceId == id) == true;
+    private bool Locked(int id) => _session?.Items.Any(item => item.SourceId == id && item.State is BatchMergeState.Completed or BatchMergeState.VerifyResult) == true;
+    private void SelectFarm(ApiModels.Property farm, bool value)
+    {
+        if (!_busy && !Pending(farm.PropertyId) && IsSelected(farm.PropertyId) != value)
+        {
+            _session?.Select(farm.PropertyId, farm.PropertyName ?? $"Farm {farm.PropertyId}", value);
+            _hasRun = false;
+        }
+    }
+    private void RemoveFarm(BatchMergeItem item)
+    {
+        if (_busy || _session is null) return;
+        _session.Select(item.SourceId, item.Name, false);
+        _hasRun = false;
+    }
+    private void SelectShown() { foreach (var farm in VisibleFarms) SelectFarm(farm, true); }
+
+    private async Task CheckSelectedAsync()
+    {
+        if (_busy || _session is null) return;
+        _busy = true;
+        try
+        {
+            foreach (var item in _session.Items.Where(item => item.State == BatchMergeState.Selected).ToArray())
+            {
+                if (_disposed) break;
+                await _session.PrepareAsync(item);
+                await Changed();
+            }
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ReviewAsync(BatchMergeItem item)
+    {
+        if (_busy || _reviewDialog is null || _session is null) return;
+        _busy = true;
+        try
+        {
+            var preview = await _reviewDialog.ReviewPlanAsync(item.Plan ?? PropertyMergeBatchReview.InitialPlan(item.SourceId, _session.TargetId));
+            if (preview is not null && !_disposed) _session.AcceptReview(item, preview);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RunAsync()
+    {
+        if (_busy || !IsReviewer || _session is null || !_session.CanRun) return;
+        _busy = true;
+        try { await _session.RunAsync(Changed); }
+        finally { _busy = false; _hasRun = true; }
+    }
+
+    private async Task VerifyAsync(BatchMergeItem item)
+    {
+        if (_busy || _session is null) return;
+        _busy = true;
+        try { await _session.VerifyAsync(item); }
+        finally { _busy = false; }
+    }
+
+    private Task Changed() => _disposed ? Task.CompletedTask : InvokeAsync(StateHasChanged);
+    private async Task CloseAsync() { if (!_busy) { _visible = false; await VisibilityChanged(); } }
+    private async Task VisibilityChanged()
+    {
+        if (!_visible && !_notified)
+        {
+            _notified = true;
+            _session?.Stop();
+            await Closed.InvokeAsync();
+        }
+    }
+    public void Dispose() { _disposed = true; _session?.Stop(); }
+    private static string StateText(BatchMergeState state) => state switch
+    {
+        BatchMergeState.Selected => "Not checked", BatchMergeState.Ready => "Ready",
+        BatchMergeState.NeedsReview => "Needs review", BatchMergeState.Merging => "In progress",
+        BatchMergeState.Completed => "Completed", _ => "Check result"
+    };
+    protected RenderFragment BatchContent => @<text>
+        @if (_target is not null && _session is not null)
+        {
+            <div class="batch-merge">
+                @if (_hasRun && !_busy)
+                {
+                    <section class="batch-outcome alert @OutcomeStyle" role="status" aria-live="polite" aria-atomic="true">
+                        <span class="oi @(MergeComplete ? "oi-check" : "oi-warning")" aria-hidden="true"></span>
+                        <div>
+                            <h3>@OutcomeTitle</h3>
+                            @if (MergeComplete)
+                            {
+                                <p>@CompletedCount @(CompletedCount == 1 ? "farm was" : "farms were") merged into <strong>@DestinationName</strong>. You can now close this window.</p>
+                            }
+                            else
+                            {
+                                <p><strong>@CompletedCount of @_session.Items.Count</strong> merges into <strong>@DestinationName</strong> are confirmed complete. @RemainingCount @(RemainingCount == 1 ? "farm still needs" : "farms still need") attention.</p>
+                                @if (StoppedItem is { } stopped)
+                                {
+                                    <p class="batch-outcome-detail"><strong>@stopped.Name:</strong> @stopped.Message</p>
+                                    <DxButton Text="@(stopped.State == BatchMergeState.VerifyResult ? "Check result" : "Review stopped merge")"
+                                              RenderStyle="ButtonRenderStyle.Primary" SizeMode="SizeMode.Small"
+                                              Click="@(() => stopped.State == BatchMergeState.VerifyResult ? VerifyAsync(stopped) : ReviewAsync(stopped))" />
+                                }
+                                else
+                                {
+                                    <p>Use the merge button below to continue with the remaining farms.</p>
+                                }
+                                @if (CompletedCount > 0) { <p>Completed merges have been kept.</p> }
+                            }
+                        </div>
+                    </section>
+                }
+                <div class="batch-destination">
+                    <div><small>Farm to keep</small><strong>@DestinationName</strong><span>Farm @_target.PropertyId · its name will be retained</span></div>
+                    <a href="@($"/farms?propertyId={_target.PropertyId}")" target="_blank" rel="noopener">Open farm</a>
+                </div>
+                <p>Select the other records for this farm, check their merge plans, then merge into the farm above. To correct its name, use farm setup before reviewing.</p>
+                <div class="batch-columns">
+                    <section class="batch-panel" aria-label="Choose duplicate farms">
+                        <h3>Choose duplicates</h3>
+                        <DxTextBox @bind-Text="_search" BindValueMode="BindValueMode.OnDelayedInput" InputDelay="200"
+                                   NullText="Search all farms by name or ID" aria-label="Search duplicate farms"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" Enabled="@(!_busy)" />
+                        <div class="batch-tools">
+                            <DxCheckBox @bind-Checked="_showAll" Enabled="@(!_busy)">Show all farms</DxCheckBox>
+                            <DxButton Text="Select shown farms" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                      SizeMode="SizeMode.Small" Click="SelectShown" Enabled="@(!_busy && VisibleFarms.Any())" />
+                        </div>
+                        <div class="batch-scroll">
+                            @foreach (var farm in VisibleFarms)
+                            {
+                                var counts = BlockCounts.GetValueOrDefault(farm.PropertyId);
+                                <div class="batch-farm" @key="farm.PropertyId">
+                                    <DxCheckBox Checked="@IsSelected(farm.PropertyId)" CheckedChanged="@((bool value) => SelectFarm(farm, value))"
+                                                Enabled="@(!_busy && !Locked(farm.PropertyId) && !Pending(farm.PropertyId))">
+                                        <strong>@farm.PropertyName</strong>
+                                    </DxCheckBox>
+                                    <small>Farm @farm.PropertyId · @(farm.IsActive ? "Active" : "Inactive") · @((counts?.BananaBlockCount ?? 0) + (counts?.MultiCropBlockCount ?? 0)) blocks</small>
+                                    @if (Pending(farm.PropertyId)) { <small>Has an outstanding merge request</small> }
+                                </div>
+                            }
+                            @if (!VisibleFarms.Any()) { <p>No matches. Search another spelling or show all farms.</p> }
+                        </div>
+                        <small>Showing @VisibleFarms.Count of @MatchingFarms.Count farms. Search to narrow the list. Selected farms stay in the review panel.</small>
+                    </section>
+                    <section class="batch-panel" aria-label="Selected merge plans">
+                        <h3>Review selected farms (@_session.Items.Count)</h3>
+                        <div class="batch-scroll" aria-live="polite">
+                            @if (_session.Items.Count == 0) { <p>Select the farms you want to merge into @DestinationName.</p> }
+                            @foreach (var item in _session.Items)
+                            {
+                                <article class="batch-item" @key="item.SourceId">
+                                    <div class="batch-item-heading"><strong>@item.Name</strong><span class="batch-state">@StateText(item.State)</span></div>
+                                    <small>Farm @item.SourceId</small>
+                                    @if (item.Preview is not null)
+                                    {
+                                        <small>@item.Preview.Blocks.Count blocks · @item.Preview.Source.IncludedRowCount.ToString("N0") linked rows to include · @item.Preview.Source.ExcludedRowCount.ToString("N0") historical rows retained</small>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(item.Message)) { <p class="batch-item-message">@item.Message</p> }
+                                    <div class="batch-item-actions">
+                                        @if (item.State == BatchMergeState.VerifyResult)
+                                        {
+                                            <DxButton Text="Check result" RenderStyle="ButtonRenderStyle.Primary" SizeMode="SizeMode.Small"
+                                                      Enabled="@(!_busy)" Click="@(() => VerifyAsync(item))" />
+                                        }
+                                        else if (item.State != BatchMergeState.Completed)
+                                        {
+                                            <DxButton Text="Review details" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                      SizeMode="SizeMode.Small" Enabled="@(!_busy)" Click="@(() => ReviewAsync(item))" />
+                                            <DxButton IconCssClass="oi oi-x" title="Remove from selection" aria-label="@($"Remove {item.Name} from selection")"
+                                                      RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Text"
+                                                      SizeMode="SizeMode.Small" Enabled="@(!_busy)" Click="@(() => RemoveFarm(item))" />
+                                        }
+                                    </div>
+                                </article>
+                            }
+                        </div>
+                    </section>
+                </div>
+                <p class="batch-explanation">Farms merge one at a time. If a check needs attention, the batch pauses and completed merges remain completed.</p>
+            </div>
+        }
+    </text>;
+
+}

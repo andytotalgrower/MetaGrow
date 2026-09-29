@@ -1,0 +1,45 @@
+.setup-page { display: flex; flex-direction: column; gap: 1.25rem; padding: .5rem 0 2rem; }
+.setup-header, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+h1 { margin: .4rem 0; } h2 { font-size: 1.3rem; margin: .5rem 0; } h3 { font-size: 1.05rem; margin: .5rem 0; }
+.setup-header p, .section-heading p { margin: .25rem 0; }
+.actions, .copy-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.setup-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 23rem; gap: 1.5rem; align-items: start; }
+.setup-content { min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
+.setup-card, .setup-editor { padding: 1.25rem; border: 1px solid #d8dee5; border-radius: .65rem; background: #fff; color: #233247; }
+.setup-editor { position: sticky; top: 1rem; height: calc(100vh - 3rem); min-height: 24rem; overflow-y: auto; }
+button:disabled { opacity: .55; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--mg-blue); outline-offset: 2px; }
+.selected { background: #e9f4fa; }
+.assignment-row { display: flex; gap: .5rem; align-items: center; margin: .4rem 0; }
+.assignment-row > :first-child { flex: 1; text-align: left; }
+input, select { padding: .55rem; border: 1px solid #bdcad4; border-radius: .3rem; max-width: 100%; }
+.table-scroll { overflow-x: auto; } table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .65rem .45rem; border-bottom: 1px solid #e0e6ec; vertical-align: middle; }
+th { color: #526478; font-size: .85rem; } td.actions { min-width: 4.5rem; flex-wrap: nowrap; }
+.muted { color: #596b7a; font-size: .9rem; }
+.setup-message { padding: .85rem 1rem; border-radius: .4rem; } .error { background: #fcecef; color: #932633; } .success { background: #e8f4ed; color: #216340; }
+@media (max-width: 1050px) { .setup-workspace { grid-template-columns: 1fr; } .setup-editor { position: static; height: 28rem; grid-row: 1; } }
+
+.order-controls { display: flex; gap: .35rem; flex-wrap: nowrap; }
+.message-space { min-height: 3rem; }
+
+.flag-cell { text-align: center; }
+.status-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; font-size: .9rem; }
+.status-icon.is-yes { color: var(--mg-blue); }
+.status-icon.is-no { color: var(--mg-grey); }
+.spray-group-list { display: flex; flex-direction: column; gap: .4rem; margin-top: 1rem; }
+.spray-group-row { display: flex; align-items: center; border: 1px solid var(--dxds-color-border-neutral-subdued-rest, #d8dee5); border-radius: .4rem; overflow: hidden; }
+.spray-group-row.is-selected { border-color: var(--mg-blue); box-shadow: inset 3px 0 var(--mg-blue); background: var(--dxds-color-surface-primary-subdued-rest, #e9f4fa); }
+.spray-group-select { display: flex; flex: 1; min-width: 0; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; text-align: left; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.spray-group-select:hover { background: var(--dxds-color-surface-neutral-default-hovered, #f3f5f7); }
+.spray-group-select:focus-visible { outline-offset: -3px; }
+.spray-group-label { display: flex; flex-direction: column; gap: .2rem; }
+.spray-group-label small { color: var(--mg-grey); }
+.spray-group-actions { display: flex; flex-shrink: 0; gap: .4rem; padding: .25rem .8rem; border-left: 1px solid var(--dxds-color-border-neutral-subdued-rest, #d8dee5); }
+.spray-products { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--dxds-color-border-neutral-subdued-rest, #d8dee5); }
+
+.survey-type-toolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.survey-type-picker { flex: 1 1 20rem; min-width: 0; }
+.survey-type-option { display: flex; flex-direction: column; gap: .25rem; padding: .3rem 0; }
+.survey-type-meta { display: flex; align-items: center; gap: .6rem; font-size: .85rem; }
+.survey-type-code { font-weight: 600; border: 1px solid currentColor; border-radius: .2rem; padding: .05rem .3rem; font-size: .75rem; }

@@ -28,15 +28,24 @@
 @code {
     [Parameter, EditorRequired] public SampleImportColumnReviewDto Review { get; set; } = new();
     [Parameter] public bool Busy { get; set; }
+    [Parameter] public Dictionary<int, int>? DraftSelections { get; set; }
     [Parameter] public EventCallback<List<SampleImportColumnSelectionDto>> Applied { get; set; }
     private SampleImportColumnReviewDto? _previousReview;
     private Dictionary<int, int> _choices = [];
 
     protected override void OnParametersSet()
     {
-        if (ReferenceEquals(_previousReview, Review)) return;
+        if (ReferenceEquals(_previousReview, Review) && (DraftSelections is null || ReferenceEquals(_choices, DraftSelections))) return;
         _previousReview = Review;
-        _choices = Review.MissingColumns.ToDictionary(column => column.ColumnId, _ => -2);
+        _choices = DraftSelections ?? [];
+        foreach (var key in _choices.Keys.Where(key => !Review.MissingColumns.Any(column => column.ColumnId == key)).ToArray())
+            _choices.Remove(key);
+        foreach (var column in Review.MissingColumns)
+        {
+            if (!_choices.TryGetValue(column.ColumnId, out var value) || value < -2 || value >= Review.FileHeaders.Count ||
+                (column.IsRequired && value == -1))
+                _choices[column.ColumnId] = -2;
+        }
     }
 
     private Task ApplyAsync() => Applied.InvokeAsync(_choices.Select(choice => new SampleImportColumnSelectionDto

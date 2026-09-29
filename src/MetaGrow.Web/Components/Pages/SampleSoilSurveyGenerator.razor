@@ -10,8 +10,10 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>Generate Sample surveys from CSV | MetaGrow</PageTitle>
+<NavigationLock ConfirmExternalNavigation="@(PendingFiles.Count > 0 || _uploading || _committing)" OnBeforeInternalNavigation="ConfirmNavigationAsync" />
 
 <DxToastProvider Name="SampleSurveyGenerationMessages" MaxToastCount="3"
                  AnimationType="ToastAnimationType.Slide"
@@ -27,7 +29,7 @@
         <div>
             <span class="generation-kicker">Returned laboratory data</span>
             <h1>Generate Sample surveys from CSV</h1>
-            <p>Create the surveys, collected samples and linked @ResultTypeName results from one returned laboratory file.</p>
+            <p>Create the surveys, collected samples and linked @ResultTypeName results from returned laboratory files. Each file is imported independently.</p>
         </div>
         <div class="hero-safety">
             <span>Preview first</span>
@@ -35,7 +37,7 @@
         </div>
     </header>
 
-    <SampleAreaNavigation ActivePage="generate" ShowGuide="@(_receipt is null)" GuideRequested="@(() => _importGuideRequest++)" />
+    <SampleAreaNavigation ActivePage="generate" ShowGuide="@(_files.Count == 0)" GuideRequested="@(() => _importGuideRequest++)" />
 
     @if (_loading)
     {
@@ -45,7 +47,130 @@
     {
         <div class="alert alert-danger" role="alert">@_loadError</div>
     }
-    else if (_receipt is not null)
+    else
+    {
+        <SampleImportGuideTarget Destination="generate" Label="Create a sample survey from CSV" RequestVersion="_importGuideRequest"
+                                 Instruction="Start by choosing the farm, agronomist and Sample Type below. Then select your CSV files to preview the surveys and results.">
+        <section class="setup-card" aria-labelledby="generation-setup-heading">
+            <div class="section-heading">
+                <span class="step-number">1</span>
+                <div>
+                    <h2 id="generation-setup-heading">Choose the destination</h2>
+                    <p>The selected farm, agronomist and Sample Type will be used for every file in this queue. Clear the queue to change the destination.</p>
+                </div>
+            </div>
+            <div class="setup-grid">
+                <div class="field property-field">
+                    <label for="generation-property">Farm</label>
+                    <DxComboBox Id="generation-property" Data="@_properties" @bind-Value="_propertyId" @bind-Value:after="PropertyChangedAsync"
+                                TextFieldName="@nameof(Property.PropertyName)" ValueFieldName="@nameof(Property.PropertyId)"
+                                NullText="Search for a farm" SearchMode="ListSearchMode.AutoSearch"
+                                SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" Enabled="@(!_uploading && !_committing && _files.Count == 0)" />
+                </div>
+                <div class="field">
+                    <label for="generation-agronomist">Agronomist</label>
+                    <DxComboBox Id="generation-agronomist" Data="@_agronomists" @bind-Value="_agronomistId" @bind-Value:after="SelectionChanged"
+                                TextFieldName="@nameof(Staff.StaffName)" ValueFieldName="@nameof(Staff.StaffId)"
+                                NullText="Select an agronomist" SearchMode="ListSearchMode.AutoSearch"
+                                SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" Enabled="@(!_uploading && !_committing && _files.Count == 0)" />
+                </div>
+                <div class="field">
+                    <label for="generation-result-type">Sample Type</label>
+                    <DxComboBox Id="generation-result-type" Data="@ResultTypeOptions" @bind-Value="_resultTypeId" @bind-Value:after="SelectionChanged"
+                                TextFieldName="@nameof(ResultTypeOption.Name)" ValueFieldName="@nameof(ResultTypeOption.Id)"
+                                AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never"
+                                Enabled="@(!_uploading && !_committing && _files.Count == 0)" />
+                </div>
+            </div>
+
+            <div id="generation-csv-drop-zone" class="csv-drop-zone @(_uploading ? "busy" : string.Empty) @(!CanUpload ? "disabled" : string.Empty)">
+                <span class="drop-icon" aria-hidden="true">⇧</span>
+                <strong>Drag and drop returned @ResultTypeName CSV files here</strong>
+                <span>@(CanUpload ? "or select several files from your device" : _files.Count >= SampleGenerationBatchRules.MaxFiles ? "The queue is full — remove files or start a new queue" : Busy ? "Please wait for the current operation" : "Select a farm, agronomist and Sample Type first")</span>
+                <DxButton Id="generationCsvSelectButton" Text="@(_uploading ? "Reading CSVs…" : "Select CSV files")"
+                          RenderStyle="ButtonRenderStyle.Primary" Enabled="@(CanUpload && !_uploading && !_committing)" />
+                @if (_uploading) { <DxWaitIndicator Visible="true" /> }
+                <small>@ResultTypeName CSV · up to 10 files · maximum 20 MB each · nothing is written during preview</small>
+            </div>
+            <DxFileInput @ref="_fileInput"
+                         ExternalDropZoneCssSelector="#generation-csv-drop-zone"
+                         ExternalSelectButtonCssSelector="button#generationCsvSelectButton"
+                         ExternalDropZoneDragOverCssClass="drop-zone-active"
+                         MaxFileSize="@MaxFileBytes" MaxFileCount="@SampleGenerationBatchRules.MaxFiles"
+                         FilesUploading="PreviewFilesAsync"
+                         AcceptedFileTypes="@AcceptedFileTypes"
+                         AllowMultiFileUpload="true" />
+        </section>
+
+        </SampleImportGuideTarget>
+
+
+        @if (_files.Count > 0)
+        {
+            <section class="queue-card" aria-labelledby="file-queue-heading">
+                <div class="section-heading split">
+                    <div><h2 id="file-queue-heading">Files to generate</h2><p>Review each file. Files are never merged; successful imports remain saved if another file fails.</p></div>
+                    <DxButton Text="Clear queue" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!Busy && !_files.Any(file => file.OutcomeUnknown))" Click="ResetAll" />
+                </div>
+                <div class="file-queue" aria-live="polite">
+                    @foreach (var file in _files)
+                    {
+                        <article @key="file.Id" class="queue-file @(ReferenceEquals(file, _active) ? "selected" : string.Empty)">
+                            <button type="button" class="file-review-button" disabled="@Busy" @onclick="@(() => _active = file)" aria-pressed="@ReferenceEquals(file, _active)">
+                                <strong>@file.FileName</strong>
+                                <span>@file.Status</span>
+                                @if (file.Preview is not null)
+                                {
+                                    <small>@file.Preview.LabName · @file.Preview.Rows.Count results · @file.Preview.SurveyGroups.Count surveys</small>
+                                    <small>@string.Join(", ", file.Preview.SurveyGroups.Select(group => group.SurveyDate.ToString("dd MMM yyyy")))</small>
+                                }
+                            </button>
+                            <div class="queue-file-actions">
+                                @if (file.OutcomeUnknown)
+                                {
+                                    <button type="button" class="btn btn-outline-primary" disabled="@Busy" @onclick="@(() => CheckOutcomeAsync(file))">Check import status</button>
+                                }
+                                else if (file.Receipt is null)
+                                {
+                                    @if (file.Preview is not null)
+                                    {
+                                        <button type="button" class="btn btn-outline-secondary" disabled="@Busy" @onclick="@(() => RefreshFileAsync(file))">Refresh preview</button>
+                                    }
+                                    <button type="button" class="btn btn-outline-secondary" disabled="@Busy" @onclick="@(() => RemoveFile(file))">Remove</button>
+                                }
+                            </div>
+                            @if (file.Error is not null) { <p class="queue-error" role="alert">@file.Error</p> }
+                            @if (file.Receipt is not null)
+                            {
+                                <div class="queue-receipts">
+                                    @foreach (var survey in file.Receipt.Surveys)
+                                    {
+                                        <a href="@SurveyUrl(survey.SurveyId)" target="_blank" rel="noopener">Survey @survey.SurveyId · @survey.SurveyDate.ToString("dd MMM yyyy")</a>
+                                    }
+                                </div>
+                            }
+                        </article>
+                    }
+                </div>
+                @if (BatchErrors.Count > 0)
+                {
+                    <div class="review-message danger" role="alert"><strong>Resolve these file conflicts</strong><ul>@foreach (var error in BatchErrors) { <li>@error</li> }</ul></div>
+                }
+                @if (_batchErrors.Count > 0)
+                {
+                    <div class="review-message danger" role="alert"><strong>Server checks</strong><ul>@foreach (var error in _batchErrors) { <li>@error</li> }</ul></div>
+                }
+                <div class="commit-bar">
+                    <div><strong>@PendingFiles.Count files · @PendingSurveyCount surveys · @PendingResultCount results remaining</strong>
+                        <span>@_files.Count(file => file.Receipt is not null) files imported. Each file succeeds or rolls back independently.</span></div>
+                    <DxButton Text="@(_committing ? "Generating…" : "Generate remaining files")" RenderStyle="ButtonRenderStyle.Primary" Enabled="@CanCommit" Click="OpenConfirmation" />
+                </div>
+            </section>
+        }
+
+        @if (_receipt is not null)
     {
         <section class="receipt-card" aria-labelledby="generation-receipt-heading">
             <div class="receipt-icon">✓</div>
@@ -62,72 +187,14 @@
                         Survey @survey.SurveyId <span>@survey.SurveyDate.ToString("dd MMM yyyy") · @survey.ImportedRowCount result@(survey.ImportedRowCount == 1 ? string.Empty : "s")</span>
                     </a>
                 }
-                <DxButton Text="Generate from another file" RenderStyle="ButtonRenderStyle.Primary" Click="ResetAll" />
+
             </div>
         </section>
     }
-    else
-    {
-        <SampleImportGuideTarget Destination="generate" Label="Create a sample survey from CSV" RequestVersion="_importGuideRequest"
-                                 Instruction="Start by choosing the farm, agronomist and result family below. Then select your CSV file to preview the surveys and results.">
-        <section class="setup-card" aria-labelledby="generation-setup-heading">
-            <div class="section-heading">
-                <span class="step-number">1</span>
-                <div>
-                    <h2 id="generation-setup-heading">Choose the destination</h2>
-                    <p>The selected farm, agronomist and result family will be used for every survey generated from this file.</p>
-                </div>
-            </div>
-            <div class="setup-grid">
-                <div class="field property-field">
-                    <label for="generation-property">Farm</label>
-                    <DxComboBox Id="generation-property" Data="@_properties" @bind-Value="_propertyId" @bind-Value:after="PropertyChangedAsync"
-                                TextFieldName="@nameof(Property.PropertyName)" ValueFieldName="@nameof(Property.PropertyId)"
-                                NullText="Search for a farm" SearchMode="ListSearchMode.AutoSearch"
-                                SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
-                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" Enabled="@(!_uploading && !_committing)" />
-                </div>
-                <div class="field">
-                    <label for="generation-agronomist">Agronomist</label>
-                    <DxComboBox Id="generation-agronomist" Data="@_agronomists" @bind-Value="_agronomistId" @bind-Value:after="SelectionChanged"
-                                TextFieldName="@nameof(Staff.StaffName)" ValueFieldName="@nameof(Staff.StaffId)"
-                                NullText="Select an agronomist" SearchMode="ListSearchMode.AutoSearch"
-                                SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
-                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" Enabled="@(!_uploading && !_committing)" />
-                </div>
-                <div class="field">
-                    <label for="generation-result-type">Result family</label>
-                    <DxComboBox Id="generation-result-type" Data="@ResultTypeOptions" @bind-Value="_resultTypeId" @bind-Value:after="SelectionChanged"
-                                TextFieldName="@nameof(ResultTypeOption.Name)" ValueFieldName="@nameof(ResultTypeOption.Id)"
-                                AllowUserInput="false" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never"
-                                Enabled="@(!_uploading && !_committing)" />
-                </div>
-            </div>
 
-            <div id="generation-csv-drop-zone" class="csv-drop-zone @(_uploading ? "busy" : string.Empty) @(!CanUpload ? "disabled" : string.Empty)">
-                <span class="drop-icon" aria-hidden="true">⇧</span>
-                <strong>Drag and drop one returned @ResultTypeName CSV here</strong>
-                <span>@(CanUpload ? "or select it from your device" : "Select a farm, agronomist and result family first")</span>
-                <DxButton Id="generationCsvSelectButton" Text="@(_uploading ? "Reading CSV…" : "Select CSV")"
-                          RenderStyle="ButtonRenderStyle.Primary" Enabled="@(CanUpload && !_uploading && !_committing)" />
-                @if (_uploading) { <DxWaitIndicator Visible="true" /> }
-                <small>@ResultTypeName CSV · maximum 20 MB · nothing is written during preview</small>
-            </div>
-            <DxFileInput @ref="_fileInput"
-                         ExternalDropZoneCssSelector="#generation-csv-drop-zone"
-                         ExternalSelectButtonCssSelector="button#generationCsvSelectButton"
-                         ExternalDropZoneDragOverCssClass="drop-zone-active"
-                         MaxFileSize="@MaxFileBytes" MaxFileCount="1"
-                         FilesUploading="PreviewFilesAsync"
-                         AcceptedFileTypes="@AcceptedFileTypes"
-                         AllowMultiFileUpload="false" />
-        </section>
-
-        </SampleImportGuideTarget>
-
-        @if (_preview is not null)
+        @if (_preview is not null && _receipt is null)
         {
-            <section class="preview-card" aria-labelledby="generation-preview-heading">
+            <section @key="_active.Id" class="preview-card" aria-labelledby="generation-preview-heading">
                 <div class="section-heading split">
                     <div>
                         <span class="step-number">2</span>
@@ -175,7 +242,7 @@
                 @if (_preview.PropertyNameOverrideRequired)
                 {
                     <div class="property-override" role="group" aria-label="Farm name override confirmation">
-                        <DxCheckBox @bind-Checked="_propertyOverrideAccepted" Enabled="@(!_committing)">
+                        <DxCheckBox @bind-Checked="_propertyOverrideAccepted" Enabled="@(!Busy)">
                             I have checked the Lab Farm/Grower name and confirm these results belong to @_preview.PropertyName.
                         </DxCheckBox>
                         <small>This confirmation is required because at least one laboratory name is not a close match.</small>
@@ -201,7 +268,7 @@
                     }
                 </div>
 
-                <SampleImportColumnReview Review="_preview.ColumnReview" Busy="_uploading" Applied="ReviewColumnsAsync" />
+                <SampleImportColumnReview Review="_preview.ColumnReview" DraftSelections="_active.ColumnSelections" Busy="@(Busy || _active.OutcomeUnknown)" Applied="ReviewColumnsAsync" />
                 @if (HasDuplicateBlocks)
                 {
                     <div class="review-message danger" role="alert">Duplicate blocks found. Select a different property block for each result row.</div>
@@ -223,7 +290,7 @@
                                             TextFieldName="@nameof(BlockChoice.Label)" ValueFieldName="@nameof(BlockChoice.Key)"
                                             NullText="Select a block" SearchMode="ListSearchMode.AutoSearch"
                                             SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
-                                            Enabled="@(!_committing)" />
+                                            Enabled="@(!Busy && !_active.OutcomeUnknown)" />
                                 @if (mapping.BlockWasSuggested && !string.IsNullOrWhiteSpace(mapping.BlockKey)) { <small class="suggestion">Suggested — please check</small> }
                             </div>
                             <div class="mapping-choice test-choice">
@@ -232,7 +299,7 @@
                                             TextFieldName="@nameof(TestTypeChoice.Label)" ValueFieldName="@nameof(TestTypeChoice.Id)"
                                             NullText="Select a test type" SearchMode="ListSearchMode.AutoSearch"
                                             SearchFilterCondition="ListSearchFilterCondition.Contains" AllowUserInput="false"
-                                            Enabled="@(!_committing)" />
+                                            Enabled="@(!Busy && !_active.OutcomeUnknown)" />
                             </div>
                         </div>
                     }
@@ -260,10 +327,7 @@
                     </DxGrid>
                 </div>
 
-                <div class="commit-bar">
-                    <div><strong>@CommitReadinessText</strong><span>Either every survey and result is written, or the transaction is rolled back.</span></div>
-                    <DxButton Text="Generate Sample surveys" RenderStyle="ButtonRenderStyle.Primary" Enabled="@CanCommit" Click="OpenConfirmation" />
-                </div>
+                <p class="file-review-hint">@CommitReadinessText · Use “Generate remaining files” above after reviewing the queue.</p>
             </section>
         }
     }
@@ -273,28 +337,16 @@
          AllowDrag="true" ShowCloseButton="@(!_committing)" CloseOnEscape="@(!_committing)"
          Width="min(650px, 94vw)" CloseOnOutsideClick="@(!_committing)">
     <BodyContentTemplate>
-        @if (_preview is not null)
-        {
-            <div class="confirm-content">
-                <p>You are about to create <strong>@_preview.SurveyGroups.Count Sample survey@(_preview.SurveyGroups.Count == 1 ? string.Empty : "s")</strong> for <strong>@_preview.PropertyName</strong>, containing <strong>@_preview.Rows.Count @ResultTypeName results</strong>.</p>
-                <p>The surveys will be assigned to <strong>@_preview.AgronomistName</strong>. This operation is atomic and the same file cannot be generated twice for this farm.</p>
-                @if (_preview.SurveyGroups.Any(group => group.ExistingSurveyIds.Count > 0))
-                {
-                    <div class="review-message warning"><strong>Existing survey dates detected</strong><span>This will create separate surveys; the existing surveys will not be changed.</span></div>
-                }
-                @if (_preview.PropertyNameOverrideRequired)
-                {
-                    <div class="review-message warning"><strong>Farm override confirmed</strong><span>The Lab Grower name was not a close match for the selected farm.</span></div>
-                }
-                @if (!string.IsNullOrWhiteSpace(_commitError))
-                {
-                    <div class="review-message danger" role="alert">
-                        <strong>Generation failed</strong>
-                        <span>@_commitError</span>
-                    </div>
-                }
-            </div>
-        }
+        <div class="confirm-content">
+            <p>Generate <strong>@PendingSurveyCount surveys</strong> containing <strong>@PendingResultCount @ResultTypeName results</strong> from <strong>@PendingFiles.Count files</strong>?</p>
+            <p>Farm: <strong>@_properties.FirstOrDefault(property => property.PropertyId == _propertyId)?.PropertyName</strong>.
+                Agronomist: <strong>@_agronomists.FirstOrDefault(staff => staff.StaffId == _agronomistId)?.StaffName</strong>.</p>
+            <p>Files are processed one at a time. A failed file rolls back completely; successful files remain imported. Retry only the remaining files.</p>
+            @if (PendingFiles.Any(file => file.Preview!.SurveyGroups.Any(group => group.ExistingSurveyIds.Count > 0)))
+            {
+                <p>Some dates already have surveys. Separate surveys will be created; existing surveys will not be changed.</p>
+            }
+        </div>
     </BodyContentTemplate>
     <FooterContentTemplate Context="footerContext">
         <div class="popup-actions">
@@ -319,18 +371,22 @@
     private static readonly List<string> AcceptedFileTypes = [".csv"];
     private static readonly List<ResultTypeOption> ResultTypeOptions =
     [
-        new(SampleLaboratoryResultType.Soil, SampleLaboratoryResultType.Name(SampleLaboratoryResultType.Soil)),
-        new(SampleLaboratoryResultType.Tissue, SampleLaboratoryResultType.Name(SampleLaboratoryResultType.Tissue))
+        new(SampleLaboratoryResultType.Soil, "Soil"),
+        new(SampleLaboratoryResultType.Tissue, "Tissue")
     ];
-
     private DxFileInput? _fileInput;
     private List<Property> _properties = [];
     private List<Staff> _agronomists = [];
     private List<BlockChoice> _blockChoices = [];
-    private List<TestTypeChoice> _testTypeChoices = [];
-    private List<MappingRow> _mappingRows = [];
-    private SampleSoilSurveyGenerationPreviewDto? _preview;
-    private SampleSoilSurveyGenerationReceiptDto? _receipt;
+    private readonly List<SampleGenerationQueueEntry> _files = [];
+    private SampleGenerationQueueEntry _active = new();
+    private List<string> _batchErrors = [];
+    private SampleSoilSurveyGenerationPreviewDto? _preview => _active.Preview;
+    private SampleSoilSurveyGenerationReceiptDto? _receipt => _active.Receipt;
+    private List<SampleGenerationMappingRow> _mappingRows => _active.Mappings;
+    private IReadOnlyList<TestTypeChoice> _testTypeChoices => _preview?.LabTestTypes
+        .Select(test => new TestTypeChoice(test.LabTestTypeId, TestTypeLabel(test))).OrderBy(test => test.Label).ToList() ?? [];
+    private bool _propertyOverrideAccepted { get => _active.PropertyOverrideAccepted; set => _active.PropertyOverrideAccepted = value; }
     private int _propertyId;
     private int _agronomistId;
     private int _resultTypeId = SampleLaboratoryResultType.Soil;
@@ -338,32 +394,22 @@
     private bool _uploading;
     private bool _committing;
     private bool _confirmVisible;
-    private bool _propertyOverrideAccepted;
     private string? _loadError;
-    private string? _commitError;
-
+    private bool Busy => _loading || _uploading || _committing;
     private string ResultTypeName => SampleLaboratoryResultType.Name(_resultTypeId);
     private IReadOnlyList<BlockChoice> AvailableBlockChoices => _blockChoices;
-    private bool HasDuplicateBlocks => _mappingRows.Where(row => !string.IsNullOrWhiteSpace(row.BlockKey))
-        .GroupBy(row => row.BlockKey.Split(':').Last()).Any(group => group.Count() > 1);
-    private bool CanUpload => _propertyId > 0 && _agronomistId > 0 &&
-        SampleLaboratoryResultType.IsImportSupported(_resultTypeId) && !_loading;
-    private bool CanCommit => _preview?.CanGenerate == true && !HasDuplicateBlocks &&
-        (!_preview.PropertyNameOverrideRequired || _propertyOverrideAccepted) &&
-        !_uploading && !_committing &&
-        _mappingRows.Count > 0 && _mappingRows.All(row =>
-            !string.IsNullOrWhiteSpace(row.BlockKey) &&
-            _testTypeChoices.Any(test => test.Id == row.LabTestTypeId));
-    private string CommitReadinessText => HasDuplicateBlocks
-        ? "Select a different block for each result row"
-        : _preview is null || !_preview.CanGenerate
-        ? "Resolve the blocked checks before generating"
-        : _preview.PropertyNameOverrideRequired && !_propertyOverrideAccepted
-            ? "Confirm the farm name override before generating"
-            : _mappingRows.Any(row => string.IsNullOrWhiteSpace(row.BlockKey) ||
-                                      !_testTypeChoices.Any(test => test.Id == row.LabTestTypeId))
-                ? "Complete every block and test-type mapping"
-                : "Ready for final confirmation";
+    private bool HasDuplicateBlocks => _active.HasDuplicateBlocks;
+    private bool CanUpload => _propertyId > 0 && _agronomistId > 0 && _files.Count < SampleGenerationBatchRules.MaxFiles &&
+        SampleLaboratoryResultType.IsImportSupported(_resultTypeId) && !Busy;
+    private List<SampleGenerationQueueEntry> PendingFiles => _files.Where(file => file.Receipt is null).ToList();
+    private int PendingSurveyCount => PendingFiles.Sum(file => file.Preview?.SurveyGroups.Count ?? 0);
+    private int PendingResultCount => PendingFiles.Sum(file => file.Preview?.Rows.Count ?? 0);
+    private List<string> BatchErrors => _files.Any(file => file.Preview is not null)
+        ? SampleGenerationBatchRules.Validate(_files.Where(file => file.Preview is not null).Select(file => file.Preview!).ToList()) : [];
+    private bool CanCommit => !Busy && PendingFiles.Count > 0 && PendingFiles.All(file => file.IsReady) && BatchErrors.Count == 0;
+    private string CommitReadinessText => _active.IsReady ? "This file is ready"
+        : HasDuplicateBlocks ? "Select a different block for each result row"
+        : "Complete this file's checks, block selections and test types";
 
     protected override async Task OnInitializedAsync()
     {
@@ -412,7 +458,7 @@
 
     private async Task PropertyChangedAsync()
     {
-        ClearPreview();
+        ClearQueue();
         _blockChoices = [];
         if (_propertyId <= 0) return;
         try
@@ -435,43 +481,52 @@
         }
     }
 
-    private void SelectionChanged() => ClearPreview();
+
+    private void SelectionChanged() => ClearQueue();
+
+    private async Task<string> AccessTokenAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var token = await ApiTokens.GetAccessTokenAsync(state.User);
+        return !string.IsNullOrWhiteSpace(token) ? token : throw new InvalidOperationException("Sign in again before importing files.");
+    }
 
     private async Task PreviewFilesAsync(FilesUploadingEventArgs args)
     {
-        if (!CanUpload || args.Files.Count != 1) return;
+        if (!CanUpload || args.Files.Count == 0) return;
+        if (_files.Count + args.Files.Count > SampleGenerationBatchRules.MaxFiles)
+        {
+            ShowToast("Too many files", "The queue can contain up to 10 files. Remove files or start a new queue.", ToastRenderStyle.Warning);
+            _fileInput?.RemoveAllFiles();
+            return;
+        }
         _uploading = true;
-        ClearPreview();
+        _batchErrors = [];
         try
         {
-            var file = args.Files[0];
-            if (!Path.GetExtension(file.Name).Equals(".csv", StringComparison.OrdinalIgnoreCase))
+            var token = await AccessTokenAsync();
+            foreach (var file in args.Files)
             {
-                ShowToast("CSV required", "Choose a file with a .csv extension.", ToastRenderStyle.Warning);
-                return;
+                var entry = new SampleGenerationQueueEntry { FileName = file.Name, Reading = true };
+                _files.Add(entry);
+                if (_files.Count == 1) _active = entry;
+                await InvokeAsync(StateHasChanged);
+                try
+                {
+                    if (!Path.GetExtension(file.Name).Equals(".csv", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Choose a file with a .csv extension.");
+                    await using var stream = file.OpenReadStream(MaxFileBytes, file.CancellationTokenSource.Token);
+                    var preview = await TgsApi.PreviewSampleChemistrySurveyGeneration(_propertyId, _agronomistId, _resultTypeId,
+                        stream, file.Name, file.Type, token);
+                    if (preview is null) throw new InvalidOperationException(TgsApi.ErrorMessage ?? "The CSV could not be previewed.");
+                    entry.ApplyPreview(preview);
+                }
+                catch (Exception exception) { entry.Error = $"{exception.Message} Remove this entry and upload the file again."; }
+                finally { entry.Reading = false; }
+                await InvokeAsync(StateHasChanged);
             }
-            var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var token = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                ShowToast("Session expired", "Sign in again before generating Sample surveys.", ToastRenderStyle.Danger);
-                return;
-            }
-            await using var stream = file.OpenReadStream(MaxFileBytes, file.CancellationTokenSource.Token);
-            _preview = await TgsApi.PreviewSampleChemistrySurveyGeneration(_propertyId, _agronomistId, _resultTypeId, stream, file.Name, file.Type, token);
-            if (_preview is null)
-            {
-                ShowToast("Preview failed", TgsApi.ErrorMessage ?? $"The {ResultTypeName} CSV could not be previewed.", ToastRenderStyle.Danger);
-                return;
-            }
-            BuildMappingRows();
-            ShowToast("Preview ready", $"{_preview.Rows.Count} {ResultTypeName} results across {_preview.SurveyGroups.Count} survey date(s) were read. No data was changed.",
-                _preview.BlockingErrors.Count == 0 ? ToastRenderStyle.Success : ToastRenderStyle.Warning);
         }
-        catch (Exception exception)
-        {
-            ShowToast("Preview failed", exception.Message, ToastRenderStyle.Danger);
-        }
+        catch (Exception exception) { ShowToast("Upload failed", exception.Message, ToastRenderStyle.Danger); }
         finally
         {
             _fileInput?.RemoveAllFiles();
@@ -480,141 +535,159 @@
         }
     }
 
-    private void BuildMappingRows()
-    {
-        if (_preview is null) { _mappingRows = []; _testTypeChoices = []; return; }
-        _testTypeChoices = _preview.LabTestTypes
-            .Select(test => new TestTypeChoice(test.LabTestTypeId, TestTypeLabel(test)))
-            .OrderBy(test => test.Label, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        _mappingRows = _preview.Mappings.Select((mapping, index) =>
-        {
-            var suggestedKey = mapping.SuggestedBlockId > 0
-                ? $"{NormalizeBlockType(mapping.SuggestedBlockType)}:{mapping.SuggestedBlockId}"
-                : string.Empty;
-            var choice = AvailableBlockChoices.FirstOrDefault(item => item.Key.Equals(suggestedKey, StringComparison.OrdinalIgnoreCase));
-            var testId = _preview.LabTestTypes.Any(test => test.LabTestTypeId == mapping.SuggestedLabTestTypeId)
-                ? mapping.SuggestedLabTestTypeId
-                : 0;
-            return new MappingRow
-            {
-                BlockControlId = $"generation-block-{index}",
-                TestControlId = $"generation-test-{index}",
-                MappingKey = mapping.MappingKey,
-                RowLabel = $"CSV row {_preview.Rows.FirstOrDefault(row => row.MappingKey == mapping.MappingKey)?.RowNumber}",
-                RawBlockName = mapping.RawBlockName,
-                ResultCount = mapping.ResultCount,
-                BlockKey = choice?.Key ?? string.Empty,
-                BlockWasSuggested = choice is not null,
-                LabTestTypeId = testId
-            };
-        }).ToList();
-    }
+    private Task ReviewColumnsAsync(List<SampleImportColumnSelectionDto> columns) => RefreshFileAsync(_active, columns);
 
-    private async Task ReviewColumnsAsync(List<SampleImportColumnSelectionDto> columns)
+    private async Task RefreshFileAsync(SampleGenerationQueueEntry file, List<SampleImportColumnSelectionDto>? columns = null)
     {
-        if (_preview is null || _uploading) return;
+        if (Busy || file.Preview is null || file.Receipt is not null || file.OutcomeUnknown) return;
         _uploading = true;
+        file.Reading = true;
+        _batchErrors = [];
         try
         {
-            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var token = await ApiTokens.GetAccessTokenAsync(state.User);
-            if (string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException("Sign in again before reviewing columns.");
+            var token = await AccessTokenAsync();
             var preview = await TgsApi.ReviewSampleChemistryGenerationColumns(
-                new SampleImportColumnReviewRequest { PreviewToken = _preview.PreviewToken, Columns = columns }, token);
-            if (preview is null) throw new InvalidOperationException(TgsApi.ErrorMessage ?? "Column review failed.");
-            _preview = preview;
-            _propertyOverrideAccepted = false;
-            BuildMappingRows();
+                new SampleImportColumnReviewRequest { PreviewToken = file.Preview.PreviewToken, Columns = columns ?? [] }, token);
+            if (preview is null) throw new InvalidOperationException(TgsApi.ErrorMessage ?? "The preview could not be refreshed.");
+            file.ApplyPreview(preview);
         }
-        catch (Exception exception) { ShowToast("Column review failed", exception.Message, ToastRenderStyle.Danger); }
-        finally { _uploading = false; }
+        catch (Exception exception) { file.Error = exception.Message; }
+        finally { file.Reading = false; _uploading = false; }
+    }
+
+    private void RemoveFile(SampleGenerationQueueEntry file)
+    {
+        if (Busy || file.Receipt is not null || file.OutcomeUnknown) return;
+        _files.Remove(file);
+        if (ReferenceEquals(_active, file)) _active = _files.FirstOrDefault() ?? new();
+        _batchErrors = [];
     }
 
     private void OpenConfirmation()
     {
-        if (!CanCommit) return;
-        _commitError = null;
-        _confirmVisible = true;
+        if (CanCommit) { _batchErrors = []; _confirmVisible = true; }
     }
     private void CloseConfirmation() { if (!_committing) _confirmVisible = false; }
 
     private async Task CommitAsync()
     {
-        if (_preview is null || !CanCommit) return;
+        if (!CanCommit) return;
         _committing = true;
-        _commitError = null;
+        _confirmVisible = false;
+        _batchErrors = [];
+        var pending = PendingFiles;
         try
         {
-            var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var token = await ApiTokens.GetAccessTokenAsync(authenticationState.User);
-            if (string.IsNullOrWhiteSpace(token))
+            var token = await AccessTokenAsync();
+            for (var index = 0; index < pending.Count; index++)
             {
-                _commitError = "Your session has expired. Sign in again before generating Sample surveys.";
-                ShowToast("Session expired", _commitError, ToastRenderStyle.Danger);
-                return;
-            }
-            var mappings = new List<SampleSoilSurveyGenerationMappingSelectionDto>();
-            foreach (var row in _mappingRows)
-            {
-                var choice = AvailableBlockChoices.FirstOrDefault(item => item.Key == row.BlockKey)
-                    ?? throw new InvalidOperationException("Select a block for every block name in the file.");
-                mappings.Add(new SampleSoilSurveyGenerationMappingSelectionDto
+                // Revalidate remaining files after each transaction: shared Hortus definitions may have changed.
+                var validation = await TgsApi.ValidateSampleGenerationBatch(new()
                 {
-                    MappingKey = row.MappingKey,
-                    BlockId = choice.MatchBlock.BlockId,
-                    BlockType = choice.MatchBlock.BlockType ?? string.Empty,
-                    LabTestTypeId = row.LabTestTypeId
-                });
+                    Files = pending.Skip(index).Select(file => file.ToRequest()).ToList()
+                }, token);
+                if (validation is null || !validation.CanGenerate)
+                {
+                    _batchErrors = validation?.Errors ?? [TgsApi.ErrorMessage ?? "Batch validation failed. Nothing further was imported."];
+                    break;
+                }
+                var file = pending[index];
+                file.Importing = true;
+                file.Error = null;
+                await InvokeAsync(StateHasChanged);
+                try
+                {
+                    file.Receipt = await TgsApi.CommitSampleChemistrySurveyGeneration(file.ToRequest(), token);
+                    if (file.Receipt is null)
+                    {
+                        file.Error = TgsApi.ErrorMessage ?? "The import did not return a receipt.";
+                        await RecoverOutcomeAsync(file, token);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    file.Error = exception.Message;
+                    await RecoverOutcomeAsync(file, token);
+                }
+                finally { file.Importing = false; }
+                await InvokeAsync(StateHasChanged);
+                // Do not start another write while an interrupted request may still be completing.
+                if (file.OutcomeUnknown) break;
             }
-            _receipt = await TgsApi.CommitSampleChemistrySurveyGeneration(new SampleSoilSurveyGenerationCommitRequest
-            {
-                PreviewToken = _preview.PreviewToken,
-                ConfirmPropertyNameMismatch = _propertyOverrideAccepted,
-                Mappings = mappings
-            }, token);
-            if (_receipt is null)
-            {
-                _commitError = TgsApi.ErrorMessage ?? "No Sample surveys were generated.";
-                ShowToast("Generation failed", _commitError, ToastRenderStyle.Danger);
-                return;
-            }
-            _commitError = null;
-            _confirmVisible = false;
-            _preview = null;
-            _mappingRows = [];
-            ShowToast("Sample surveys generated", $"{_receipt.Surveys.Count} surveys and {_receipt.ImportedRowCount} {_receipt.ResultTypeName} results were committed.", ToastRenderStyle.Success);
         }
-        catch (Exception exception)
+        catch (Exception exception) { _batchErrors = [exception.Message]; }
+        finally
         {
-            _commitError = exception.Message;
-            ShowToast("Generation failed", _commitError, ToastRenderStyle.Danger);
+            _committing = false;
+            ShowToast("Import queue", $"{_files.Count(file => file.Receipt is not null)} files imported; {PendingFiles.Count} remaining.",
+                PendingFiles.Count == 0 ? ToastRenderStyle.Success : ToastRenderStyle.Warning);
         }
-        finally { _committing = false; }
     }
 
-    private void ClearPreview()
+    private async Task RecoverOutcomeAsync(SampleGenerationQueueEntry file, string token)
     {
-        _preview = null;
-        _receipt = null;
-        _mappingRows = [];
-        _testTypeChoices = [];
+        file.OutcomeUnknown = true;
+        try
+        {
+            var status = await TgsApi.GetSampleGenerationStatus(new() { PreviewToken = file.Preview!.PreviewToken }, token);
+            if (status is null)
+            {
+                file.Error = $"{file.Error} The outcome could not be verified. Check import status before retrying.";
+                return;
+            }
+            file.Receipt = status.Receipt;
+            if (file.Receipt is not null)
+            {
+                file.Receipt.PropertyName = file.Preview!.PropertyName;
+                file.Receipt.AgronomistName = file.Preview.AgronomistName;
+                file.Receipt.LabName = file.Preview.LabName;
+            }
+            file.OutcomeUnknown = false;
+            file.Error = status.Imported ? null : $"{file.Error ?? "No completed import was found."} Review this file, then generate remaining files to retry.";
+        }
+        catch { file.Error = "The import outcome could not be checked. Check import status before retrying."; }
+    }
+
+    private async Task CheckOutcomeAsync(SampleGenerationQueueEntry file)
+    {
+        if (Busy || !file.OutcomeUnknown) return;
+        _uploading = true;
+        try { await RecoverOutcomeAsync(file, await AccessTokenAsync()); }
+        catch (Exception exception) { file.Error = exception.Message; }
+        finally { _uploading = false; }
+    }
+
+    private void ClearQueue()
+    {
+        _files.Clear();
+        _active = new();
+        _batchErrors = [];
         _confirmVisible = false;
-        _propertyOverrideAccepted = false;
-        _commitError = null;
     }
 
     private void ResetAll()
     {
-        _propertyId = 0;
-        _blockChoices = [];
-        ClearPreview();
+        if (Busy || _files.Any(file => file.OutcomeUnknown)) return;
+        ClearQueue();
     }
 
     private void ShowToast(string title, string text, ToastRenderStyle style) => ToastService.ShowToast(new ToastOptions
     {
         ProviderName = "SampleSurveyGenerationMessages", Title = title, Text = text, RenderStyle = style, DisplayTime = TimeSpan.FromSeconds(10)
     });
+    private async Task ConfirmNavigationAsync(LocationChangingContext context)
+    {
+        if (_uploading || _committing || _files.Any(file => file.OutcomeUnknown))
+        {
+            context.PreventNavigation();
+            ShowToast("Import queue", "Wait for the current operation, or check the unknown import status, before leaving this page.", ToastRenderStyle.Warning);
+            return;
+        }
+        if (PendingFiles.Count > 0 && !await JS.InvokeAsync<bool>("confirm",
+            "Leave this page and discard the remaining file previews? Completed imports will stay saved."))
+            context.PreventNavigation();
+    }
+
     private void BackToSamples() => Navigation.NavigateTo("/surveys/samples");
     private static string SurveyUrl(int surveyId) => $"/surveys/samples/{surveyId}/edit";
     private static string NormalizeBlockType(string? value) => value?.StartsWith("ban", StringComparison.OrdinalIgnoreCase) == true ? "banana" : "mcs";
@@ -630,16 +703,4 @@
     private sealed record BlockChoice(string Key, string Label, Block MatchBlock);
     private sealed record TestTypeChoice(int Id, string Label);
     private sealed record ResultTypeOption(int Id, string Name);
-    private sealed class MappingRow
-    {
-        public string RowLabel { get; init; } = string.Empty;
-        public string BlockControlId { get; init; } = string.Empty;
-        public string TestControlId { get; init; } = string.Empty;
-        public string MappingKey { get; init; } = string.Empty;
-        public string RawBlockName { get; init; } = string.Empty;
-        public int ResultCount { get; init; }
-        public string BlockKey { get; set; } = string.Empty;
-        public bool BlockWasSuggested { get; init; }
-        public int LabTestTypeId { get; set; }
-    }
 }

@@ -3,8 +3,9 @@
 @using MetaGrow.Web.Services
 @inject ITgsApiService TgsApi
 @inject PropertyMergeApiClient Merges
+@implements IDisposable
 
-<DxPopup @bind-Visible="_visible" ShowFooter="true" HeaderText="Review property merge"
+<DxPopup @bind-Visible="_visible" @bind-Visible:after="VisibilityChanged" ShowFooter="true" HeaderText="Review property merge"
          AllowDrag="true" ShowCloseButton="@(!_working)" CloseOnEscape="@(!_working)"
          Width="1100px">
     <BodyContentTemplate>
@@ -85,7 +86,7 @@
                                                             ValueChanged="@((PropertyMergeFieldValue value) => ChangeFieldChoice(field, value))"
                                                             TextFieldName="@nameof(FieldChoiceOption.Label)"
                                                             ValueFieldName="@nameof(FieldChoiceOption.Value)"
-                                                            AllowUserInput="false" Enabled="@(!_working && !ReviewingSavedRequest)" SizeMode="SizeMode.Small"
+                                                            AllowUserInput="false" Enabled="@(!_working && !ReviewingSavedRequest && !(_planOnly && field.FieldName == "PropertyName"))" SizeMode="SizeMode.Small"
                                                             CssClass="merge-combo" />
                                             </td>
                                         </tr>
@@ -181,7 +182,11 @@
                 @if (_isReviewer)
                 {
                     <div class="merge-message info">
-                        @if (ReviewingSavedRequest)
+                        @if (_planOnly)
+                        {
+                            <span>This saves your choices for the batch. The destination name is retained. No farms are merged until you start the batch.</span>
+                        }
+                        else if (ReviewingSavedRequest)
                         {
                             <span>The submitted direction and block decisions are locked for review; current farm-field differences have been refreshed. The stored procedure will repeat every safety check immediately before committing.</span>
                         }
@@ -210,7 +215,13 @@
                     <span>@WorkingMessage</span>
                 </div>
             }
-            @if (_preview is not null && !_isReviewer)
+            @if (_preview is not null && _planOnly)
+            {
+                <DxButton Text="Use this merge plan" RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(_preview.CanRequestMerge && !_working && !_refreshing && !_loading && _error is null)"
+                          Click="AcceptPlan" />
+            }
+            else if (_preview is not null && !_isReviewer)
             {
                 <DxButton Text="Request merge approval" RenderStyle="ButtonRenderStyle.Primary"
                           Enabled="@(_preview.CanRequestMerge && !_working && !_refreshing)" Click="RequestApprovalAsync" />
@@ -237,6 +248,8 @@
     private bool _loading;
     private bool _refreshing;
     private bool _working;
+    private bool _planOnly;
+    private TaskCompletionSource<PropertyMergePreview?>? _planCompletion;
     private string WorkingMessage => !_isReviewer
         ? "Sending merge request..."
         : ReviewingSavedRequest
@@ -260,6 +273,7 @@
 
     public Task OpenAsync(int sourcePropertyId, int targetPropertyId)
     {
+        _planOnly = false;
         _approvalRequestId = null;
         return OpenAsync(new PropertyMergePreviewRequest
         {
@@ -270,6 +284,7 @@
 
     public Task OpenAsync(ApiModels.MetaGrow.MetaGrowPropertyMergeRequestDto request)
     {
+        _planOnly = false;
         _approvalRequestId = request.Id;
         return OpenAsync(new PropertyMergePreviewRequest
         {
@@ -279,6 +294,30 @@
             FieldChoices = request.FieldChoices.Select(Clone).ToList()
         });
     }
+
+    public async Task<PropertyMergePreview?> ReviewPlanAsync(PropertyMergePreviewRequest request)
+    {
+        _planOnly = true;
+        _approvalRequestId = null;
+        _planCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completion = _planCompletion;
+        await OpenAsync(request);
+        return await completion.Task;
+    }
+
+    private void AcceptPlan()
+    {
+        if (!_planOnly || _preview is null || !_preview.CanRequestMerge || _refreshing || _loading || _error is not null) return;
+        _planCompletion?.TrySetResult(_preview);
+        Close();
+    }
+
+    private void VisibilityChanged()
+    {
+        if (!_visible) _planCompletion?.TrySetResult(null);
+    }
+
+    public void Dispose() => _planCompletion?.TrySetResult(null);
 
     private async Task OpenAsync(PropertyMergePreviewRequest request)
     {
@@ -440,7 +479,11 @@
         ValueSource = item.ValueSource
     };
 
-    private void Close() => _visible = false;
+    private void Close()
+    {
+        _visible = false;
+        VisibilityChanged();
+    }
     private static string Display(string? value) => value switch
     {
         null => "Not set (NULL)",

@@ -1,0 +1,8 @@
+.admin-page { display: flex; flex-direction: column; gap: 2rem; padding: .5rem 0 2rem; width: 100%; }
+.mg-hero { max-width: 48rem; }
+.mg-eyebrow { color: var(--mg-blue, #007cba); font-size: .75rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+.mg-hero h1 { font-size: 2rem; margin: .4rem 0; }
+/* Match the home page's readable text on the shared dark hero background. */
+.mg-hero p { color: #c9c9c9; margin: 0 0 1.25rem; }
+.mg-keyline { border: 0; border-top: 2px solid var(--mg-red, #d1242b); margin: 0; width: 5rem; }
+.tiles { display: flex; flex-wrap: wrap; gap: 1rem; }

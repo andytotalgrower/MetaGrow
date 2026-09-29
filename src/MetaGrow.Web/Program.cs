@@ -29,6 +29,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     options.AccessDeniedPath = "/Account/AccessDenied";
     options.ExpireTimeSpan = TimeSpan.FromDays(7);
     options.SlidingExpiration = true;
+    options.EventsType = typeof(SessionCookieEvents);
     options.Cookie.HttpOnly = true;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.Cookie.SameSite = SameSiteMode.Lax;
@@ -46,6 +47,7 @@ builder.Services.AddHttpClient(AuthApiClient.HttpClientName, client =>
     })
     .AddHttpMessageHandler<ClientIpForwardingHandler>();
 builder.Services.AddSingleton<ServerTokenStore>();
+builder.Services.AddScoped<SessionCookieEvents>();
 builder.Services.AddScoped<AuthApiClient>();
 builder.Services.AddScoped<ApiTokenService>();
 builder.Services.AddScoped<AccountApiClient>();

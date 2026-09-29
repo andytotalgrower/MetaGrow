@@ -56,6 +56,8 @@ public sealed class RoleContractTests
 
     [Theory]
     [InlineData(nameof(PropertyMergesController.ExecuteImmediately))]
+    [InlineData(nameof(PropertyMergesController.ExecuteReviewed))]
+    [InlineData(nameof(PropertyMergesController.GetExecutionStatus))]
     [InlineData(nameof(PropertyMergesController.Approve))]
     [InlineData(nameof(PropertyMergesController.Reject))]
     public void Only_managers_and_administrators_can_execute_or_reject_property_merges(string methodName)

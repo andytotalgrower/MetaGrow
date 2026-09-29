@@ -17,7 +17,8 @@ public static class SampleSurveyFilter
         survey.HasNutritionSamples;
 
     public static bool CanImportLabData(SampleSurveySummaryDto survey) =>
-        !survey.HasImportedLabData;
+        !survey.HasImportedLabData &&
+        !survey.SampleTypes.Any(sampleType => sampleType.Id is 30 or 40);
 
     public static IReadOnlyList<SampleSurveySummaryDto> Apply(
         IEnumerable<SampleSurveySummaryDto> surveys,

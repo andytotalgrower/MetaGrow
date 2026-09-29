@@ -1,0 +1,273 @@
+@page "/admin/crop-types"
+@attribute [Authorize(Roles = MetaGrowRoles.Admin)]
+@using ApiModels
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@using MetaGrow.Web.Services
+@inject ITgsApiService TgsApi
+@inject ApiTokenService ApiTokens
+@inject AuthenticationStateProvider AuthenticationState
+@inject ILogger<CropTypes> Logger
+@inject IJSRuntime JS
+
+<PageTitle>Crop types | MetaGrow</PageTitle>
+<NavigationLock ConfirmExternalNavigation="@HasUnsavedChanges" OnBeforeInternalNavigation="BeforeNavigation" />
+
+<div class="crop-types-page">
+    <header>
+        <div><AdminBackLink /><h1>Crop types</h1><p>Maintain crops and the parent crops they belong to.</p></div>
+        <DxButton Text="Add crop" RenderStyle="ButtonRenderStyle.Primary" Click="@(() => RequestNewCropAsync(0))" Enabled="@(CanSelect && !_loading && _loaded)" />
+    </header>
+    @if (_message is not null)
+    {
+        <div class="crop-message @(_error ? "error" : "success")" role="status">@_message</div>
+    }
+    @if (_loading)
+    {
+        <p role="status">Loading crop types…</p>
+    }
+    else if (!_loaded)
+    {
+        <DxButton Text="Retry loading" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="LoadAsync" Enabled="@(!_busy)" />
+    }
+    else
+    {
+        <div class="crop-workspace">
+            <section class="crop-browser" aria-label="Crop hierarchy">
+                <label for="crop-search">Find a crop</label>
+                <input id="crop-search" type="search" @bind="_search" @bind:event="oninput" placeholder="Search crop names" />
+                <p class="muted">@_crops.Count crops · @_crops.Count(c => c.ParentCropTypeId == 0) top-level crops</p>
+                @if (_crops.Count == 0)
+                {
+                    <p>No crops yet. Add a crop to get started.</p>
+                }
+                else if (!VisibleRoots.Any())
+                {
+                    <p>No crops match your search.</p>
+                }
+                @foreach (var root in VisibleRoots)
+                {
+                    var children = Children(root.CropTypeId);
+                    var expanded = !string.IsNullOrWhiteSpace(_search) || _expanded.Contains(root.CropTypeId);
+                    <div class="crop-group" @key="root.CropTypeId">
+                        <div class="crop-row">
+                            @if (children.Count > 0)
+                            {
+                                <button class="expand" aria-label="@($"{(expanded ? "Collapse" : "Expand")} {root.CropTypeName}")" aria-expanded="@expanded" @onclick="@(() => Toggle(root.CropTypeId))">@(expanded ? "−" : "+")</button>
+                            }
+                            <button class="crop-name" aria-pressed="@(_editor?.CropTypeId == root.CropTypeId)" disabled="@(!CanSelect)" @onclick="@(() => RequestEditAsync(root))">@root.CropTypeName <small>@(children.Count > 0 ? $"({children.Count})" : "")</small></button>
+                            <DxButton Text="Add child" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@CanSelect" Click="@(() => RequestNewCropAsync(root.CropTypeId))" />
+                        </div>
+                        @if (expanded)
+                        {
+                            @foreach (var child in children.Where(c => Matches(root) || Matches(c)))
+                            {
+                                <button @key="child.CropTypeId" class="child crop-name" aria-pressed="@(_editor?.CropTypeId == child.CropTypeId)" disabled="@(!CanSelect)" @onclick="@(() => RequestEditAsync(child))">@child.CropTypeName</button>
+                            }
+                        }
+                    </div>
+                }
+            </section>
+            <section class="crop-editor" aria-label="Crop details">
+                @if (_editor is null)
+                {
+                    <h2>Select a crop</h2><p>Choose a crop to edit its name or parent, or add a new crop.</p>
+                }
+                else
+                {
+                    <h2>@(_editor.CropTypeId == 0 ? "Add crop" : "Edit crop")</h2>
+                    <form @onsubmit="SaveAsync" @onsubmit:preventDefault>
+                        <fieldset disabled="@(!CanSelect)">
+                            <label for="crop-name">Crop name</label>
+                            <input id="crop-name" @bind="_editor.CropTypeName" @bind:event="oninput" @bind:after="ClearReview" maxlength="50" required />
+                            <label for="crop-parent">Parent crop</label>
+                            <select id="crop-parent" @bind="_editor.ParentCropTypeId" @bind:after="ClearReview" disabled="@HasChildren">
+                                <option value="0">None — top-level crop</option>
+                                @foreach (var parent in _crops.Where(c => c.ParentCropTypeId == 0 && c.CropTypeId != _editor.CropTypeId))
+                                {
+                                    <option value="@parent.CropTypeId">@parent.CropTypeName</option>
+                                }
+                            </select>
+                            <p class="muted">@(HasChildren ? "Move this crop's children before assigning it a parent." : "A crop can belong to one top-level parent.")</p>
+                            <div class="editor-actions">
+                                <DxButton Text="@(_busy ? "Saving…" : "Save crop")" RenderStyle="ButtonRenderStyle.Primary" SubmitFormOnClick="true" Enabled="@CanSelect" />
+                                <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="Cancel" Enabled="@CanSelect" />
+                                @if (_editor.CropTypeId > 0)
+                                {
+                                    <DxButton Text="Delete" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(CanSelect && !HasChildren)" Click="@(() => _confirmDelete = true)" />
+                                }
+                            </div>
+                            @if (_similarCrops.Count > 0)
+                            {
+                                <div class="duplicate-review" role="alert" aria-labelledby="duplicate-heading">
+                                    <h3 id="duplicate-heading">Review existing crops</h3>
+                                    <p>@(_exactDuplicate ? "This name already exists. Open the existing crop or change the name." : $"These crops have names similar to “{_editor.CropTypeName}”. Check spelling and spacing before creating another crop.")</p>
+                                    <ul>
+                                        @foreach (var candidate in _similarCrops)
+                                        {
+                                            <li><strong>@candidate.CropTypeName</strong> — @ParentName(candidate)
+                                                <DxButton Text="Open existing crop" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@CanSelect" Click="@(() => RequestEditAsync(candidate))" /></li>
+                                        }
+                                    </ul>
+                                    @if (!_exactDuplicate)
+                                    {
+                                        <DxButton Text="Create as a different crop" RenderStyle="ButtonRenderStyle.Primary" Click="ConfirmCreateAsync" Enabled="@CanSelect" />
+                                    }
+                                    <DxButton Text="Go back and correct name" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ClearReview" Enabled="@CanSelect" />
+                                </div>
+                            }
+                            @if (_confirmDelete)
+                            {
+                                <div class="delete-confirm" role="alert">
+                                    <p>Delete @_editor.CropTypeName? Crops referenced by existing data cannot be deleted.</p>
+                                    <DxButton Text="Confirm delete" RenderStyle="ButtonRenderStyle.Danger" Click="DeleteAsync" Enabled="@CanSelect" />
+                                    <DxButton Text="Keep crop" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="@(() => _confirmDelete = false)" Enabled="@CanSelect" />
+                                </div>
+                            }
+                        </fieldset>
+                    </form>
+                }
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private List<CropType> _crops = [];
+    private readonly HashSet<int> _expanded = [];
+    private CropType? _editor;
+    private string? _originalName;
+    private int _originalParent;
+    private bool _confirmingSelection;
+    private bool CanSelect => !_busy && !_confirmingSelection;
+    private bool HasUnsavedChanges => _editor is not null &&
+        ((_editor.CropTypeName ?? "") != (_originalName ?? "") || _editor.ParentCropTypeId != _originalParent);
+    private string _search = "";
+    private string? _message;
+    private bool _error, _busy, _loaded, _confirmDelete;
+    private bool _loading = true;
+    private List<CropType> _similarCrops = [];
+    private bool _exactDuplicate;
+    private string? _reviewKey;
+    private bool HasChildren => _editor is { CropTypeId: > 0 } && _crops.Any(c => c.ParentCropTypeId == _editor.CropTypeId);
+    private IEnumerable<CropType> VisibleRoots => _crops.Where(c => c.ParentCropTypeId == 0 && (Matches(c) || Children(c.CropTypeId).Any(Matches)));
+    private bool Matches(CropType crop) => string.IsNullOrWhiteSpace(_search) || (crop.CropTypeName?.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase) ?? false);
+    private List<CropType> Children(int id) => _crops.Where(c => c.ParentCropTypeId == id).ToList();
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            var crops = await TgsApi.GetCrops();
+            _loaded = crops is not null && string.IsNullOrWhiteSpace(TgsApi.ErrorMessage);
+            if (_loaded) _crops = crops!.OrderBy(c => c.CropTypeName, StringComparer.OrdinalIgnoreCase).ToList();
+            else SetMessage(TgsApi.ErrorMessage ?? "Crop types could not be loaded.", true);
+        }
+        catch (Exception exception) { Logger.LogError(exception, "Loading crop types failed"); _loaded = false; SetMessage("Crop types could not be loaded. Please retry.", true); }
+        finally { _loading = false; }
+    }
+
+    private void ClearReview() { _similarCrops = []; _exactDuplicate = false; _reviewKey = null; }
+    private string ParentName(CropType crop) => crop.ParentCropTypeId == 0 ? "Top-level crop" : _crops.FirstOrDefault(c => c.CropTypeId == crop.ParentCropTypeId)?.CropTypeName ?? "Parent crop";
+    private void NewCrop(int parent) => SetEditor(new() { ParentCropTypeId = parent });
+    private void Edit(CropType crop) => SetEditor(new() { CropTypeId = crop.CropTypeId, CropTypeName = crop.CropTypeName, ParentCropTypeId = crop.ParentCropTypeId });
+    private void SetEditor(CropType crop)
+    {
+        ClearReview();
+        _editor = crop;
+        _originalName = crop.CropTypeName;
+        _originalParent = crop.ParentCropTypeId;
+        _message = null;
+        _confirmDelete = false;
+        if (crop.ParentCropTypeId > 0) _expanded.Add(crop.ParentCropTypeId);
+    }
+    private async Task RequestEditAsync(CropType crop)
+    {
+        if (!CanSelect || _editor?.CropTypeId == crop.CropTypeId) return;
+        if (await CanDiscardAsync()) Edit(crop);
+    }
+    private async Task RequestNewCropAsync(int parent)
+    {
+        if (!CanSelect) return;
+        if (await CanDiscardAsync()) NewCrop(parent);
+    }
+    private async Task<bool> CanDiscardAsync()
+    {
+        if (!HasUnsavedChanges) return true;
+        _confirmingSelection = true;
+        try { return await JS.InvokeAsync<bool>("confirm", "Discard unsaved crop changes and switch to the selected crop?"); }
+        finally { _confirmingSelection = false; }
+    }
+    private void Cancel() { if (_busy) return; ClearReview(); _editor = null; _confirmDelete = false; _message = null; }
+    private void Toggle(int id) { if (!_expanded.Remove(id)) _expanded.Add(id); }
+    private void SetMessage(string message, bool error = false) { _message = message; _error = error; }
+    private void BeforeNavigation(LocationChangingContext context)
+    {
+        if (!HasUnsavedChanges && !_busy) return;
+        context.PreventNavigation();
+        SetMessage("Save or cancel the crop editor before leaving this page.", true);
+    }
+
+    private Task SaveAsync() => SaveReviewedAsync(false);
+    private Task ConfirmCreateAsync() => SaveReviewedAsync(true);
+    private async Task SaveReviewedAsync(bool confirmed)
+    {
+        if (_busy || _editor is null) return;
+        if (string.IsNullOrWhiteSpace(_editor.CropTypeName)) { SetMessage("Enter a crop name.", true); return; }
+        // Refresh before both review and confirmation so other administrators' additions are included.
+        if (_editor.CropTypeId == 0)
+        {
+            _busy = true;
+            try
+            {
+                var crops = await TgsApi.GetCrops();
+                if (crops is null || !string.IsNullOrWhiteSpace(TgsApi.ErrorMessage))
+                { SetMessage("The latest crop list could not be checked. Please retry.", true); return; }
+                _crops = crops.OrderBy(c => c.CropTypeName, StringComparer.OrdinalIgnoreCase).ToList();
+                var review = CropNameReview.Check(_editor.CropTypeName, _editor.ParentCropTypeId, _crops);
+                _similarCrops = review.Candidates;
+                _exactDuplicate = review.HasExactDuplicate;
+                var accepted = confirmed && _reviewKey == review.Key;
+                _reviewKey = review.Key;
+                if (_exactDuplicate || (_similarCrops.Count > 0 && !accepted)) return;
+            }
+            catch (Exception exception) { Logger.LogError(exception, "Crop duplicate check failed"); SetMessage("The latest crop list could not be checked. Please retry.", true); return; }
+            finally { _busy = false; }
+        }
+        await MutateAsync(async token =>
+        {
+            var saved = await TgsApi.SaveCropType(_editor, token);
+            if (saved is null) return false;
+            if (saved.ParentCropTypeId > 0) _expanded.Add(saved.ParentCropTypeId);
+            return true;
+        }, "Crop saved.");
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_busy || _editor is null || !_confirmDelete || HasChildren) return;
+        await MutateAsync(token => TgsApi.DeleteCropType(_editor.CropTypeId, token), "Crop deleted.");
+    }
+
+    private async Task MutateAsync(Func<string, Task<bool>> action, string success)
+    {
+        _busy = true;
+        try
+        {
+            var state = await AuthenticationState.GetAuthenticationStateAsync();
+            var token = await ApiTokens.GetAccessTokenAsync(state.User);
+            if (string.IsNullOrWhiteSpace(token)) { SetMessage("Your session has expired. Sign in again.", true); return; }
+            if (!await action(token)) { SetMessage(TgsApi.ErrorMessage ?? "The crop could not be changed.", true); return; }
+            _editor = null;
+            ClearReview();
+            _confirmDelete = false;
+            SetMessage(success);
+            await LoadAsync();
+        }
+        catch (TokenRefreshUnavailableException exception) { SetMessage(exception.Message, true); }
+        catch (Exception exception) { Logger.LogError(exception, "Crop maintenance failed"); SetMessage("The crop change could not be confirmed. Refresh before trying again.", true); }
+        finally { _busy = false; }
+    }
+}

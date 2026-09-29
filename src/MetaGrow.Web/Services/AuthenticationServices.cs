@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
@@ -22,33 +22,32 @@ public sealed class ServerTokenStore(IDistributedCache cache, IDataProtectionPro
 {
     private static readonly DistributedCacheEntryOptions CacheOptions = new() { SlidingExpiration = TimeSpan.FromDays(14) };
     private readonly IDataProtector protector = dataProtection.CreateProtector("MetaGrow.Web.ServerTokenStore");
-    private readonly ConcurrentDictionary<string, TokenEntry> entries = new();
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> locks = new();
+    // Fixed stripes stay alive while requests are waiting, including during logout.
+    private readonly SemaphoreSlim[] locks = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
     private static string Key(string id) => $"mg_token:{id}";
 
     public async Task<TokenEntry?> GetAsync(string id)
     {
-        if (entries.TryGetValue(id, out var entry)) return entry;
         var value = await cache.GetStringAsync(Key(id));
         if (value is null) return null;
+        TokenEntry? entry;
         try { entry = JsonSerializer.Deserialize<TokenEntry>(protector.Unprotect(value)); }
         catch { await cache.RemoveAsync(Key(id)); return null; }
-        if (entry is not null) entries[id] = entry;
         return entry;
     }
     public async Task SetAsync(string id, TokenEntry entry)
     {
-        entries[id] = entry;
         await cache.SetStringAsync(Key(id), protector.Protect(JsonSerializer.Serialize(entry)), CacheOptions);
     }
     public async Task RemoveAsync(string id)
     {
-        entries.TryRemove(id, out _);
-        if (locks.TryRemove(id, out var gate)) gate.Dispose();
         await cache.RemoveAsync(Key(id));
     }
-    public SemaphoreSlim GetLock(string id) => locks.GetOrAdd(id, _ => new(1, 1));
+    public SemaphoreSlim GetLock(string id) => locks[(uint)StringComparer.Ordinal.GetHashCode(id) % (uint)locks.Length];
 }
+
+public sealed class TokenRefreshUnavailableException(Exception? inner = null)
+    : HttpRequestException("Your session could not be renewed because MetaGrow.Api is temporarily unavailable. Please try again shortly.", inner);
 
 public sealed class AuthApiClient(IHttpClientFactory clients, ILogger<AuthApiClient> logger)
 {
@@ -61,7 +60,29 @@ public sealed class AuthApiClient(IHttpClientFactory clients, ILogger<AuthApiCli
     public Task<(MetaGrowMfaSetupInfo?, string[])> MfaSetupInfoAsync(string token) => Post<MetaGrowMfaChallengeRequest, MetaGrowMfaSetupInfo>("auth/mfa/setup-info", new() { ChallengeToken = token });
     public Task<(MetaGrowMfaSetupResponse?, string[])> MfaSetupAsync(string token, string code) => Post<MetaGrowMfaSetupRequest, MetaGrowMfaSetupResponse>("auth/mfa/setup", new() { ChallengeToken = token, Code = code });
     public Task<(MetaGrowAuthResponse?, string[])> MfaVerifyAsync(MetaGrowMfaVerifyRequest value) => Post<MetaGrowMfaVerifyRequest, MetaGrowAuthResponse>("auth/mfa/verify", value);
-    public Task<(MetaGrowAuthResponse?, string[])> RefreshAsync(string token) => Post<MetaGrowRefreshRequest, MetaGrowAuthResponse>("auth/refresh", new() { RefreshToken = token });
+    // Only an explicit authentication rejection invalidates the saved session.
+    public async Task<MetaGrowAuthResponse?> RefreshAsync(string token)
+    {
+        try
+        {
+            using var response = await Client.PostAsJsonAsync("auth/refresh", new MetaGrowRefreshRequest { RefreshToken = token });
+            if (response.StatusCode == HttpStatusCode.Unauthorized) return null;
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("MetaGrow token renewal failed with HTTP {StatusCode}.", (int)response.StatusCode);
+                throw new TokenRefreshUnavailableException();
+            }
+            var fresh = await response.Content.ReadFromJsonAsync<MetaGrowAuthResponse>();
+            if (fresh is null || string.IsNullOrWhiteSpace(fresh.AccessToken) || string.IsNullOrWhiteSpace(fresh.RefreshToken))
+                throw new TokenRefreshUnavailableException();
+            return fresh;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException or JsonException)
+        {
+            logger.LogWarning(exception, "Could not renew a MetaGrow session; retaining its saved credentials.");
+            throw new TokenRefreshUnavailableException(exception);
+        }
+    }
     public Task<string[]> ConfirmEmailAsync(string userId, string code) => PostOnly("auth/confirm-email", new MetaGrowConfirmEmailRequest { UserId = userId, Code = code });
     public Task<string[]> ForgotPasswordAsync(string email) => PostOnly("auth/forgot-password", new MetaGrowForgotPasswordRequest { Email = email });
     public Task<string[]> ResetPasswordAsync(MetaGrowResetPasswordRequest value) => PostOnly("auth/reset-password", value);
@@ -112,22 +133,30 @@ public sealed class AuthApiClient(IHttpClientFactory clients, ILogger<AuthApiCli
 
 public sealed class ApiTokenService(ServerTokenStore tokens, AuthApiClient auth)
 {
+    public event Func<Task>? SessionExpired;
+
+    private async Task<string?> ExpiredAsync()
+    {
+        if (SessionExpired is { } expired) await expired();
+        return null;
+    }
+
     public async Task<string?> GetAccessTokenAsync(ClaimsPrincipal principal)
     {
         var id = principal.FindFirst(AuthConstants.SessionClaim)?.Value;
-        if (id is null) return null;
+        if (id is null) return await ExpiredAsync();
         var entry = await tokens.GetAsync(id);
-        if (entry is null) return null;
+        if (entry is null) return await ExpiredAsync();
         if (entry.AccessTokenExpiresUtc - DateTime.UtcNow > TimeSpan.FromSeconds(60)) return entry.AccessToken;
         var gate = tokens.GetLock(id);
         await gate.WaitAsync();
         try
         {
             entry = await tokens.GetAsync(id);
-            if (entry is null) return null;
+            if (entry is null) return await ExpiredAsync();
             if (entry.AccessTokenExpiresUtc - DateTime.UtcNow > TimeSpan.FromSeconds(60)) return entry.AccessToken;
-            var (fresh, _) = await auth.RefreshAsync(entry.RefreshToken);
-            if (fresh is null) { await tokens.RemoveAsync(id); return null; }
+            var fresh = await auth.RefreshAsync(entry.RefreshToken);
+            if (fresh is null) { await tokens.RemoveAsync(id); return await ExpiredAsync(); }
             await tokens.SetAsync(id, new(fresh.AccessToken, fresh.AccessTokenExpiresUtc, fresh.RefreshToken));
             return fresh.AccessToken;
         }
@@ -192,7 +221,9 @@ public sealed class AccountApiClient(
         object? body = null,
         CancellationToken cancellationToken = default)
     {
-        var request = await CreateRequest(method, path, body);
+        HttpRequestMessage? request;
+        try { request = await CreateRequest(method, path, body); }
+        catch (TokenRefreshUnavailableException exception) { return (default, exception.Message); }
         if (request is null) return (default, "Your session has expired. Please log in again.");
         var response = await Client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode) return (default, await ReadError(response));
@@ -205,7 +236,9 @@ public sealed class AccountApiClient(
         object body,
         CancellationToken cancellationToken = default)
     {
-        var request = await CreateRequest(method, path, body);
+        HttpRequestMessage? request;
+        try { request = await CreateRequest(method, path, body); }
+        catch (TokenRefreshUnavailableException exception) { return exception.Message; }
         if (request is null) return "Your session has expired. Please log in again.";
         var response = await Client.SendAsync(request, cancellationToken);
         return response.IsSuccessStatusCode ? null : await ReadError(response);
@@ -232,6 +265,17 @@ public sealed class AccountApiClient(
         }
         catch { }
         return $"Request failed ({(int)response.StatusCode}).";
+    }
+}
+
+public sealed class SessionCookieEvents(ServerTokenStore tokens) : CookieAuthenticationEvents
+{
+    public override async Task ValidatePrincipal(CookieValidatePrincipalContext context)
+    {
+        var id = context.Principal?.FindFirst(AuthConstants.SessionClaim)?.Value;
+        if (id is not null && await tokens.GetAsync(id) is not null) return;
+        context.RejectPrincipal();
+        await context.HttpContext.SignOutAsync(context.Scheme.Name);
     }
 }
 

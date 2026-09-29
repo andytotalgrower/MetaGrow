@@ -45,7 +45,9 @@ public sealed class PropertyDeletionApiClient(
         object? body = null)
     {
         var principal = (await authenticationState.GetAuthenticationStateAsync()).User;
-        var accessToken = await tokens.GetAccessTokenAsync(principal);
+        string? accessToken;
+        try { accessToken = await tokens.GetAccessTokenAsync(principal); }
+        catch (TokenRefreshUnavailableException exception) { return (default, exception.Message); }
         if (accessToken is null) return (default, "Your session has expired. Please log in again.");
 
         using var request = new HttpRequestMessage(method, path);

@@ -1,0 +1,355 @@
+@page "/admin/multicrop-setup"
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@using MetaGrow.Web.Services
+@using System.Text.Json
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager)]
+@inject ITgsApiService Api
+@inject ApiTokenService Tokens
+@inject AuthenticationStateProvider AuthenticationState
+@inject IJSRuntime JS
+@inject ILogger<MultiCropSetup> Logger
+
+<PageTitle>Multi-crop survey setup | MetaGrow</PageTitle>
+<NavigationLock ConfirmExternalNavigation="@Dirty" OnBeforeInternalNavigation="BeforeNavigation" />
+
+<div class="setup-page">
+    <header class="setup-header">
+        <div><AdminBackLink /><h1>Multi-crop survey setup</h1><p>Configure survey types, measurements and spray options.</p></div>
+        <DxButton Text="Refresh" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="Reload" />
+    </header>
+    <div class="message-space" role="status">@if (_message is not null) { <div class="setup-message @(_error ? "error" : "success")">@_message</div> }</div>
+    <nav aria-label="Setup sections">
+        <DxTabs @key="_tabsVersion" ActiveTabIndex="@Array.FindIndex(Tabs, tab => tab.Key == _tab)" ActiveTabIndexChanged="ChangeSection">
+            @foreach (var tab in Tabs)
+            {
+                @* DxTabs needs an enabled active tab, including during loading/saving. *@
+                <DxTab Text="@tab.Value" Enabled="@(!_busy || _tab == tab.Key)" />
+            }
+        </DxTabs>
+    </nav>
+    @if (_loading) { <p role="status">Loading survey setup…</p> }
+    else if (_catalogue is null) { <p>Survey setup could not be loaded. Use Refresh to try again.</p> }
+    else
+    {
+        <div class="setup-workspace">
+            <main class="setup-content">
+                @if (_tab != "types")
+                {
+                    <input id="setup-search" type="search" aria-label="@SearchPlaceholder" placeholder="@SearchPlaceholder" @bind="_search" @bind:event="oninput" />
+                }
+                @if (_tab == "types")
+                {
+                    <div class="survey-type-toolbar">
+                        <div class="survey-type-picker">
+                            <DxComboBox @key="_typeSelectorVersion" TData="SurveyTypeChoice" TValue="int"
+                                        Data="@SurveyTypeChoices" Value="@_typeId" ValueChanged="SelectType"
+                                        TextFieldName="@nameof(SurveyTypeChoice.DisplayText)" ValueFieldName="@nameof(SurveyTypeChoice.Id)"
+                                        aria-label="Survey type" NullText="Search survey types by name, code or crop"
+                                        AllowUserInput="true" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                        Enabled="@(!_busy)">
+                                <ItemDisplayTemplate Context="choice">
+                                    <div class="survey-type-option">
+                                        <strong>@choice.DataItem.Name</strong>
+                                        <span class="survey-type-meta"><span class="survey-type-code">@choice.DataItem.Code</span><span>@choice.DataItem.Crop</span></span>
+                                    </div>
+                                </ItemDisplayTemplate>
+                            </DxComboBox>
+                        </div>
+                        <DxButton Text="New survey type" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="@(() => Edit(new SurveyTypeSetup(), "New survey type"))" />
+                    </div>
+                    @if (SelectedType is { } selected)
+                    {
+                        <section class="setup-card">
+                            <div class="section-heading"><div><h2>@selected.ApplicationName</h2><p>@selected.ApplicationCode · @CropName(selected.CropTypeId)</p></div>
+                                <div class="actions"><DxButton IconCssClass="oi oi-pencil" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Edit details {selected.ApplicationName}")" title="@($"Edit details {selected.ApplicationName}")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(selected, "Survey type details"))" /><DxButton Text="Clone" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Clone(selected))" /><DxButton IconCssClass="oi oi-trash" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Delete {selected.ApplicationName}")" title="@($"Delete {selected.ApplicationName}")" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Delete("types", selected.ApplicationId, selected.ApplicationName))" /></div>
+                            </div>
+                            <p class="muted">Setup changes also affect existing reports that use this type. Clone the type when you need a different survey structure.</p>
+                            <div class="section-heading"><h3>Measurement groups</h3><DxButton Text="Add group" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(new SurveyGroupSetup { ApplicationId = _typeId }, "New measurement group"))" /></div>
+                            <div class="table-scroll"><table><thead><tr><th>Group</th><th>Code</th><th>Order</th><th>Actions</th></tr></thead><tbody>
+                                @foreach (var group in TypeGroups)
+                                {
+                                    <tr @key="group.ApplicationGroupId" class="@(_groupId == group.ApplicationGroupId ? "selected" : "")"><td><DxButton Text="@group.GroupName" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => SelectGroup(group.ApplicationGroupId))" /></td><td>@group.GroupCode</td><td><div class="order-controls"><DxButton IconCssClass="oi oi-arrow-top" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" title="Move up" aria-label="@($"Move {group.GroupName} up")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy && TypeGroups.First().ApplicationGroupId != group.ApplicationGroupId)" Click="@(() => Move("groups", group.ApplicationGroupId, -1))" /><DxButton IconCssClass="oi oi-arrow-bottom" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" title="Move down" aria-label="@($"Move {group.GroupName} down")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy && TypeGroups.Last().ApplicationGroupId != group.ApplicationGroupId)" Click="@(() => Move("groups", group.ApplicationGroupId, 1))" /></div></td><td class="actions"><DxButton IconCssClass="oi oi-pencil" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Edit {group.GroupName}")" title="@($"Edit {group.GroupName}")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(group, "Edit measurement group"))" /><DxButton IconCssClass="oi oi-trash" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Delete {group.GroupName}")" title="@($"Delete {group.GroupName}")" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Delete("groups", group.ApplicationGroupId, group.GroupName))" /></td></tr>
+                                }
+                            </tbody></table></div>
+                            @if (!TypeGroups.Any()) { <p>No measurement groups yet. Add a group or clone an existing survey type.</p> }
+                            @if (SelectedGroup is { } selectedGroup)
+                            {
+                                <div class="section-heading"><h3>@selectedGroup.GroupName measurements</h3><DxButton Text="Assign measurement" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(new SurveyParameterSetup { ApplicationGroupId = _groupId }, "Assign measurement"))" /></div>
+                                <div class="table-scroll"><table><thead><tr><th>Measurement</th><th>Order</th><th class="flag-cell">Always on chart</th><th class="flag-cell">Always in summary</th><th>Actions</th></tr></thead><tbody>
+                                    @foreach (var parameter in GroupParameters)
+                                    {
+                                        <tr @key="parameter.ApplicationParameterId"><td>@ParameterName(parameter.CollectionParameterId)</td><td><div class="order-controls"><DxButton IconCssClass="oi oi-arrow-top" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" title="Move up" aria-label="@($"Move {ParameterName(parameter.CollectionParameterId)} up")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy && GroupParameters.First().ApplicationParameterId != parameter.ApplicationParameterId)" Click="@(() => Move("parameters", parameter.ApplicationParameterId, -1))" /><DxButton IconCssClass="oi oi-arrow-bottom" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" title="Move down" aria-label="@($"Move {ParameterName(parameter.CollectionParameterId)} down")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy && GroupParameters.Last().ApplicationParameterId != parameter.ApplicationParameterId)" Click="@(() => Move("parameters", parameter.ApplicationParameterId, 1))" /></div></td><td class="flag-cell"><span class="status-icon @(parameter.AlwaysOnGraph ? "is-yes" : "is-no")" role="img" aria-label="@YesNo(parameter.AlwaysOnGraph)" title="@YesNo(parameter.AlwaysOnGraph)"><span class="oi @(parameter.AlwaysOnGraph ? "oi-check" : "oi-x")" aria-hidden="true"></span></span></td><td class="flag-cell"><span class="status-icon @(parameter.AlwaysOnGrid ? "is-yes" : "is-no")" role="img" aria-label="@YesNo(parameter.AlwaysOnGrid)" title="@YesNo(parameter.AlwaysOnGrid)"><span class="oi @(parameter.AlwaysOnGrid ? "oi-check" : "oi-x")" aria-hidden="true"></span></span></td><td class="actions"><DxButton IconCssClass="oi oi-pencil" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Edit {ParameterName(parameter.CollectionParameterId)}")" title="@($"Edit {ParameterName(parameter.CollectionParameterId)}")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(parameter, "Edit measurement assignment"))" /><DxButton IconCssClass="oi oi-trash" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Remove {ParameterName(parameter.CollectionParameterId)}")" title="@($"Remove {ParameterName(parameter.CollectionParameterId)}")" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Delete("parameters", parameter.ApplicationParameterId, ParameterName(parameter.CollectionParameterId)))" /></td></tr>
+                                    }
+                                </tbody></table></div>
+                            }
+                        </section>
+                        <section class="setup-card">
+                            <div class="section-heading"><h3>Spray groups</h3><DxButton Text="Add spray group" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(new SprayGroupSetup { ApplicationId = _typeId }, "New spray group"))" /></div>
+                            <div class="copy-row"><label for="copy-spray-source">Copy groups and product assignments from</label><select id="copy-spray-source" @bind="_copySource" disabled="@_busy"><option value="0">Choose a survey type…</option>@foreach (var source in _catalogue.Types.Where(t => t.ApplicationId != _typeId).OrderBy(t => t.ApplicationName)) { <option value="@source.ApplicationId">@source.ApplicationName</option> }</select><DxButton Text="Copy groups" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy && _copySource > 0)" Click="CopySprays" /></div>
+                            <p class="muted">Copy adds missing groups and products and keeps existing assignments.</p>
+                            <div class="spray-group-list" aria-label="Spray groups">
+                                @foreach (var spray in TypeSprayGroups)
+                                {
+                                    var productCount = _catalogue.SprayGroupProducts.Count(p => p.SprayGroupId == spray.SprayGroupId);
+                                    <div @key="spray.SprayGroupId" class="spray-group-row @(_sprayId == spray.SprayGroupId ? "is-selected" : "")">
+                                        <button type="button" class="spray-group-select" disabled="@_busy" aria-pressed="@(_sprayId == spray.SprayGroupId)" @onclick="@(() => SelectSpray(spray.SprayGroupId))">
+                                            <span class="spray-group-label"><strong>@spray.GroupName</strong><small>@productCount @(productCount == 1 ? "product" : "products")</small></span>
+                                        </button>
+                                        <div class="spray-group-actions" role="group" aria-label="@($"{spray.GroupName} actions")">
+                                            <DxButton IconCssClass="oi oi-pencil" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Edit {spray.GroupName}")" title="@($"Edit {spray.GroupName}")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(spray, "Edit spray group"))" />
+                                            <DxButton IconCssClass="oi oi-trash" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Delete {spray.GroupName}")" title="@($"Delete {spray.GroupName}")" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Delete("spray-groups", spray.SprayGroupId, spray.GroupName))" />
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            @if (!TypeSprayGroups.Any()) { <p class="muted">No spray groups yet. Add a group or copy groups from another survey type.</p> }
+                            @if (SelectedSpray is { } selectedSpray)
+                            {
+                                <div class="spray-products">
+                                    <div class="section-heading"><h3>@selectedSpray.GroupName products</h3><DxButton Text="Assign product" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(new SprayGroupProductSetup { SprayGroupId = _sprayId }, "Assign spray product"))" /></div>
+                                    @foreach (var assignment in _catalogue.SprayGroupProducts.Where(p => p.SprayGroupId == _sprayId))
+                                    {
+                                        <div class="assignment-row"><span>@ProductName(assignment.SprayProductRefId)</span><DxButton IconCssClass="oi oi-trash" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Remove {ProductName(assignment.SprayProductRefId)}")" title="@($"Remove {ProductName(assignment.SprayProductRefId)}")" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Delete("spray-group-products", assignment.SprayGroupProductId, ProductName(assignment.SprayProductRefId)))" /></div>
+                                    }
+                                </div>
+                            }
+                        </section>
+                    }
+                }
+                else if (_tab == "parameters")
+                {
+                    <div class="section-heading"><h2>Shared measurement parameters</h2><DxButton Text="New parameter" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="@(() => Edit(new CollectionParameterSetup { MinValue = 0, MaxValue = 5, DefaultValue = "0", CollectionParameterCalculationId = 1, ScaleText = "%" }, "New shared parameter"))" /></div>
+                    <p class="muted">Definitions are shared by all survey types that use them.</p>
+                    <div class="table-scroll"><table><thead><tr><th>Parameter</th><th>Code</th><th>Type</th><th>Used by</th><th>Actions</th></tr></thead><tbody>
+                        @foreach (var parameter in _catalogue.CollectionParameters.Where(p => Matches(p.CollectionParameterName + " " + p.CollectionParameterCode)).OrderBy(p => p.CollectionParameterName))
+                        {
+                            <tr><td>@parameter.CollectionParameterName</td><td>@parameter.CollectionParameterCode</td><td>@parameter.CollectionParameterType</td><td>@ParameterUsage(parameter.CollectionParameterId)</td><td class="actions"><DxButton IconCssClass="oi oi-pencil" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Edit {ParameterName(parameter.CollectionParameterId)}")" title="@($"Edit {ParameterName(parameter.CollectionParameterId)}")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(parameter, "Edit shared parameter"))" /><DxButton IconCssClass="oi oi-trash" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Delete {parameter.CollectionParameterName}")" title="@($"Delete {parameter.CollectionParameterName}")" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Delete("collection-parameters", parameter.CollectionParameterId, parameter.CollectionParameterName))" /></td></tr>
+                        }
+                    </tbody></table></div>
+                }
+                else
+                {
+                    <div class="section-heading"><h2>Shared spray products</h2><DxButton Text="New product" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="@(() => Edit(new SprayProductSetup(), "New spray product"))" /></div>
+                    <div class="table-scroll"><table><thead><tr><th>Product</th><th>Default rate</th><th>Actions</th></tr></thead><tbody>
+                        @foreach (var product in _catalogue.SprayProducts.Where(p => Matches(p.ProductName)).OrderBy(p => p.ProductName))
+                        {
+                            <tr class="@(_productId == product.SprayProductRefId ? "selected" : "")"><td><DxButton Text="@product.ProductName" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => SelectProduct(product.SprayProductRefId))" /></td><td>@product.DefaultApplicationRate @product.ApplicationUnit</td><td class="actions"><DxButton IconCssClass="oi oi-pencil" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Edit {product.ProductName}")" title="@($"Edit {product.ProductName}")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(product, "Edit shared spray product"))" /><DxButton IconCssClass="oi oi-trash" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Delete {product.ProductName}")" title="@($"Delete {product.ProductName}")" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Delete("spray-products", product.SprayProductRefId, product.ProductName))" /></td></tr>
+                        }
+                    </tbody></table></div>
+                    @if (_productId > 0)
+                    {
+                        <section class="setup-card">
+                            <div class="section-heading"><h3>@ProductName(_productId): target parameters</h3><DxButton Text="Add target" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(new SprayTargetSetup { SprayProductRefId = _productId }, "Assign target parameter"))" /></div>
+                            @foreach (var target in _catalogue.SprayTargets.Where(t => t.SprayProductRefId == _productId))
+                            {
+                                <div class="assignment-row"><span>@ParameterName(target.CollectionParameterId)</span><DxButton IconCssClass="oi oi-trash" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Remove {ParameterName(target.CollectionParameterId)}")" title="@($"Remove {ParameterName(target.CollectionParameterId)}")" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Delete("spray-targets", target.SprayProductTargetId, ParameterName(target.CollectionParameterId)))" /></div>
+                            }
+                        </section>
+                        <section class="setup-card"><div class="section-heading"><h3>@ProductName(_productId): crop rates</h3><DxButton Text="Add crop rate" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(new SprayRateSetup { SprayProductRefId = _productId }, "New crop rate"))" /></div>
+                            <div class="table-scroll"><table><thead><tr><th>Crop</th><th>Rate</th><th>Withholding days</th><th>Permit</th><th>Actions</th></tr></thead><tbody>
+                                @foreach (var rate in _catalogue.SprayRates.Where(r => r.SprayProductRefId == _productId))
+                                {
+                                    <tr><td>@CropName(rate.CropTypeId)</td><td>@rate.ApplicationRate @rate.ApplicationUnit</td><td>@rate.WitholdingPeriod</td><td>@rate.PermitNo @rate.PermitExpiryDate?.ToString("dd/MM/yyyy")</td><td class="actions"><DxButton IconCssClass="oi oi-pencil" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Edit {CropName(rate.CropTypeId) + " rate"}")" title="@($"Edit {CropName(rate.CropTypeId) + " rate"}")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(rate, "Edit crop rate"))" /><DxButton IconCssClass="oi oi-trash" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Delete {CropName(rate.CropTypeId) + " rate"}")" title="@($"Delete {CropName(rate.CropTypeId) + " rate"}")" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Delete("spray-rates", rate.ApplicationRateId, CropName(rate.CropTypeId) + " rate"))" /></td></tr>
+                                }
+                            </tbody></table></div>
+                        </section>
+                    }
+                }
+            </main>
+            <aside class="setup-editor" aria-label="Setup editor">
+                @if (_draft is not null)
+                {
+                    <h2>@_editTitle</h2>
+                    @if (_cloneSource > 0) { <p>Copies measurement groups, assignments and spray groups. Enter a new name and code.</p> }
+                    @if (_draft is CollectionParameterSetup shared) { <p class="muted">Used by: @ParameterUsage(shared.CollectionParameterId)</p> }
+                    <MultiCropSetupForm @key="_draft" Model="_draft" Catalogue="_catalogue" Busy="_busy" Save="Save" Cancel="Cancel" Changed="DraftChanged" />
+                }
+                else
+                {
+                    <h2>Setup editor</h2>
+                    <p class="muted">Choose an add, assign or edit action to show its settings here.</p>
+                }
+            </aside>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly KeyValuePair<string, string>[] Tabs = [new("types", "Survey types"), new("parameters", "Shared parameters"), new("products", "Spray products")];
+    private MultiCropSetupCatalogue? _catalogue;
+    private object? _draft;
+    private string _original = "", _editTitle = "", _tab = "types", _search = "";
+    private string? _message;
+    private bool _busy, _loading, _error;
+    private int _tabsVersion, _typeSelectorVersion;
+    private int _typeId, _groupId, _sprayId, _productId, _cloneSource, _copySource;
+    private bool Dirty => _draft is not null && JsonSerializer.Serialize(_draft, _draft.GetType()) != _original;
+    private sealed record SurveyTypeChoice(int Id, string Name, string Code, string Crop)
+    {
+        public string DisplayText => $"{Name} · {Code} · {Crop}";
+    }
+    private IEnumerable<SurveyTypeChoice> SurveyTypeChoices => _catalogue?.Types.OrderBy(t => t.ApplicationName)
+        .Select(t => new SurveyTypeChoice(t.ApplicationId, t.ApplicationName, t.ApplicationCode, CropName(t.CropTypeId))) ?? Enumerable.Empty<SurveyTypeChoice>();
+    private SurveyTypeSetup? SelectedType => _catalogue?.Types.FirstOrDefault(t => t.ApplicationId == _typeId);
+    private IEnumerable<SurveyGroupSetup> TypeGroups => _catalogue?.Groups.Where(g => g.ApplicationId == _typeId).OrderBy(g => g.SortOrder).ThenBy(g => g.ApplicationGroupId) ?? Enumerable.Empty<SurveyGroupSetup>();
+    private IEnumerable<SurveyParameterSetup> GroupParameters => _catalogue?.Parameters.Where(p => p.ApplicationGroupId == _groupId).OrderBy(p => p.SortOrder).ThenBy(p => p.ApplicationParameterId) ?? Enumerable.Empty<SurveyParameterSetup>();
+    private SurveyGroupSetup? SelectedGroup => TypeGroups.FirstOrDefault(g => g.ApplicationGroupId == _groupId);
+    private IEnumerable<SprayGroupSetup> TypeSprayGroups => _catalogue?.SprayGroups.Where(g => g.ApplicationId == _typeId).OrderBy(g => g.GroupName) ?? Enumerable.Empty<SprayGroupSetup>();
+    private SprayGroupSetup? SelectedSpray => TypeSprayGroups.FirstOrDefault(g => g.SprayGroupId == _sprayId);
+
+    protected override Task OnInitializedAsync() => Load();
+    private string SearchPlaceholder => _tab switch
+    {
+        "types" => "Search survey types by name or code",
+        "parameters" => "Search shared parameters by name or code",
+        _ => "Search spray products by name"
+    };
+    private bool Matches(string value) => string.IsNullOrWhiteSpace(_search) || value.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase);
+    private string CropName(int id) => id == 0 ? "Multiple crops" : _catalogue?.Crops.FirstOrDefault(c => c.CropTypeId == id)?.CropTypeName ?? $"Crop {id}";
+    private string ParameterName(int id) => _catalogue?.CollectionParameters.FirstOrDefault(p => p.CollectionParameterId == id)?.CollectionParameterName ?? $"Parameter {id}";
+    private string ProductName(int id) => _catalogue?.SprayProducts.FirstOrDefault(p => p.SprayProductRefId == id)?.ProductName ?? $"Product {id}";
+    private static string YesNo(bool value) => value ? "Yes" : "No";
+    private string ParameterUsage(int id)
+    {
+        if (_catalogue is null) return "None";
+        var groupIds = _catalogue.Parameters.Where(p => p.CollectionParameterId == id).Select(p => p.ApplicationGroupId).ToHashSet();
+        var typeIds = _catalogue.Groups.Where(g => groupIds.Contains(g.ApplicationGroupId)).Select(g => g.ApplicationId).ToHashSet();
+        var names = typeIds.Select(id => _catalogue.Types.FirstOrDefault(t => t.ApplicationId == id)?.ApplicationName ?? $"Other survey type ({id})").Order().ToArray();
+        return names.Length == 0 ? "None" : string.Join(", ", names);
+    }
+    private async Task<string> Token() => await Tokens.GetAccessTokenAsync((await AuthenticationState.GetAuthenticationStateAsync()).User)
+        ?? throw new InvalidOperationException("Your session has expired. Please sign in again.");
+    private async Task Load()
+    {
+        _busy = true;
+        _loading = _catalogue is null;
+        try
+        {
+            var catalogue = await Api.GetMultiCropSetup(await Token());
+            if (catalogue is null) throw new InvalidOperationException(Api.ErrorMessage ?? "Could not load setup.");
+            _catalogue = catalogue;
+            if (SelectedType is null) _typeId = _catalogue.Types.OrderBy(t => t.ApplicationName).FirstOrDefault()?.ApplicationId ?? 0;
+            if (SelectedGroup is null) _groupId = TypeGroups.FirstOrDefault()?.ApplicationGroupId ?? 0;
+            if (SelectedSpray is null) _sprayId = TypeSprayGroups.FirstOrDefault()?.SprayGroupId ?? 0;
+            if (!_catalogue.SprayProducts.Any(p => p.SprayProductRefId == _productId)) _productId = 0;
+        }
+        catch (Exception e) { ShowError(e); }
+        finally { _busy = _loading = false; }
+    }
+    private void ShowError(Exception e)
+    {
+        Logger.LogWarning(e, "Multi-crop setup request failed");
+        _message = e is InvalidOperationException or TokenRefreshUnavailableException ? e.Message : "Survey setup could not be updated. Please try again.";
+        _error = true;
+    }
+    private async Task<bool> Discard() => !_busy && (!Dirty || await JS.InvokeAsync<bool>("confirm", "Discard your unsaved setup changes?"));
+    private void ClearDraft() { _draft = null; _cloneSource = 0; }
+    private async Task Cancel() { if (await Discard()) ClearDraft(); }
+    private void DraftChanged() => StateHasChanged();
+    private async Task Reload() { if (!await Discard()) return; ClearDraft(); _message = null; await Load(); }
+    private async Task ChangeSection(int index)
+    {
+        if (index < 0 || index >= Tabs.Length || Tabs[index].Key == _tab) return;
+        await ChangeTab(Tabs[index].Key);
+        // Restore the active tab when the user keeps their unsaved draft.
+        if (_tab != Tabs[index].Key) _tabsVersion++;
+    }
+    private async Task ChangeTab(string tab) { if (!await Discard()) return; ClearDraft(); _tab = tab; _search = ""; }
+    private async Task SelectType(int id) { if (id == _typeId || id <= 0) return; if (!await Discard()) { _typeSelectorVersion++; return; } ClearDraft(); _typeId = id; _groupId = TypeGroups.FirstOrDefault()?.ApplicationGroupId ?? 0; _sprayId = TypeSprayGroups.FirstOrDefault()?.SprayGroupId ?? 0; _copySource = 0; }
+    private async Task SelectGroup(int id) { if (!await Discard()) return; ClearDraft(); _groupId = id; }
+    private async Task SelectSpray(int id) { if (!await Discard()) return; ClearDraft(); _sprayId = id; }
+    private async Task SelectProduct(int id) { if (!await Discard()) return; ClearDraft(); _productId = id; }
+    private async Task Edit(object item, string title)
+    {
+        if (!await Discard()) return;
+        ClearDraft(); _message = null; _editTitle = title;
+        _original = JsonSerializer.Serialize(item, item.GetType());
+        _draft = JsonSerializer.Deserialize(_original, item.GetType());
+    }
+    private async Task Clone(SurveyTypeSetup source)
+    {
+        if (!await Discard()) return;
+        ClearDraft(); _message = null; _editTitle = "Clone survey type"; _cloneSource = source.ApplicationId;
+        var copy = JsonSerializer.Deserialize<SurveyTypeSetup>(JsonSerializer.Serialize(source))!;
+        copy.ApplicationId = 0; copy.ApplicationName = ""; copy.ApplicationCode = "";
+        _draft = copy; _original = JsonSerializer.Serialize(copy);
+    }
+    private async Task Save()
+    {
+        if (_busy || _draft is null) return;
+        _busy = true; _message = null;
+        try
+        {
+            var token = await Token();
+            object? saved = _draft switch
+            {
+                SurveyTypeSetup type when _cloneSource > 0 => await Api.CloneMultiCropType(_cloneSource, type, token),
+                SurveyTypeSetup type => await Api.SaveMultiCropSetup("types", type, token),
+                SurveyGroupSetup group => await Api.SaveMultiCropSetup("groups", group, token),
+                SurveyParameterSetup parameter => await Api.SaveMultiCropSetup("parameters", parameter, token),
+                CollectionParameterSetup parameter => await Api.SaveMultiCropSetup("collection-parameters", parameter, token),
+                SprayGroupSetup group => await Api.SaveMultiCropSetup("spray-groups", group, token),
+                SprayGroupProductSetup product => await Api.SaveMultiCropSetup("spray-group-products", product, token),
+                SprayProductSetup product => await Api.SaveMultiCropSetup("spray-products", product, token),
+                SprayRateSetup rate => await Api.SaveMultiCropSetup("spray-rates", rate, token),
+                SprayTargetSetup target => await Api.SaveMultiCropSetup("spray-targets", target, token),
+                _ => null
+            };
+            if (saved is null) throw new InvalidOperationException(Api.ErrorMessage ?? "Could not save setup.");
+            switch (saved)
+            {
+                case SurveyTypeSetup t: _typeId = t.ApplicationId; break;
+                case SurveyGroupSetup g: _groupId = g.ApplicationGroupId; break;
+                case SprayGroupSetup g: _sprayId = g.SprayGroupId; break;
+                case SprayProductSetup p: _productId = p.SprayProductRefId; break;
+            }
+            ClearDraft(); _message = "Setup saved."; _error = false;
+            await Load();
+        }
+        catch (Exception e) { ShowError(e); }
+        finally { _busy = false; }
+    }
+    private async Task Delete(string section, int id, string name)
+    {
+        if (!await Discard() || !await JS.InvokeAsync<bool>("confirm", $"Delete {name}? Records required by saved surveys cannot be deleted.")) return;
+        _busy = true;
+        try
+        {
+            if (!await Api.DeleteMultiCropSetup(section, id, await Token())) throw new InvalidOperationException(Api.ErrorMessage ?? "Could not delete this record.");
+            ClearDraft(); _message = "Setup record removed."; _error = false; await Load();
+        }
+        catch (Exception e) { ShowError(e); }
+        finally { _busy = false; }
+    }
+    private async Task Move(string section, int id, int direction)
+    {
+        if (!await Discard()) return;
+        _busy = true;
+        try
+        {
+            if (!await Api.MoveMultiCropSetup(section, id, direction, await Token()))
+                throw new InvalidOperationException(Api.ErrorMessage ?? "Could not change the order.");
+            ClearDraft(); _message = "Order saved."; _error = false;
+            await Load();
+        }
+        catch (Exception e) { ShowError(e); }
+        finally { _busy = false; }
+    }
+    private async Task CopySprays()
+    {
+        if (!await Discard()) return;
+        _busy = true;
+        try
+        {
+            if (!await Api.CopyMultiCropSprayGroups(_copySource, _typeId, await Token())) throw new InvalidOperationException(Api.ErrorMessage ?? "Could not copy spray groups.");
+            ClearDraft(); _message = "Spray groups and product assignments copied."; _error = false; await Load();
+        }
+        catch (Exception e) { ShowError(e); }
+        finally { _busy = false; }
+    }
+    private async Task BeforeNavigation(Microsoft.AspNetCore.Components.Routing.LocationChangingContext context)
+    {
+        if (_busy || Dirty && !await JS.InvokeAsync<bool>("confirm", "Discard your unsaved setup changes?")) context.PreventNavigation();
+    }
+}

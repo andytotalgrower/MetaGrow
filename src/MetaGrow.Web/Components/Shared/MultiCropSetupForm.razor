@@ -1,0 +1,160 @@
+@using ApiModels.MetaGrow
+@using System.ComponentModel.DataAnnotations
+
+<EditForm Model="Model" OnValidSubmit="Save">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+    <fieldset disabled="@Busy" class="setup-fields">
+        @switch (Model)
+        {
+            case SurveyTypeSetup item:
+                <label for="setup-applicationcode">Short code</label>
+                <input id="setup-applicationcode" maxlength="10" @bind="item.ApplicationCode" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-applicationname">Survey type name</label>
+                <input id="setup-applicationname" maxlength="50" @bind="item.ApplicationName" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-croptypeid">Crop</label>
+                <select id="setup-croptypeid" @bind="item.CropTypeId" @bind:after="NotifyChanged"><option value="0">Multiple crops</option>@foreach (var option in Catalogue.Crops) { <option value="@option.CropTypeId">@option.CropTypeName</option> }</select>
+                <label for="setup-compliancetext">Report compliance text</label>
+                <textarea id="setup-compliancetext" rows="4" @bind="item.ComplianceText" @bind:after="NotifyChanged" @bind:event="oninput"></textarea>
+                <label for="setup-showgraphgrowth">Growth chart</label>
+                <input id="setup-showgraphgrowth" type="checkbox" @bind="item.ShowGraphGrowth" @bind:after="NotifyChanged" />
+                <label for="setup-showgraphpestbene">Pests and beneficials chart</label>
+                <input id="setup-showgraphpestbene" type="checkbox" @bind="item.ShowGraphPestBene" @bind:after="NotifyChanged" />
+                <label for="setup-showgraphdisease">Disease chart</label>
+                <input id="setup-showgraphdisease" type="checkbox" @bind="item.ShowGraphDisease" @bind:after="NotifyChanged" />
+                <label for="setup-showgridgrowth">Growth summary</label>
+                <input id="setup-showgridgrowth" type="checkbox" @bind="item.ShowGridGrowth" @bind:after="NotifyChanged" />
+                <label for="setup-showgridpest">Pest summary</label>
+                <input id="setup-showgridpest" type="checkbox" @bind="item.ShowGridPest" @bind:after="NotifyChanged" />
+                <label for="setup-showgridbene">Beneficials summary</label>
+                <input id="setup-showgridbene" type="checkbox" @bind="item.ShowGridBene" @bind:after="NotifyChanged" />
+                <label for="setup-showgriddisease">Disease summary</label>
+                <input id="setup-showgriddisease" type="checkbox" @bind="item.ShowGridDisease" @bind:after="NotifyChanged" />
+                break;
+            case SurveyGroupSetup item:
+                <label for="setup-groupcode">Group code</label>
+                <input id="setup-groupcode" maxlength="10" @bind="item.GroupCode" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-groupname">Group name</label>
+                <input id="setup-groupname" maxlength="50" @bind="item.GroupName" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-sortorder">Display order</label>
+                <input id="setup-sortorder" type="number" step="1" @bind="item.SortOrder" @bind:after="NotifyChanged" />
+                <label for="setup-displaytext">Display label</label>
+                <input id="setup-displaytext" maxlength="50" @bind="item.DisplayText" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-populationtype">Field layout</label>
+                <select id="setup-populationtype" @bind="item.PopulationType" @bind:after="NotifyChanged"><option value="sdn">Add measurements as needed</option><option value="mn">Show all fields in the group</option></select>
+                <p class="field-help">Existing reports use GRO, PEST, BENE and DIS for standard sections. Keep those codes when editing a standard group.</p>
+                break;
+            case SurveyParameterSetup item:
+                <label for="setup-collectionparameterid">Measurement</label>
+                <select id="setup-collectionparameterid" @bind="item.CollectionParameterId" @bind:after="NotifyChanged"><option value="0">Choose…</option>@foreach (var option in Catalogue.CollectionParameters.OrderBy(p => p.CollectionParameterName)) { <option value="@option.CollectionParameterId">@option.CollectionParameterName</option> }</select>
+                <label for="setup-displaytext">Display label</label>
+                <input id="setup-displaytext" maxlength="50" @bind="item.DisplayText" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-sortorder">Display order</label>
+                <input id="setup-sortorder" type="number" step="1" @bind="item.SortOrder" @bind:after="NotifyChanged" />
+                <label for="setup-alwaysongraph">Always show on group chart</label>
+                <input id="setup-alwaysongraph" type="checkbox" @bind="item.AlwaysOnGraph" @bind:after="NotifyChanged" />
+                <label for="setup-alwaysongrid">Always show in summary</label>
+                <input id="setup-alwaysongrid" type="checkbox" @bind="item.AlwaysOnGrid" @bind:after="NotifyChanged" />
+                break;
+            case CollectionParameterSetup item:
+                <label for="setup-collectionparametercode">Parameter code</label>
+                <input id="setup-collectionparametercode" maxlength="10" @bind="item.CollectionParameterCode" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-collectionparametername">Parameter name</label>
+                <input id="setup-collectionparametername" maxlength="50" @bind="item.CollectionParameterName" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-collectionparametertype">Value type</label>
+                <select id="setup-collectionparametertype" @bind="item.CollectionParameterType" @bind:after="@(() => ParameterTypeChanged(item))">
+                    <option value="int">Integer</option>
+                    <option value="intop">Optional integer</option>
+                    <option value="d1">Decimal (1 place)</option>
+                    <option value="d2">Decimal (2 places)</option>
+                    <option value="str">Text</option>
+                    <option value="date">Date</option>
+                    <option value="yn">Yes / no</option>
+                    <option value="ynm">Yes / no (mandatory)</option>
+                    <option value="bool">Boolean</option>
+                    <option value="dr">Dropdown</option>
+                </select>
+                <label for="setup-minvalue">Minimum</label>
+                <input id="setup-minvalue" type="number" step="any" @bind="item.MinValue" @bind:after="NotifyChanged" />
+                <label for="setup-maxvalue">Maximum</label>
+                <input id="setup-maxvalue" type="number" step="any" @bind="item.MaxValue" @bind:after="NotifyChanged" />
+                <label for="setup-defaultvalue">Default value</label>
+                <input id="setup-defaultvalue" maxlength="50" @bind="item.DefaultValue" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-valuelist">Value list</label>
+                <textarea id="setup-valuelist" rows="4" maxlength="1000" @bind="item.ValueList" @bind:after="NotifyChanged" @bind:event="oninput"></textarea>
+                <label for="setup-databasecolumnname">Field mapping</label>
+                <input id="setup-databasecolumnname" maxlength="50" @bind="item.DatabaseColumnName" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-collectionparametercalculationid">Calculation</label>
+                <select id="setup-collectionparametercalculationid" @bind="item.CollectionParameterCalculationId" @bind:after="NotifyChanged"><option value="0">None</option>@foreach (var option in Catalogue.Calculations) { <option value="@option.CollectionParameterCalculationId">@option.CalculationName</option> }</select>
+                <label for="setup-scaletext">Units / scale text</label>
+                <input id="setup-scaletext" maxlength="20" @bind="item.ScaleText" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <p class="field-help">This definition is shared across survey types. Date limits and defaults use yyyyMMdd. Existing dropdown definitions are preserved; a new value list uses LIST:value|label,value|label.</p>
+                break;
+            case SprayGroupSetup item:
+                <label for="setup-groupname">Group name</label>
+                <input id="setup-groupname" maxlength="100" @bind="item.GroupName" @bind:after="NotifyChanged" @bind:event="oninput" />
+                break;
+            case SprayGroupProductSetup item:
+                <label for="setup-sprayproductrefid">Product</label>
+                <select id="setup-sprayproductrefid" @bind="item.SprayProductRefId" @bind:after="NotifyChanged"><option value="0">Choose…</option>@foreach (var option in Catalogue.SprayProducts.OrderBy(p => p.ProductName)) { <option value="@option.SprayProductRefId">@option.ProductName</option> }</select>
+                break;
+            case SprayProductSetup item:
+                <label for="setup-productname">Product name</label>
+                <input id="setup-productname" maxlength="150" @bind="item.ProductName" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-applicationunit">Application unit</label>
+                <input id="setup-applicationunit" maxlength="10" @bind="item.ApplicationUnit" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-defaultapplicationrate">Default application rate</label>
+                <input id="setup-defaultapplicationrate" type="number" step="any" @bind="item.DefaultApplicationRate" @bind:after="NotifyChanged" />
+                <label for="setup-applicationnotes">Application notes</label>
+                <textarea id="setup-applicationnotes" rows="4" maxlength="300" @bind="item.ApplicationNotes" @bind:after="NotifyChanged" @bind:event="oninput"></textarea>
+                <label for="setup-activeingredient">Active ingredient</label>
+                <input id="setup-activeingredient" maxlength="100" @bind="item.ActiveIngredient" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <p class="field-help">Product details are shared across survey types. Set crop-specific rates below the product list.</p>
+                break;
+            case SprayRateSetup item:
+                <label for="setup-croptypeid">Crop</label>
+                <select id="setup-croptypeid" @bind="item.CropTypeId" @bind:after="NotifyChanged"><option value="0">Choose…</option>@foreach (var option in Catalogue.Crops) { <option value="@option.CropTypeId">@option.CropTypeName</option> }</select>
+                <label for="setup-applicationrate">Application rate</label>
+                <input id="setup-applicationrate" type="number" step="any" @bind="item.ApplicationRate" @bind:after="NotifyChanged" />
+                <label for="setup-applicationunit">Application unit</label>
+                <input id="setup-applicationunit" maxlength="10" @bind="item.ApplicationUnit" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-applicationnotes">Application notes</label>
+                <textarea id="setup-applicationnotes" rows="4" maxlength="300" @bind="item.ApplicationNotes" @bind:after="NotifyChanged" @bind:event="oninput"></textarea>
+                <label for="setup-witholdingperiod">Withholding period (days)</label>
+                <input id="setup-witholdingperiod" type="number" step="1" @bind="item.WitholdingPeriod" @bind:after="NotifyChanged" />
+                <label for="setup-permitno">Permit number</label>
+                <input id="setup-permitno" maxlength="100" @bind="item.PermitNo" @bind:after="NotifyChanged" @bind:event="oninput" />
+                <label for="setup-permitexpirydate">Permit expiry</label>
+                <input id="setup-permitexpirydate" type="date" @bind="item.PermitExpiryDate" @bind:after="NotifyChanged" />
+                break;
+            case SprayTargetSetup item:
+                <label for="setup-collectionparameterid">Measurement</label>
+                <select id="setup-collectionparameterid" @bind="item.CollectionParameterId" @bind:after="NotifyChanged"><option value="0">Choose…</option>@foreach (var option in Catalogue.CollectionParameters.OrderBy(p => p.CollectionParameterName)) { <option value="@option.CollectionParameterId">@option.CollectionParameterName</option> }</select>
+                break;
+        }
+        <div class="form-actions">
+            <DxButton Text="@(Busy ? "Saving…" : "Save changes")" SubmitFormOnClick="true" Enabled="@(!Busy)" RenderStyle="ButtonRenderStyle.Primary" />
+            <DxButton Text="Cancel" Click="Cancel" Enabled="@(!Busy)" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+        </div>
+    </fieldset>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public object Model { get; set; } = null!;
+    [Parameter, EditorRequired] public MultiCropSetupCatalogue Catalogue { get; set; } = new();
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback Save { get; set; }
+    [Parameter] public EventCallback Cancel { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+    private Task NotifyChanged() => Changed.InvokeAsync();
+    private async Task ParameterTypeChanged(CollectionParameterSetup item)
+    {
+        var numeric = item.CollectionParameterType is "int" or "intop" or "d1" or "d2";
+        item.MinValue = numeric ? 0 : null;
+        item.MaxValue = numeric ? 5 : null;
+        item.DefaultValue = numeric ? "0" : item.CollectionParameterType == "ynm" ? "N" : "";
+        item.CollectionParameterCalculationId = numeric ? 1 : 0;
+        item.ScaleText = numeric ? "%" : "";
+        await Changed.InvokeAsync();
+    }
+}

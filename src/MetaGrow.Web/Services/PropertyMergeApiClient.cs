@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using ApiModels;
 using ApiModels.MetaGrow;
+using MetaGrow.Shared;
 using Microsoft.AspNetCore.Components.Authorization;
 
 namespace MetaGrow.Web.Services;
@@ -15,6 +16,12 @@ public sealed class PropertyMergeApiClient(
 
     public Task<(MetaGrowPropertyMergeRequestDto[]?, string?)> GetPendingAsync() =>
         SendAuthenticated<MetaGrowPropertyMergeRequestDto[]>(HttpMethod.Get, "property-merges/pending");
+
+    public Task<(MetaGrowPropertyMergeRequestDto[]?, string?)> GetExecutionStatusAsync(Guid id) =>
+        SendAuthenticated<MetaGrowPropertyMergeRequestDto[]>(HttpMethod.Get, $"property-merges/{id}/status");
+
+    public Task<(MetaGrowPropertyMergeRequestDto?, string?)> ExecuteReviewedAsync(ReviewedPropertyMergeRequest request) =>
+        SendAuthenticated<MetaGrowPropertyMergeRequestDto>(HttpMethod.Post, "property-merges/execute-reviewed", request);
 
     public Task<(MetaGrowPropertyMergeRequestDto?, string?)> RequestAsync(PropertyMergePreviewRequest plan) =>
         SendAuthenticated<MetaGrowPropertyMergeRequestDto>(
@@ -45,7 +52,9 @@ public sealed class PropertyMergeApiClient(
     private async Task<(T?, string?)> SendAuthenticated<T>(HttpMethod method, string path, object? body = null)
     {
         var principal = (await authenticationState.GetAuthenticationStateAsync()).User;
-        var accessToken = await tokens.GetAccessTokenAsync(principal);
+        string? accessToken;
+        try { accessToken = await tokens.GetAccessTokenAsync(principal); }
+        catch (TokenRefreshUnavailableException exception) { return (default, exception.Message); }
         if (accessToken is null) return (default, "Your session has expired. Please log in again.");
 
         using var request = new HttpRequestMessage(method, path);

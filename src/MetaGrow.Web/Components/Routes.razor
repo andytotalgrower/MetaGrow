@@ -6,3 +6,23 @@
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
+
+@implements IDisposable
+@inject MetaGrow.Web.Services.ApiTokenService ApiTokens
+@inject NavigationManager Navigation
+
+@code {
+    private bool _redirecting;
+
+    protected override void OnInitialized() => ApiTokens.SessionExpired += OnSessionExpiredAsync;
+
+    private Task OnSessionExpiredAsync() => InvokeAsync(() =>
+    {
+        if (_redirecting) return;
+        _redirecting = true;
+        var returnUrl = "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+        Navigation.NavigateTo("Account/Login?ReturnUrl=" + Uri.EscapeDataString(returnUrl), forceLoad: true);
+    });
+
+    public void Dispose() => ApiTokens.SessionExpired -= OnSessionExpiredAsync;
+}

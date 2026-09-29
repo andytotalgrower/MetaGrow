@@ -18,9 +18,10 @@ public sealed class SampleImportBlockSelectionTests
     public void Duplicate_block_validation_matches_production(Type pageType, string first, string second, bool expected)
     {
         var page = Activator.CreateInstance(pageType)!;
-        var field = pageType.GetField("_mappingRows", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var rows = (IList)field.GetValue(page)!;
-        var rowType = field.FieldType.GetGenericArguments()[0];
+        var field = pageType.GetField("_mappingRows", BindingFlags.NonPublic | BindingFlags.Instance);
+        var mappings = pageType.GetProperty("_mappingRows", BindingFlags.NonPublic | BindingFlags.Instance);
+        var rows = (IList)(field?.GetValue(page) ?? mappings!.GetValue(page))!;
+        var rowType = (field?.FieldType ?? mappings!.PropertyType).GetGenericArguments()[0];
         foreach (var key in new[] { first, second })
         {
             var row = Activator.CreateInstance(rowType)!;

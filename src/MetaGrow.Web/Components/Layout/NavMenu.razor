@@ -37,7 +37,7 @@
     <hr class="menu-separator" />
     <DxMenu Orientation="Orientation.Vertical" CssClass="menu">
         <Items>
-            <AuthorizeView Roles="@ApiModels.MetaGrow.MetaGrowRoles.Admin">
+            <AuthorizeView Roles="@(ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager)">
                 <DxMenuItem NavigateUrl="/admin" Text="Administration" CssClass="@MenuItemCssClass("/admin")" IconCssClass="icon icon-settings" />
             </AuthorizeView>
             <AuthorizeView>

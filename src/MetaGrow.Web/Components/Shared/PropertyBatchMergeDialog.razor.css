@@ -1,0 +1,27 @@
+.batch-merge { display: flex; flex-direction: column; gap: .8rem; max-height: 74vh; overflow-y: auto; }
+.batch-merge p { margin: 0; font-size: .85rem; }
+.batch-outcome { position: sticky; top: 0; z-index: 2; display: flex; flex-shrink: 0; align-items: flex-start; gap: .85rem; margin: 0; padding: 1rem; }
+.batch-outcome > .oi { font-size: 1.5rem; margin-top: .15rem; }
+.batch-outcome > div { display: flex; flex-direction: column; align-items: flex-start; gap: .45rem; min-width: 0; }
+.batch-outcome h3 { font-size: 1.15rem; font-weight: 700; margin: 0; }
+.batch-outcome-detail { overflow-wrap: anywhere; }
+.batch-destination { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1rem; background: var(--dxds-color-surface-neutral-subdued-rest, #f7f9fb); border: 1px solid var(--dxds-color-border-neutral-subdued-rest); border-radius: .5rem; }
+.batch-destination > div { display: flex; flex-direction: column; gap: .15rem; }
+.batch-destination strong { font-size: 1.15rem; }
+.batch-destination small, .batch-destination span, .batch-panel > small, .batch-farm small, .batch-item > small { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .75rem; }
+.batch-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 1rem; }
+.batch-panel { display: flex; flex-direction: column; gap: .65rem; min-width: 0; border: 1px solid var(--dxds-color-border-neutral-subdued-rest); border-radius: .5rem; padding: .85rem; height: 26rem; }
+.batch-panel h3 { font-size: 1rem; margin: 0; }
+.batch-tools, .batch-item-actions, .batch-footer { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.batch-tools { justify-content: space-between; }
+.batch-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.batch-farm { padding: .65rem 0; border-bottom: 1px solid var(--dxds-color-border-neutral-subdued-rest); }
+.batch-farm small { display: block; margin-left: 1.6rem; }
+.batch-item { padding: .7rem 0; display: flex; flex-direction: column; gap: .3rem; border-bottom: 1px solid var(--dxds-color-border-neutral-subdued-rest); }
+.batch-item-heading { display: flex; justify-content: space-between; gap: .7rem; }
+.batch-state { font-size: .75rem; font-weight: 600; white-space: nowrap; }
+.batch-item-message { font-size: .8rem !important; }
+.batch-item-actions { margin-top: .15rem; }
+.batch-explanation, .batch-footer > span { font-size: .78rem !important; color: var(--dxds-color-content-neutral-subdued-rest); }
+.batch-footer { justify-content: flex-end; }
+@media (max-width: 55rem) { .batch-columns { grid-template-columns: 1fr; } .batch-panel { height: 22rem; } }

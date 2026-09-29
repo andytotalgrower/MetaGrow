@@ -47,7 +47,7 @@
 
         <section class="result-type-card" aria-labelledby="result-type-heading">
             <div>
-                <span class="import-kicker">Result family</span>
+                <span class="import-kicker">Sample Type</span>
                 <h2 id="result-type-heading">Choose what this file contains</h2>
                 <p>Soil and Tissue imports are available for outstanding collected samples.</p>
             </div>
@@ -81,7 +81,7 @@
                 <div id="soil-csv-drop-zone" class="csv-drop-zone @(_uploading ? "busy" : string.Empty) @(!CanUpload ? "disabled" : string.Empty)">
                     <span class="drop-icon" aria-hidden="true">⇧</span>
                     <strong>Drag and drop one CSV here</strong>
-                    <span>@(CanUpload ? "or select it from your device" : "There are no outstanding collected samples for this result family")</span>
+                    <span>@(CanUpload ? "or select it from your device" : "There are no outstanding collected samples for this Sample Type")</span>
                     <DxButton Id="soilCsvSelectButton" Text="@(_uploading ? "Reading CSV..." : "Select CSV")"
                               RenderStyle="ButtonRenderStyle.Primary" Enabled="@(CanUpload && !_uploading && !_committing)" />
                     @if (_uploading) { <DxWaitIndicator Visible="true" /> }
