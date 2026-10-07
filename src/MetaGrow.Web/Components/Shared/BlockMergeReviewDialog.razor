@@ -1,0 +1,259 @@
+@using ApiModels
+@using MetaGrow.Web.Services
+@using System.Text.Json
+@inject BlockMergeApiClient Merges
+@inject IJSRuntime JS
+
+<DxPopup @bind-Visible="_visible" HeaderText="Merge multi-crop blocks" Width="850px" ShowFooter="true"
+         ShowCloseButton="@(!_working)" CloseOnEscape="@(!_working)" CloseOnOutsideClick="false">
+    <BodyContentTemplate>
+        <div class="block-merge-review">
+            <p>Combine two records for the same block in this farm. The block you keep retains its name, crop, area, plant count and other details.</p>
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="merge-error" role="alert">@_error</div>
+            }
+            @if (_pending is not null)
+            {
+                <div class="merge-notice" role="status">
+                    <strong>A merge has been submitted.</strong>
+                    <p>@_pending.Plan.SourceBlockId → @_pending.Plan.TargetBlockId. Check its result before submitting another merge.</p>
+                    <button type="button" disabled="@_working" @onclick="CheckStatusAsync">Check merge status</button>
+                    @if (_notFound)
+                    {
+                        <button type="button" disabled="@_working" @onclick="RetryAsync">Retry the same request</button>
+                    }
+                </div>
+            }
+            else
+            {
+                @if (_blocks.Count < 2) { <p>This farm needs at least two multi-crop blocks to start a merge.</p> }
+                <div class="merge-selection">
+                    <label>Duplicate block to remove
+                        <select aria-label="Duplicate block to remove" disabled="@_working" value="@_sourceId" @onchange="SourceChanged">
+                            <option value="0">Select the duplicate</option>
+                            @foreach (var block in _blocks)
+                            {
+                                <option value="@block.BlockId">@Label(block)</option>
+                            }
+                        </select>
+                    </label>
+                    <label>Block to keep
+                        <select aria-label="Block to keep" disabled="@_working" value="@_targetId" @onchange="TargetChanged">
+                            <option value="0">Select the block to keep</option>
+                            @foreach (var block in _blocks.Where(item => item.BlockId != _sourceId))
+                            {
+                                <option value="@block.BlockId">@Label(block)</option>
+                            }
+                        </select>
+                    </label>
+                </div>
+                @if (_preview is { Source: not null, Target: not null } preview)
+                {
+                    <h3>@preview.Source.BlockName → @preview.Target.BlockName</h3>
+                    <table>
+                        <thead><tr><th>Detail</th><th>Duplicate</th><th>Kept block</th></tr></thead>
+                        <tbody>
+                            @foreach (var field in Fields(preview.Source, preview.Target))
+                            {
+                                <tr class="@(field.Source == field.Target ? null : "different")"><th>@field.Name</th><td>@field.Source</td><td>@field.Target</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                    <h4>Records to transfer</h4>
+                    @if (preview.Dependencies.Sum(item => item.SourceRows) == 0)
+                    {
+                        <p>The duplicate has no supported linked records.</p>
+                    }
+                    else
+                    {
+                        <ul>
+                            @foreach (var group in preview.Dependencies.Where(item => item.SourceRows > 0).GroupBy(item => item.Category))
+                            {
+                                <li>@group.Key: @group.Sum(item => item.SourceRows).ToString("N0") records</li>
+                            }
+                        </ul>
+                    }
+                    <details><summary>Table details</summary>
+                        <table><thead><tr><th>Table</th><th>Duplicate</th><th>Kept block</th></tr></thead><tbody>
+                            @foreach (var item in preview.Dependencies.Where(item => item.SourceRows + item.TargetRows > 0))
+                            {
+                                <tr><td>@item.TableName</td><td>@item.SourceRows</td><td>@item.TargetRows</td></tr>
+                            }
+                        </tbody></table>
+                    </details>
+                    <p class="history-note">Historical result snapshots keep their original names and IDs. The merge receipt records the old and kept block identities.</p>
+                    @if (preview.Issues.Count > 0)
+                    {
+                        <div class="merge-error"><strong>Resolve these conflicts before merging</strong><ul>
+                            @foreach (var issue in preview.Issues) { <li>@issue.Message <small>@issue.TableName</small></li> }
+                        </ul></div>
+                    }
+                    else
+                    {
+                        @if (!preview.Target.IsActive)
+                        {
+                            <label class="merge-notice"><input type="checkbox" @bind="_inactiveAcknowledged" /> I understand the kept block will remain inactive.</label>
+                        }
+                        <label class="merge-confirm"><input type="checkbox" @bind="_confirmed" /> Remove @preview.Source.BlockName (#@preview.Source.BlockId) and transfer its supported records to @preview.Target.BlockName (#@preview.Target.BlockId).</label>
+                    }
+                }
+                else if (_preview is { Issues.Count: > 0 })
+                {
+                    <ul class="merge-error">@foreach (var issue in _preview.Issues) { <li>@issue.Message</li> }</ul>
+                }
+            }
+            @if (_working) { <p role="status">Checking block merge data…</p> }
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_working)" Click="Close" />
+        @if (_pending is null)
+        {
+            <DxButton Text="Refresh preview" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_working && Plan.IsValid)" Click="PreviewAsync" />
+            <DxButton Text="@MergeLabel" RenderStyle="ButtonRenderStyle.Danger" Enabled="@CanExecute" Click="ExecuteAsync" />
+        }
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public EventCallback<MultiCropBlockMergeStatus> Merged { get; set; }
+    private bool _visible, _working, _confirmed, _inactiveAcknowledged, _notFound;
+    private int _propertyId, _sourceId, _targetId;
+    private string? _error;
+    private IReadOnlyList<Block> _blocks = [];
+    private IReadOnlyList<CropType> _crops = [];
+    private MultiCropBlockMergePreview? _preview;
+    private MultiCropBlockMergeExecution? _pending;
+    private string StorageKey => $"metagrow.block-merge.{_propertyId}";
+    private MultiCropBlockMergePlan Plan => new() { PropertyId = _propertyId, SourceBlockId = _sourceId, TargetBlockId = _targetId };
+    private bool CanExecute => !_working && _pending is null && _confirmed && _preview is { CanMerge: true } &&
+        (_preview.Target!.IsActive || _inactiveAcknowledged);
+    private string MergeLabel => _preview?.Target is { } target ? $"Merge into {target.BlockName}" : "Merge blocks";
+
+    public async Task OpenAsync(int propertyId, IReadOnlyList<Block> blocks, IReadOnlyList<CropType> crops)
+    {
+        if (_working) return;
+        _propertyId = propertyId;
+        _blocks = blocks.OrderBy(item => item.BlockName).ToList();
+        _crops = crops;
+        _sourceId = _targetId = 0;
+        _preview = null;
+        _error = null;
+        _confirmed = _inactiveAcknowledged = _notFound = false;
+        // Preserve in-memory recovery if browser storage was temporarily unavailable.
+        if (_pending?.Plan.PropertyId != propertyId) _pending = null;
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("sessionStorage.getItem", StorageKey);
+            if (!string.IsNullOrWhiteSpace(saved))
+            {
+                var recovered = JsonSerializer.Deserialize<MultiCropBlockMergeExecution>(saved);
+                if (recovered is { RequestId: var requestId, Plan: { IsValid: true } plan } && requestId != Guid.Empty && plan.PropertyId == propertyId)
+                    _pending = recovered;
+                else _error = "The saved recovery request is invalid. Reload the page before starting another merge.";
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JsonException) { _error = "Browser recovery storage is unavailable. Keep this page open if you submit a merge."; }
+        _visible = true;
+        await InvokeAsync(StateHasChanged);
+        if (_pending is not null) await CheckStatusAsync();
+    }
+
+    private async Task SourceChanged(ChangeEventArgs args)
+    {
+        _sourceId = int.TryParse(args.Value?.ToString(), out var id) ? id : 0;
+        if (_sourceId == _targetId) _targetId = 0;
+        await PreviewAsync();
+    }
+
+    private async Task TargetChanged(ChangeEventArgs args)
+    {
+        _targetId = int.TryParse(args.Value?.ToString(), out var id) ? id : 0;
+        await PreviewAsync();
+    }
+
+    private async Task PreviewAsync()
+    {
+        if (_working || _pending is not null) return;
+        _preview = null;
+        _confirmed = _inactiveAcknowledged = false;
+        _error = null;
+        if (!Plan.IsValid) return;
+        _working = true;
+        try { (_preview, _error) = await Merges.Preview(Plan); }
+        finally { _working = false; }
+    }
+
+    private async Task ExecuteAsync()
+    {
+        if (!CanExecute) return;
+        _pending = new() { RequestId = Guid.NewGuid(), Plan = Plan, Fingerprint = _preview!.Fingerprint, AcknowledgeInactiveTarget = _inactiveAcknowledged };
+        try { await JS.InvokeVoidAsync("sessionStorage.setItem", StorageKey, JsonSerializer.Serialize(_pending)); }
+        catch (JSException)
+        {
+            _pending = null;
+            _error = "The merge recovery request could not be saved in this browser. Enable session storage and try again.";
+            return;
+        }
+        await RetryAsync();
+    }
+
+    private async Task RetryAsync()
+    {
+        if (_working || _pending is null) return;
+        _working = true;
+        _notFound = false;
+        try
+        {
+            var (status, error) = await Merges.Execute(_pending);
+            _error = error;
+            if (status is not null) await HandleStatus(status);
+        }
+        finally { _working = false; }
+    }
+
+    private async Task CheckStatusAsync()
+    {
+        if (_working || _pending is null) return;
+        _working = true;
+        _notFound = false;
+        try
+        {
+            var (status, error) = await Merges.Status(_pending.RequestId);
+            _error = error;
+            if (status is not null) await HandleStatus(status);
+        }
+        finally { _working = false; }
+    }
+
+    private async Task HandleStatus(MultiCropBlockMergeStatus status)
+    {
+        if (_pending is null || status.RequestId != _pending.RequestId) { _error = "The service returned a different request. Check status again."; return; }
+        if (status.Status == "NotFound") { _notFound = true; return; }
+        if (status.Status == "Processing") return;
+        if (status.Status is not ("Completed" or "Failed")) { _error = "The merge result is unknown. Check status again."; return; }
+        try { await JS.InvokeVoidAsync("sessionStorage.removeItem", StorageKey); }
+        catch (JSException) { /* Reopening checks the same durable receipt again. */ }
+        _pending = null;
+        _preview = null;
+        _confirmed = false;
+        if (status.Status == "Failed") { _error = status.Error ?? "The merge failed. Refresh the preview before trying again."; return; }
+        _visible = false;
+        await Merged.InvokeAsync(status);
+    }
+
+    private void Close() { if (!_working) _visible = false; }
+    private string Label(Block block) => $"{block.BlockName} · #{block.BlockId} · {Crop(block.CropTypeId)}{(block.IsActive ? "" : " · inactive")}";
+    private string Crop(int id) => _crops.FirstOrDefault(item => item.CropTypeId == id)?.CropTypeName ?? $"Crop {id}";
+    private IEnumerable<(string Name, string Source, string Target)> Fields(Block source, Block target) =>
+    [
+        ("Name", source.BlockName ?? "", target.BlockName ?? ""),
+        ("Crop", Crop(source.CropTypeId), Crop(target.CropTypeId)),
+        ("Plants", source.NoPlants.ToString("N0"), target.NoPlants.ToString("N0")),
+        ("Area (ha)", source.Size.ToString("N2"), target.Size.ToString("N2")),
+        ("Short code", source.ShortCode ?? "—", target.ShortCode ?? "—"),
+        ("Status", source.IsActive ? "Active" : "Inactive", target.IsActive ? "Active" : "Inactive"),
+        ("Report order", source.BlockOrder.ToString(), target.BlockOrder.ToString())
+    ];
+}

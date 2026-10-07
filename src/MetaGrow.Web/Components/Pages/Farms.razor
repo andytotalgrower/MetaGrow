@@ -245,6 +245,11 @@
                                     <h3 id="blocks-heading">Blocks</h3>
                                     <p>Banana and multi-crop blocks remain separate records but are maintained for this farm here.</p>
                                 </div>
+                                @if (_activeBlockType == MultiCropBlockType)
+                                {
+                                    <DxButton Text="Merge blocks" RenderStyle="ButtonRenderStyle.Secondary"
+                                              Click="OpenBlockMergeAsync" Enabled="@(!_busy && !_loadingProperty && _multiCropBlocks.Count > 0)" />
+                                }
                                 <DxButton Text="@($"New {(_activeBlockType == BananaBlockType ? "banana" : "multi-crop")} block")"
                                           RenderStyle="ButtonRenderStyle.Primary" Click="NewBlock" Enabled="@(!_busy)" />
                             </div>
@@ -418,6 +423,7 @@
 </div>
 
 <ConfirmDialog @ref="_duplicateConfirmation" />
+<BlockMergeReviewDialog @ref="_blockMergeDialog" Merged="BlockMergedAsync" />
 
 @code {
     [Parameter]
@@ -437,6 +443,37 @@
     private static readonly string[] States = ["QLD", "NSW", "VIC", "TAS", "SA", "WA", "NT", "ACT"];
 
     private ConfirmDialog? _duplicateConfirmation;
+    private BlockMergeReviewDialog? _blockMergeDialog;
+
+    private async Task OpenBlockMergeAsync()
+    {
+        if (_property is null || _busy || _loadingProperty || _blockMergeDialog is null || _activeBlockType != MultiCropBlockType) return;
+        // Always reload the complete list, including inactive blocks and names hidden by filters.
+        _busy = true;
+        try
+        {
+            var blocks = await TgsApi.GetMultiCropBlocksForProperty(_property.PropertyId);
+            if (blocks is null) { SetMessage("Could not load the blocks for merging. " + TgsApi.ErrorMessage, true); return; }
+            _multiCropBlocks = blocks;
+        }
+        finally { _busy = false; }
+        await _blockMergeDialog.OpenAsync(_property.PropertyId, _multiCropBlocks, _crops);
+    }
+
+    private async Task BlockMergedAsync(MultiCropBlockMergeStatus result)
+    {
+        if (_property?.PropertyId != result.PropertyId) return;
+        _blockEditor = null;
+        _isNewBlock = false;
+        _activeBlockType = MultiCropBlockType;
+        _blockFilter = null;
+        var refreshed = await TgsApi.GetMultiCropBlocksForProperty(result.PropertyId);
+        _multiCropBlocks = refreshed ?? _multiCropBlocks.Where(item => item.BlockId != result.SourceBlockId).ToList();
+        var kept = _multiCropBlocks.FirstOrDefault(item => item.BlockId == result.TargetBlockId);
+        if (kept is not null) EditBlock(kept);
+        SetMessage($"Merged {result.SourceBlockName} into {result.TargetBlockName}. {result.RowsMoved:N0} linked records transferred." +
+            (refreshed is null ? " The block list could not be refreshed; reload this page." : ""), false);
+    }
     private IReadOnlyList<ApiModels.Property> PropertySuggestions => _properties
         .Where(item => item.PropertyId != _property?.PropertyId && RecordNameMatching.Suggest(_property?.PropertyName, item.PropertyName))
         .OrderByDescending(item => RecordNameMatching.SameName(_property?.PropertyName, item.PropertyName))

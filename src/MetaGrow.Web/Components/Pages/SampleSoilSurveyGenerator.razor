@@ -111,7 +111,7 @@
         {
             <section class="queue-card" aria-labelledby="file-queue-heading">
                 <div class="section-heading split">
-                    <div><h2 id="file-queue-heading">Files to generate</h2><p>Review each file. Files are never merged; successful imports remain saved if another file fails.</p></div>
+                    <div><h2 id="file-queue-heading">Results to import</h2><p>Review each file. Files are never merged; successful imports remain saved if another file fails.</p></div>
                     <DxButton Text="Clear queue" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!Busy && !_files.Any(file => file.OutcomeUnknown))" Click="ResetAll" />
                 </div>
                 <div class="file-queue" aria-live="polite">
@@ -130,15 +130,16 @@
                             <div class="queue-file-actions">
                                 @if (file.OutcomeUnknown)
                                 {
-                                    <button type="button" class="btn btn-outline-primary" disabled="@Busy" @onclick="@(() => CheckOutcomeAsync(file))">Check import status</button>
+                                    <DxButton Text="Check import status" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!Busy)" Click="@(() => CheckOutcomeAsync(file))" />
                                 }
                                 else if (file.Receipt is null)
                                 {
                                     @if (file.Preview is not null)
                                     {
-                                        <button type="button" class="btn btn-outline-secondary" disabled="@Busy" @onclick="@(() => RefreshFileAsync(file))">Refresh preview</button>
+                                        <DxButton Text="Refresh preview" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!Busy)" Click="@(() => RefreshFileAsync(file))"
+                                                  title="Recheck the uploaded CSV using the latest lab mappings and existing surveys. No data is imported. Upload again if you changed the CSV on your device." />
                                     }
-                                    <button type="button" class="btn btn-outline-secondary" disabled="@Busy" @onclick="@(() => RemoveFile(file))">Remove</button>
+                                    <DxButton Text="Remove" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!Busy)" Click="@(() => RemoveFile(file))" />
                                 }
                             </div>
                             @if (file.Error is not null) { <p class="queue-error" role="alert">@file.Error</p> }
@@ -165,7 +166,7 @@
                 <div class="commit-bar">
                     <div><strong>@PendingFiles.Count files · @PendingSurveyCount surveys · @PendingResultCount results remaining</strong>
                         <span>@_files.Count(file => file.Receipt is not null) files imported. Each file succeeds or rolls back independently.</span></div>
-                    <DxButton Text="@(_committing ? "Generating…" : "Generate remaining files")" RenderStyle="ButtonRenderStyle.Primary" Enabled="@CanCommit" Click="OpenConfirmation" />
+                    <DxButton Text="@(_committing ? "Importing…" : "Create Survey & Import Data")" RenderStyle="ButtonRenderStyle.Primary" Enabled="@CanCommit" Click="OpenConfirmation" />
                 </div>
             </section>
         }
@@ -327,18 +328,18 @@
                     </DxGrid>
                 </div>
 
-                <p class="file-review-hint">@CommitReadinessText · Use “Generate remaining files” above after reviewing the queue.</p>
+                <p class="file-review-hint">@CommitReadinessText · Use “Create Survey &amp; Import Data” above after reviewing the queue.</p>
             </section>
         }
     }
 </div>
 
-<DxPopup @bind-Visible="_confirmVisible" ShowFooter="true" HeaderText="Confirm Sample survey generation"
+<DxPopup @bind-Visible="_confirmVisible" ShowFooter="true" HeaderText="Confirm survey creation and data import"
          AllowDrag="true" ShowCloseButton="@(!_committing)" CloseOnEscape="@(!_committing)"
          Width="min(650px, 94vw)" CloseOnOutsideClick="@(!_committing)">
     <BodyContentTemplate>
         <div class="confirm-content">
-            <p>Generate <strong>@PendingSurveyCount surveys</strong> containing <strong>@PendingResultCount @ResultTypeName results</strong> from <strong>@PendingFiles.Count files</strong>?</p>
+            <p>Create <strong>@PendingSurveyCount surveys</strong> and import <strong>@PendingResultCount @ResultTypeName results</strong> from <strong>@PendingFiles.Count files</strong>?</p>
             <p>Farm: <strong>@_properties.FirstOrDefault(property => property.PropertyId == _propertyId)?.PropertyName</strong>.
                 Agronomist: <strong>@_agronomists.FirstOrDefault(staff => staff.StaffId == _agronomistId)?.StaffName</strong>.</p>
             <p>Files are processed one at a time. A failed file rolls back completely; successful files remain imported. Retry only the remaining files.</p>
@@ -354,11 +355,11 @@
             <DxButton RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_committing)" Click="CommitAsync">
                 @if (_committing)
                 {
-                    <span class="button-progress"><DxWaitIndicator Visible="true" /> Generating…</span>
+                    <span class="button-progress"><DxWaitIndicator Visible="true" /> Importing…</span>
                 }
                 else
                 {
-                    <span>Confirm and generate</span>
+                    <span>Create Survey &amp; Import Data</span>
                 }
             </DxButton>
         </div>
@@ -643,7 +644,7 @@
                 file.Receipt.LabName = file.Preview.LabName;
             }
             file.OutcomeUnknown = false;
-            file.Error = status.Imported ? null : $"{file.Error ?? "No completed import was found."} Review this file, then generate remaining files to retry.";
+            file.Error = status.Imported ? null : $"{file.Error ?? "No completed import was found."} Review this file, then select Create Survey & Import Data to retry.";
         }
         catch { file.Error = "The import outcome could not be checked. Check import status before retrying."; }
     }
