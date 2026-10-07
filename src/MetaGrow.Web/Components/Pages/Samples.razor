@@ -91,28 +91,29 @@
     }
 
     <SampleImportGuideTarget Destination="surveys" Label="Find your existing sample survey" RequestVersion="_importGuideRequest" Ready="@(!_loading)"
-                             Instruction="Find your survey below, then select Import beside it. Set the survey-date range and press Search, then narrow the results by property if needed.">
+                             Instruction="Find your survey below, then select Import beside it. Set the survey-date range; results update automatically after a short pause. Then narrow the results by property if needed.">
     <section class="filter-panel search-panel" aria-labelledby="sample-search-heading">
         <div class="filter-heading">
             <div>
                 <h2 id="sample-search-heading">Search</h2>
-                <p>Load Sample surveys for a survey-date range. Date changes take effect when you press Search.</p>
-            </div>
-            <div class="filter-actions">
-                <DxButton Text="Search" RenderStyle="ButtonRenderStyle.Primary" Click="SearchAsync" Enabled="@(!_loading)" />
+                <p>Results update automatically after you finish entering valid dates.</p>
             </div>
         </div>
 
         <div class="search-grid">
-            <div class="filter-field">
+            <div class="filter-field" @oninput="@(args => DateInputAsync(args, true))">
                 <label for="sample-start-date">From</label>
-                <DxDateEdit Id="sample-start-date" @bind-Date="_startDate" DisplayFormat="dd/MM/yyyy" />
+                <DxDateEdit Id="sample-start-date" @bind-Date="_startDate" @bind-Date:after="@(() => DateChangedAsync(true))" DisplayFormat="dd/MM/yyyy" Format="dd/MM/yyyy" />
             </div>
-            <div class="filter-field">
+            <div class="filter-field" @oninput="@(args => DateInputAsync(args, false))">
                 <label for="sample-end-date">To</label>
-                <DxDateEdit Id="sample-end-date" @bind-Date="_endDate" DisplayFormat="dd/MM/yyyy" />
+                <DxDateEdit Id="sample-end-date" @bind-Date="_endDate" @bind-Date:after="@(() => DateChangedAsync(false))" DisplayFormat="dd/MM/yyyy" Format="dd/MM/yyyy" />
             </div>
         </div>
+        @if (_dateValidationMessage is not null)
+        {
+            <p role="status">@_dateValidationMessage</p>
+        }
     </section>
 
     </SampleImportGuideTarget>
@@ -314,10 +315,17 @@
     private static readonly string[] CategoryOptions = [SampleSurveyFilter.MetagenCategory, SampleSurveyFilter.ChemistryCategory];
     private readonly DateTime _today = DateTime.Today;
     private IGrid? _grid;
-    private DateTime _startDate;
-    private DateTime _endDate;
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+    private string? _startDateInput;
+    private string? _endDateInput;
+    private string? _dateValidationMessage;
+    private CancellationTokenSource? _dateSearchCancellation;
+    private int _dateSearchVersion;
+    private bool _disposed;
     private DateTime _appliedStartDate;
     private DateTime _appliedEndDate;
+    private (DateTime Start, DateTime End)? _loadedDateRange;
     private string? _propertySearch;
     private int? _agronomistId;
     private string? _category;
@@ -397,21 +405,29 @@
         _labId = _testTypeId = null;
     }
 
-    private async Task LoadSurveysAsync()
+    private async Task LoadSurveysAsync(CancellationToken cancellationToken = default)
     {
         if (_appliedEndDate.Date < _appliedStartDate.Date) { _errorMessage = "The end date must be on or after the start date."; return; }
-        await _loadGate.WaitAsync();
+        await _loadGate.WaitAsync(cancellationToken);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (_disposed) return;
+            var startDate = _appliedStartDate.Date;
+            var endDate = _appliedEndDate.Date;
+            var dateSearchVersion = _dateSearchVersion;
             _loading = true;
             _errorMessage = null;
             try
             {
-                var surveys = await TgsApi.GetSampleSurveySummaries(_appliedStartDate.Date, _appliedEndDate.Date);
+                var surveys = await TgsApi.GetSampleSurveySummaries(startDate, endDate);
+                if (_disposed || cancellationToken.IsCancellationRequested || dateSearchVersion != _dateSearchVersion ||
+                    startDate != _appliedStartDate.Date || endDate != _appliedEndDate.Date) return;
                 _surveys = (surveys ?? [])
                     .Where(SampleSurveyFilter.IsVisibleOnFinder)
                     .ToList();
                 _errorMessage = surveys is null ? TgsApi.ErrorMessage ?? "The Sample surveys could not be loaded from the TGS API." : null;
+                if (surveys is not null) _loadedDateRange = (startDate, endDate);
             }
             finally { _loading = false; }
         }
@@ -447,18 +463,64 @@
         }
     }
 
-    private async Task SearchAsync()
+    private Task DateInputAsync(ChangeEventArgs args, bool start)
     {
-        if (_endDate.Date < _startDate.Date)
+        // DateEdit commits typed values on blur. Observe input too so a complete date
+        // can trigger a search while the user remains in the editor.
+        if (start) _startDateInput = args.Value?.ToString() ?? string.Empty;
+        else _endDateInput = args.Value?.ToString() ?? string.Empty;
+        return ScheduleDateSearchAsync();
+    }
+
+    private Task DateChangedAsync(bool start)
+    {
+        if (start) _startDateInput = null;
+        else _endDateInput = null;
+        return ScheduleDateSearchAsync();
+    }
+
+    private static DateTime? ParseSearchDate(string? input, DateTime? selectedDate) => input is null
+        ? selectedDate?.Date
+        : DateTime.TryParseExact(input.Trim(), "d/M/yyyy", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var date) ? date.Date : null;
+
+    private async Task ScheduleDateSearchAsync()
+    {
+        _dateSearchCancellation?.Cancel();
+        _dateSearchVersion++;
+        if (_disposed) return;
+        var startDate = ParseSearchDate(_startDateInput, _startDate);
+        var endDate = ParseSearchDate(_endDateInput, _endDate);
+        if (startDate is null || endDate is null)
         {
-            _errorMessage = "The end date must be on or after the start date.";
+            _dateValidationMessage = "Enter both dates in dd/MM/yyyy format to update the results.";
             return;
         }
-
-        _appliedStartDate = _startDate.Date;
-        _appliedEndDate = _endDate.Date;
-        await SaveFiltersAsync();
-        await LoadSurveysAsync();
+        if (endDate < startDate)
+        {
+            _dateValidationMessage = "The end date must be on or after the start date.";
+            return;
+        }
+        _dateValidationMessage = null;
+        using var cancellation = new CancellationTokenSource();
+        _dateSearchCancellation = cancellation;
+        var token = cancellation.Token;
+        try
+        {
+            await Task.Delay(500, token);
+            token.ThrowIfCancellationRequested();
+            _appliedStartDate = startDate.Value;
+            _appliedEndDate = endDate.Value;
+            await SaveFiltersAsync();
+            token.ThrowIfCancellationRequested();
+            if (!_loading && _errorMessage is null && _loadedDateRange == (startDate.Value, endDate.Value)) return;
+            await LoadSurveysAsync(token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        finally
+        {
+            if (ReferenceEquals(_dateSearchCancellation, cancellation)) _dateSearchCancellation = null;
+        }
     }
 
     private async Task LoadDeletionRequestsAsync()
@@ -585,7 +647,10 @@
     }
     private void ApplyFilters(SampleSurveyFilterPreferences filters)
     {
-        _startDate = filters.StartDate.Date; _endDate = filters.EndDate.Date; _appliedStartDate = _startDate; _appliedEndDate = _endDate; _propertySearch = filters.PropertySearch; _agronomistId = filters.AgronomistId; _category = string.Equals(filters.Category, SampleSurveyFilter.NutritionCategory, StringComparison.OrdinalIgnoreCase) ? SampleSurveyFilter.ChemistryCategory : filters.Category; _workflow = filters.Workflow; _labId = filters.LabId; _testTypeId = filters.TestTypeId;
+        _dateSearchCancellation?.Cancel();
+        _dateSearchVersion++;
+        _startDateInput = _endDateInput = _dateValidationMessage = null;
+        _startDate = _appliedStartDate = filters.StartDate.Date; _endDate = _appliedEndDate = filters.EndDate.Date; _propertySearch = filters.PropertySearch; _agronomistId = filters.AgronomistId; _category = string.Equals(filters.Category, SampleSurveyFilter.NutritionCategory, StringComparison.OrdinalIgnoreCase) ? SampleSurveyFilter.ChemistryCategory : filters.Category; _workflow = filters.Workflow; _labId = filters.LabId; _testTypeId = filters.TestTypeId;
     }
     private void ShowColumnChooser() => _grid?.ShowColumnChooser();
     private static LaneAction? NextAction(SampleSurveySummaryDto survey, SampleSurveyCategory category)
@@ -718,6 +783,8 @@
 
     public void Dispose()
     {
+        _disposed = true;
+        _dateSearchCancellation?.Cancel();
         _realtimeSubscription?.Dispose();
         var cancellation = Interlocked.Exchange(ref _realtimeRefreshCancellation, null);
         cancellation?.Cancel();

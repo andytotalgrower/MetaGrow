@@ -1,4 +1,5 @@
 .block-merge-review { display: grid; gap: 1rem; color: #183c39; }
+.merge-footer-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: .65rem; width: 100%; }
 .block-merge-review p, .block-merge-review h3, .block-merge-review h4 { margin: 0; }
 .merge-selection { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .merge-selection label { display: grid; gap: .4rem; font-weight: 600; }

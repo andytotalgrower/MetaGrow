@@ -149,10 +149,6 @@
                                 <DxCheckBox @bind-Checked="_property.IsActive">Active property</DxCheckBox>
                             </div>
                             <div class="field">
-                                <label for="property-billing-code">Billing account code (MYOB)</label>
-                                <DxTextBox Id="property-billing-code" @bind-Text="_property.BillingAccountCode" />
-                            </div>
-                            <div class="field">
                                 <label for="property-billing-entity">Billing entity</label>
                                 <DxComboBox Id="property-billing-entity" Data="@_billingEntities" @bind-Value="_property.BillingEntityId"
                                             TextFieldName="@nameof(ListItemInt.Name)" ValueFieldName="@nameof(ListItemInt.Id)"
@@ -294,11 +290,11 @@
                                                 </div>
                                             }
                                         </div>
-                                        <div class="field check-field"><DxCheckBox @bind-Checked="_blockEditor.IsActive">Active block</DxCheckBox></div>
+                                        <div class="field check-field"><DxCheckBox @bind-Checked="_blockEditor.IsActive" Enabled="@(!_busy)">Active block</DxCheckBox></div>
                                         @if (_activeBlockType == MultiCropBlockType)
                                         {
                                             <div class="field">
-                                                <label for="block-crop">Crop *</label>
+                                                <label for="block-crop">@(_isNewBlock || _blockEditor.IsActive ? "Crop *" : "Crop")</label>
                                                 <DxComboBox Id="block-crop" Data="@_crops" @bind-Value="_blockEditor.CropTypeId"
                                                             TextFieldName="@nameof(CropType.CropTypeName)" ValueFieldName="@nameof(CropType.CropTypeId)"
                                                             SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" />
@@ -325,6 +321,10 @@
                                             <DxSpinEdit Id="block-size" @bind-Value="_blockEditor.Size" MinValue="0" Increment="0.1" DisplayFormat="0.00" />
                                         </div>
                                     </div>
+                                    @if (_messageIsError && !string.IsNullOrWhiteSpace(_message))
+                                    {
+                                        <div class="alert alert-danger" role="alert">@_message</div>
+                                    }
                                     <div class="block-editor-actions">
                                         <span>Report order: @_blockEditor.BlockOrder</span>
                                         <DxButton Text="Save block" RenderStyle="ButtonRenderStyle.Primary" Click="SaveBlockAsync" Enabled="@(!_busy)" />
@@ -406,7 +406,8 @@
                                                     <td>@block.NoPlants.ToString("N0")</td>
                                                     <td>@block.Size.ToString("N2")</td>
                                                     <td><span class="record-status @(block.IsActive ? "active" : "inactive")">@(block.IsActive ? "Active" : "Inactive")</span></td>
-                                                    <td><DxButton Text="Edit" RenderStyle="ButtonRenderStyle.Secondary" SizeMode="SizeMode.Small" Click="@(() => EditBlock(block))" /></td>
+                                                    <td><DxButton IconCssClass="oi oi-pencil" CssClass="mg-grid-icon-button" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                                  aria-label="@($"Edit block {block.BlockName}")" title="@($"Edit block {block.BlockName}")" Enabled="@(!_busy)" Click="@(() => EditBlock(block))" /></td>
                                                 </tr>
                                             }
                                         </tbody>
@@ -769,7 +770,7 @@
             SetMessage("Enter a block name before saving.", true);
             return;
         }
-        if (_activeBlockType == MultiCropBlockType && _blockEditor.CropTypeId <= 0)
+        if (_activeBlockType == MultiCropBlockType && _blockEditor.CropTypeId <= 0 && (_isNewBlock || _blockEditor.IsActive))
         {
             SetMessage("Choose a crop for the multi-crop block.", true);
             return;
@@ -817,10 +818,20 @@
                 return;
             }
 
-            var savedId = result.BlockId;
-            await ReloadActiveBlocksAsync();
-            _blockEditor = ActiveBlockList.Where(item => item.BlockId == savedId).Select(CloneBlock).FirstOrDefault() ?? result;
+            if (!await ReloadActiveBlocksAsync())
+            {
+                SetMessage("The block was saved, but the blocks could not be refreshed. " + TgsApi.ErrorMessage, true);
+                return;
+            }
+            var savedBlock = ActiveBlockList.FirstOrDefault(item => item.BlockId == result.BlockId);
+            if (savedBlock is null || savedBlock.IsActive != _blockEditor.IsActive)
+            {
+                SetMessage("The block's active status was not confirmed after saving. Your edits are still open; please try again.", true);
+                return;
+            }
+            _blockEditor = null;
             _isNewBlock = false;
+            _focusBlockEditor = false;
             SetMessage("Block details saved.", false);
         }
         finally
@@ -889,13 +900,16 @@
         }
     }
 
-    private async Task ReloadActiveBlocksAsync()
+    private async Task<bool> ReloadActiveBlocksAsync()
     {
-        if (_property is null) return;
-        if (_activeBlockType == BananaBlockType)
-            _bananaBlocks = await TgsApi.GetBananaBlocksForProperty(_property.PropertyId) ?? [];
-        else
-            _multiCropBlocks = await TgsApi.GetMultiCropBlocksForProperty(_property.PropertyId) ?? [];
+        if (_property is null) return false;
+        var blocks = _activeBlockType == BananaBlockType
+            ? await TgsApi.GetBananaBlocksForProperty(_property.PropertyId)
+            : await TgsApi.GetMultiCropBlocksForProperty(_property.PropertyId);
+        if (blocks is null) return false;
+        if (_activeBlockType == BananaBlockType) _bananaBlocks = blocks;
+        else _multiCropBlocks = blocks;
+        return true;
     }
 
     private static Block CloneBlock(Block source) => new()

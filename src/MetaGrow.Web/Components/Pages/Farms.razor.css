@@ -1,4 +1,4 @@
-.farm-setup-page { display: flex; flex-direction: column; gap: 1rem; margin: 0 auto; max-width: 96rem; padding-bottom: 2rem; }
+.farm-setup-page { display: flex; flex-direction: column; gap: 1rem; width: 100%; min-width: 0; padding-bottom: 2rem; }
 .farm-hero { align-items: center; background: linear-gradient(115deg, var(--mg-blue-0, #e7f5fb), transparent 70%); border-left: .3rem solid var(--mg-blue, #007cba); border-radius: .6rem; display: flex; gap: 1rem; justify-content: space-between; padding: 1.25rem 1.4rem; }
 .farm-hero h1 { font-size: clamp(1.55rem, 2.5vw, 2.15rem); margin: .15rem 0; }
 .farm-hero p { color: var(--dxds-color-content-neutral-subdued-rest); margin: 0; }

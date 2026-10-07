@@ -64,7 +64,7 @@
 .survey-date-card>div strong { font-size:.9rem; line-height:1.2; }
 .survey-date-card.has-existing { border-color:#e4ba50; background:rgba(255,193,7,.06); }
 .existing-surveys { grid-column:3; justify-self:end; text-align:right; }
-.existing-surveys strong { color:#7b5700; }
+.existing-surveys a { color:#7b5700; font-weight:700; text-decoration:underline; text-underline-offset:.15em; }
 .ready-badge { grid-column:3; grid-row:1; justify-self:end; padding:.24rem .48rem; border-radius:999px; background:#d8eee8; color:#175b4d!important; white-space:nowrap; }
 .mapping-list { display:flex; flex-direction:column; gap:.65rem; margin-top:.75rem; }
 .mapping-row { display:grid; grid-template-columns:minmax(11rem,.8fr) auto minmax(17rem,1.2fr) minmax(17rem,1.2fr); gap:.75rem; align-items:start; padding:.85rem; border:1px solid var(--dxds-color-border-neutral-subdued-rest); border-radius:.7rem; }

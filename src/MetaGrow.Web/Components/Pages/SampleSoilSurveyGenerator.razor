@@ -199,7 +199,7 @@
                 <div class="section-heading split">
                     <div>
                         <span class="step-number">2</span>
-                        <div><h2 id="generation-preview-heading">Review what will be created</h2><p>Check the survey dates, destination blocks and test types before continuing.</p></div>
+                        <div><h2 id="generation-preview-heading">@(_preview.FileAlreadyGenerated ? "CSV already imported" : "Review what will be created")</h2><p>Check the survey dates, destination blocks and test types before continuing.</p></div>
                     </div>
                     <div class="preview-file"><strong>@_preview.FileName</strong><span>@_preview.Rows.Count returned results</span></div>
                 </div>
@@ -208,7 +208,7 @@
                     <div><span>Farm</span><strong>@_preview.PropertyName</strong></div>
                     <div><span>Agronomist</span><strong>@_preview.AgronomistName</strong></div>
                     <div><span>Detected laboratory</span><strong>@_preview.LabName</strong></div>
-                    <div><span>Surveys to create</span><strong>@_preview.SurveyGroups.Count</strong></div>
+                    <div><span>Surveys to create</span><strong>@(_preview.FileAlreadyGenerated ? 0 : _preview.SurveyGroups.Count)</strong></div>
                 </div>
 
                 @if (_preview.BlockingErrors.Count > 0)
@@ -216,6 +216,10 @@
                     <div class="review-message danger" role="alert">
                         <strong>Generation blocked</strong>
                         <ul>@foreach (var error in _preview.BlockingErrors) { <li>@error</li> }</ul>
+                        @if (_preview.FileAlreadyGenerated && _preview.SurveyGroups.Any(group => group.ExistingSurveyIds.Count > 0))
+                        {
+                            <span>Open an existing survey below to view its results or request deletion.</span>
+                        }
                     </div>
                 }
                 @if (_preview.Warnings.Count > 0)
@@ -259,9 +263,15 @@
                             <div><span>@ResultTypeName results</span><strong>@group.ResultCount</strong></div>
                             @if (group.ExistingSurveyIds.Count > 0)
                             {
-                                <div class="existing-surveys"><span>Existing on this date</span><strong>@string.Join(", ", group.ExistingSurveyIds.Select(id => $"#{id}"))</strong></div>
+                                <div class="existing-surveys">
+                                    <span>Existing on this date</span>
+                                    @foreach (var surveyId in group.ExistingSurveyIds)
+                                    {
+                                        <a href="@SurveyUrl(surveyId)" target="_blank" rel="noopener" aria-label="@($"Open Sample survey #{surveyId} in a new tab")">View survey #@surveyId</a>
+                                    }
+                                </div>
                             }
-                            else
+                            else if (!_preview.FileAlreadyGenerated)
                             {
                                 <span class="ready-badge">New survey</span>
                             }

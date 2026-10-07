@@ -107,12 +107,14 @@
         </div>
     </BodyContentTemplate>
     <FooterContentTemplate>
-        <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_working)" Click="Close" />
-        @if (_pending is null)
-        {
-            <DxButton Text="Refresh preview" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_working && Plan.IsValid)" Click="PreviewAsync" />
-            <DxButton Text="@MergeLabel" RenderStyle="ButtonRenderStyle.Danger" Enabled="@CanExecute" Click="ExecuteAsync" />
-        }
+        <div class="merge-footer-actions">
+            <DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_working)" Click="Close" />
+            @if (_pending is null)
+            {
+                <DxButton Text="Refresh preview" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_working && Plan.IsValid)" Click="PreviewAsync" />
+                <DxButton Text="@MergeLabel" RenderStyle="ButtonRenderStyle.Danger" Enabled="@CanExecute" Click="ExecuteAsync" />
+            }
+        </div>
     </FooterContentTemplate>
 </DxPopup>
 
