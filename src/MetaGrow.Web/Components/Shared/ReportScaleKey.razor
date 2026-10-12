@@ -1,0 +1,17 @@
+@if (Items.Count > 0)
+{
+    <aside class="report-scale-key" aria-label="@Title">
+        <strong>@Title</strong>
+        <dl>
+            @foreach (var item in Items)
+            {
+                <div><dt>@item.Label</dt><dd>@item.Description</dd></div>
+            }
+        </dl>
+    </aside>
+}
+
+@code {
+    [Parameter] public string Title { get; set; } = "Key";
+    [Parameter] public IReadOnlyList<(string Label, string Description)> Items { get; set; } = [];
+}

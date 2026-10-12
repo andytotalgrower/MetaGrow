@@ -60,7 +60,11 @@
 }
 
 .report-header {
+    align-items: flex-end;
     border-bottom: 3px solid var(--mg-blue, #007cba);
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-start;
     padding: 1.5rem 0 1rem;
 }
 
@@ -108,9 +112,10 @@
 .report-meta > div {
     background: var(--dxds-color-surface-neutral-default-rest);
     display: flex;
-    flex-direction: column;
-    gap: .2rem;
-    padding: .85rem 1rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: .2rem .5rem;
+    padding: .4rem .7rem;
 }
 
 .report-meta span {
@@ -130,7 +135,8 @@
 .print-only { display: none; }
 
 .key-findings { border-left: 4px solid var(--mg-crop-green, #00654e); }
-.key-findings ol { display: grid; gap: .75rem; margin: 0; padding-left: 1.5rem; }
+.key-findings .section-heading { margin-bottom: .5rem; }
+.key-findings ol { display: grid; gap: .35rem; margin: 0; padding-left: 1.5rem; }
 .key-findings li { padding-left: .35rem; white-space: pre-line; }
 
 .summary-scroll { overflow-x: auto; }
@@ -142,7 +148,7 @@
 
 .summary-table th,
 .summary-table td {
-    border-bottom: 1px solid var(--dxds-color-border-neutral-subdued-rest);
+    border-bottom: .5px solid #c5ccd1;
     padding: .55rem .7rem;
     text-align: right;
     white-space: nowrap;
@@ -166,6 +172,10 @@
 .summary-table .farm-average th,
 .summary-table .farm-average td { background: color-mix(in srgb, var(--mg-blue, #007cba) 8%, transparent); font-weight: 700; }
 .rust-thrips-table td { text-align: center; }
+.summary-panel .rust-thrips-table { min-width: 0; width: min(100%, calc(12rem + var(--rust-columns) * 4rem)); }
+.rust-thrips-table thead th { white-space: nowrap; }
+.action-category { display: block; font-size: .85em; margin-bottom: .25rem; }
+.chart-unit, .summary-note { font-size: .8rem; }
 
 .rust-thrips-legend {
     align-items: center;
@@ -217,6 +227,7 @@
 .comment-grid article { border-left: 3px solid var(--mg-blue-1, #bfe0f0); padding-left: 1rem; }
 .comment-grid h3 { font-size: 1rem; margin: 0 0 .35rem; }
 .comment-grid p { margin: 0; white-space: pre-line; }
+.no-comments { border-left: 3px solid var(--mg-blue-1, #bfe0f0); padding: .5rem 1rem; margin: 0; color: #52616b; }
 
 .operational-heading {
     align-items: flex-start;
@@ -237,18 +248,6 @@
     object-fit: contain;
     object-position: right top;
 }
-
-.handout-context {
-    background: var(--dxds-color-surface-neutral-subdued-rest);
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    margin: 0 0 1rem;
-}
-
-.handout-context > div { border-right: 1px solid var(--dxds-color-border-neutral-subdued-rest); min-width: 0; padding: .65rem .75rem; }
-.handout-context > div:last-child { border-right: 0; }
-.handout-context dt { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .7rem; }
-.handout-context dd { font-weight: 600; margin: .15rem 0 0; overflow-wrap: anywhere; }
 
 .action-table-scroll,
 .action-checklist-scroll { overflow-x: auto; }
@@ -276,6 +275,8 @@
 .action-table th:first-child { width: 7.5rem; }
 .action-table th:nth-child(3) { width: 22%; }
 .action-table th:nth-child(4) { width: 28%; }
+.action-table th,
+.action-table td { border: .5px solid #c5ccd1; }
 
 .action-checklist-table th,
 .action-checklist-table td { padding: .45rem; vertical-align: middle; }
@@ -338,16 +339,9 @@
     .report-brand-option { flex: 1 1 100%; }
     .report-meta,
     .comment-grid,
-    .photo-grid,
-    .handout-context { grid-template-columns: 1fr; }
-    .handout-context > div { border-bottom: 1px solid var(--dxds-color-border-neutral-subdued-rest); border-right: 0; }
+    .photo-grid { grid-template-columns: 1fr; }
     .report-panel { padding: 1rem; }
     ::deep .report-chart { min-height: 20rem; }
-}
-
-@page {
-    size: A4 landscape;
-    margin: 11mm 12mm 12mm;
 }
 
 @media print {
@@ -368,18 +362,18 @@
     .report-header h1 { font-size: 21pt; }
     .report-meta {
         break-inside: avoid;
-        grid-template-columns: 1.35fr 1.35fr 1fr .8fr .8fr;
-        margin: 3mm 0 4mm;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        margin: 2mm 0 3mm;
     }
     .report-meta > div {
         align-items: baseline;
         flex-direction: row;
         gap: 1.5mm;
-        padding: 1.8mm 2.5mm;
-        white-space: nowrap;
+        padding: 1.2mm 2mm;
     }
     .report-meta span { font-size: 7pt; }
-    .report-meta strong { font-size: 8.5pt; }
+    .report-meta strong { font-size: 8pt; }
+    .no-comments { padding: 2mm 3mm; font-size: 8.5pt; }
 
     .report-panel {
         background: #fff;
@@ -403,7 +397,9 @@
     }
 
     .report-panel > .section-heading { padding-right: 53mm; }
-    .key-findings { border-left: 1mm solid #333; break-inside: avoid; padding-left: 4mm; }
+    .key-findings { border-left: 1mm solid #333; break-inside: avoid; margin-bottom: 4mm; padding: 3mm 0 0 4mm; }
+    .key-findings .section-heading { margin-bottom: 2mm; }
+    .key-findings ol { gap: 1.5mm; }
 
     .wide-print-section {
         break-before: page;
@@ -446,8 +442,6 @@
     .operational-heading { border-bottom-color: #222; margin-bottom: 4mm; padding-bottom: 3mm; }
     .operational-heading h2 { font-size: 16pt; }
     .handout-brand-logo { max-height: 9mm; max-width: 55mm; }
-    .handout-context { background: #f1f1f1; break-inside: avoid; margin-bottom: 4mm; }
-    .handout-context > div { padding: 2mm 2.5mm; }
 
     .action-table-scroll,
     .action-checklist-scroll,
@@ -460,7 +454,9 @@
     .action-table th,
     .action-table td,
     .action-checklist-table th,
-    .action-checklist-table td { border-color: #888; padding: 2mm; }
+    .action-checklist-table td { border: .25mm solid #555; padding: 2mm; }
+    .action-table th,
+    .action-table td { border: .1mm solid #c5ccd1; }
     .action-table th,
     .action-checklist-table th { background: #eee; }
 
@@ -469,7 +465,9 @@
     .action-checklist-table .checklist-action { width: 70mm; }
     .action-checklist-table .checklist-block { height: 30mm; padding: 1mm; vertical-align: bottom; }
     .action-checklist-table .checklist-block span { display: inline-block; line-height: 1; transform: rotate(180deg); writing-mode: vertical-rl; }
-    .action-checklist-table .checklist-target { font-size: 13pt; }
+    .action-checklist-table .checklist-target { font-size: 13pt; padding: 1mm .3mm; }
+    .action-checklist-table tbody td { min-height: 10mm; height: 10mm; color: #000; border-color: #444; }
+    .action-checklist-section .operational-heading { margin-bottom: 3mm; }
     .action-checklist-table .checklist-not-applicable {
         background: #ccc !important;
         -webkit-print-color-adjust: exact;
@@ -480,7 +478,7 @@
     .summary-panel .summary-table { max-width: none; width: 273mm; }
     .summary-table { table-layout: fixed; width: 100%; }
     .summary-table th,
-    .summary-table td { font-size: 7pt; line-height: 1.15; padding: 1.5mm; white-space: normal; }
+    .summary-table td { border: .1mm solid #c5ccd1; font-size: 7pt; line-height: 1.15; padding: 1.5mm; white-space: normal; }
     .summary-table thead th:not(:first-child) { font-size: 6pt; height: 34mm; padding: 1mm .5mm; text-align: center; vertical-align: bottom; }
     .summary-table .summary-header-text { align-items: center; display: inline-flex; gap: .8mm; line-height: 1; transform: rotate(180deg); white-space: nowrap; writing-mode: vertical-rl; }
     .summary-table .summary-header-text small { color: #333; display: inline; font-size: 5pt; }
@@ -488,7 +486,11 @@
     .summary-table th:first-child { position: static; width: 30mm; }
     .pest-summary-table th:first-child { width: 38mm; }
     .pest-summary-table th:nth-child(2) { width: 12mm; }
-    .rust-thrips-table thead th:not(:first-child) { height: auto; font-size: 6.5pt; vertical-align: middle; }
+    .rust-thrips-table thead th:not(:first-child) { height: 16mm; font-size: 6.5pt; vertical-align: bottom; }
+    .summary-panel .rust-thrips-table { min-width: 0; width: min(273mm, calc(38mm + var(--rust-columns) * 11mm)); }
+    .rust-thrips-table th:first-child { width: 38mm; }
+    .rust-thrips-table td, .rust-thrips-table th { padding: 1mm .5mm; }
+    .chart-unit, .summary-note { font-size: 7pt; }
     .rust-thrips-status,
     .rust-thrips-key {
         -webkit-print-color-adjust: exact;
@@ -499,5 +501,10 @@
     .include-print-photos .photo-section { break-before: page; display: block; }
     .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .photo-grid figure { break-inside: avoid; }
-    .report-footer { display: none; }
+    .report-footer {
+        break-inside: avoid;
+        display: flex;
+        font-size: 7pt;
+        margin: 3mm 0 0;
+    }
 }

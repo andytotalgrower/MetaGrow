@@ -10,7 +10,7 @@
 
 <PageTitle>Multi-crop survey @SurveyId | MetaGrow</PageTitle>
 
-<div class="online-report @(Print ? "print-layout" : string.Empty) @(_includePhotosForPrint ? "include-print-photos" : string.Empty)">
+<div class="online-report survey-print-report @(Print ? "print-layout" : string.Empty) @(_includePhotosForPrint ? "include-print-photos" : string.Empty)">
     @if (_loading)
     {
         <div class="report-loading" role="status">
@@ -79,7 +79,7 @@
                      alt="@SelectedBrand.AltText" />
                 <span class="report-eyebrow">Multi-crop survey</span>
                 <h1>@_report.PropertyName</h1>
-                <p>@_report.ApplicationName · @_report.CropTypeName</p>
+                <p>@ReportChartLayout.SurveyTitle(_report.ApplicationName) · @_report.CropTypeName</p>
             </div>
         </header>
 
@@ -106,149 +106,9 @@
             </section>
         }
 
-        @if (_report.Blocks.Count > 0 && SummaryMetrics.Count > 0)
-        {
-            <section class="report-panel summary-panel wide-print-section" aria-labelledby="summary-title">
-                <img class="section-brand-logo print-only"
-                     src="@SelectedBrand.LogoPath"
-                     alt="@SelectedBrand.AltText" />
-                <div class="section-heading">
-                    <span class="section-kicker">Current survey</span>
-                    <h2 id="summary-title">Block summary</h2>
-                    <p>Scroll horizontally on smaller screens to compare every measurement.</p>
-                </div>
-                <div class="summary-scroll">
-                    <table class="summary-table">
-                        <thead>
-                            <tr>
-                                <th scope="col">Block</th>
-                                @foreach (var metric in SummaryMetrics)
-                                {
-                                    <th scope="col">
-                                        <span class="summary-header-text">
-                                            <span>@metric.MetricLabel</span>
-                                            @if (!string.IsNullOrWhiteSpace(metric.ScaleText))
-                                            {
-                                                <small>@metric.ScaleText</small>
-                                            }
-                                        </span>
-                                    </th>
-                                }
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var block in _report.Blocks)
-                            {
-                                <tr>
-                                    <th scope="row">@BlockDisplayName(block)</th>
-                                    @foreach (var metric in SummaryMetrics)
-                                    {
-                                        <td>@FormatValue(SummaryValue(block, metric.MetricCode))</td>
-                                    }
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-                @if (_report.BlockGroups.Count > 0)
-                {
-                    <div class="report-group-summary no-print" aria-label="Report block groups">
-                        @foreach (var group in _report.BlockGroups)
-                        {
-                            <span><strong>@group.GroupName:</strong> @BlockGroupNames(group)</span>
-                        }
-                    </div>
-                }
-                @if (!string.IsNullOrWhiteSpace(_report.ComplianceText))
-                {
-                    <p class="compliance-note">@_report.ComplianceText</p>
-                }
-            </section>
-        }
-
-        @foreach (var reportSection in ReportSections)
-        {
-            var section = reportSection.Section;
-            var chartId = $"section-{section.Code}-{reportSection.Sequence}";
-            <section class="report-panel chart-panel" aria-labelledby="@chartId">
-                <img class="section-brand-logo print-only"
-                     src="@SelectedBrand.LogoPath"
-                     alt="@SelectedBrand.AltText" />
-                <div class="section-heading">
-                    <span class="section-kicker">@(section.IsHistorical ? "Survey history" : reportSection.GroupName)</span>
-                    <h2 id="@chartId">@section.Title</h2>
-                    <p class="no-print">Move over a point or bar for its value. Select a legend item to show or hide that series.</p>
-                </div>
-
-                @if (section.IsHistorical)
-                {
-                    var points = HistoricalChartPoints(section);
-                    <DxChart Data="@points"
-                             Width="100%"
-                             CssClass="report-chart interactive-chart"
-                             Palette="@UtilsService.ChartPalette"
-                             PaletteExtensionMode="ChartPaletteExtensionMode.Blend">
-                        <DxChartArgumentAxis>
-                            <DxChartAxisLabel Format="ChartElementFormat.ShortDate" />
-                        </DxChartArgumentAxis>
-                        @foreach (var series in section.Series)
-                        {
-                            var seriesName = series.Name;
-                            <DxChartLineSeries Name="@seriesName"
-                                               ArgumentField="@((ReportHistoryChartPoint point) => point.Date)"
-                                               ValueField="@((ReportHistoryChartPoint point) => point.Value)"
-                                               Filter="@((ReportHistoryChartPoint point) => point.SeriesName == seriesName)" />
-                        }
-                        <DxChartLegend Position="RelativePosition.Outside" Orientation="Orientation.Horizontal" AllowToggleSeries="true" />
-                        <DxChartTooltip Enabled="true" Position="RelativePosition.Outside">
-                            <div class="chart-tooltip">
-                                <strong>@context.Point.SeriesName</strong>
-                                <span>@context.Point.Argument</span>
-                                <span>@context.Point.Value</span>
-                            </div>
-                        </DxChartTooltip>
-                    </DxChart>
-                    <MultiCropPrintChart Section="@section" />
-                }
-                else
-                {
-                    var points = CurrentChartPoints(section);
-                    <DxChart Data="@points"
-                             Width="100%"
-                             CssClass="report-chart interactive-chart"
-                             Palette="@UtilsService.ChartPalette"
-                             PaletteExtensionMode="ChartPaletteExtensionMode.Blend">
-                        <DxChartArgumentAxis Type="ChartAxisType.Discrete" DiscreteDivisionMode="ChartDiscreteAxisDivisionMode.CrossLabels">
-                            <DxChartAxisMinorTick Visible="false" />
-                        </DxChartArgumentAxis>
-                        @foreach (var series in section.Series)
-                        {
-                            var seriesName = series.Name;
-                            <DxChartBarSeries Name="@seriesName"
-                                              ArgumentField="@((ReportCurrentChartPoint point) => point.MetricLabel)"
-                                              ValueField="@((ReportCurrentChartPoint point) => point.Value)"
-                                              Filter="@((ReportCurrentChartPoint point) => point.SeriesName == seriesName)" />
-                        }
-                        <DxChartLegend Position="RelativePosition.Outside" Orientation="Orientation.Horizontal" AllowToggleSeries="true" />
-                        <DxChartTooltip Enabled="true" Position="RelativePosition.Outside">
-                            <div class="chart-tooltip">
-                                <strong>@context.Point.SeriesName</strong>
-                                <span>@context.Point.Argument</span>
-                                <span>@context.Point.Value</span>
-                            </div>
-                        </DxChartTooltip>
-                    </DxChart>
-                    <MultiCropPrintChart Section="@section" />
-                }
-            </section>
-        }
-
         @if (_report.Comments.Count > 0)
         {
             <section class="report-panel observations-section" aria-labelledby="observations-title">
-                <img class="section-brand-logo print-only"
-                     src="@SelectedBrand.LogoPath"
-                     alt="@SelectedBrand.AltText" />
                 <div class="section-heading">
                     <span class="section-kicker">Agronomist notes</span>
                     <h2 id="observations-title">Observations</h2>
@@ -258,7 +118,12 @@
                     {
                         <article>
                             <h3>@comment.Title</h3>
-                            <p>@comment.Text</p>
+                            <ul>
+                                @foreach (var observation in ReportChartLayout.ObservationLines(comment.Text))
+                                {
+                                    <li>@observation</li>
+                                }
+                            </ul>
                         </article>
                     }
                 </div>
@@ -321,6 +186,82 @@
             </section>
         }
 
+        @RenderCharts(false)
+
+        @if (_report.Blocks.Count > 0 && SummaryMetrics.Count > 0)
+        {
+            <section class="report-panel summary-panel wide-print-section" aria-labelledby="summary-title">
+                <img class="section-brand-logo print-only"
+                     src="@SelectedBrand.LogoPath"
+                     alt="@SelectedBrand.AltText" />
+                <div class="section-heading">
+                    <span class="section-kicker">Current survey</span>
+                    <h2 id="summary-title">Survey Summary</h2>
+                    <p class="no-print">Scroll horizontally on smaller screens to compare every measurement.</p>
+                </div>
+                <div class="summary-scroll">
+                    <table class="summary-table">
+                        <thead>
+                            <tr class="summary-groups">
+                                <th scope="col" rowspan="2">Block</th>
+                                @foreach (var group in SummaryColumnGroups)
+                                {
+                                    <th scope="colgroup" colspan="@group.Count">@group.Name</th>
+                                }
+                            </tr>
+                            <tr class="summary-metrics">
+                                @foreach (var metric in SummaryMetrics)
+                                {
+                                    <th scope="col">
+                                        <span class="summary-header-text">
+                                            <span>@metric.MetricLabel</span>
+                                            @if (!string.IsNullOrWhiteSpace(metric.ScaleText))
+                                            {
+                                                <small>@metric.ScaleText</small>
+                                            }
+                                        </span>
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var block in _report.Blocks)
+                            {
+                                <tr>
+                                    <th scope="row">@BlockDisplayName(block)</th>
+                                    @foreach (var metric in SummaryMetrics)
+                                    {
+                                        <td>@FormatValue(SummaryValue(block, metric.MetricCode), metric.DisplayFormat)</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <ReportScaleKey Title="Measurement key" Items="@SummaryScaleKey" />
+                @if (_report.BlockGroups.Count > 0)
+                {
+                    <div class="report-group-summary no-print" aria-label="Report block groups">
+                        @foreach (var group in _report.BlockGroups)
+                        {
+                            <span><strong>@group.GroupName:</strong> @BlockGroupNames(group)</span>
+                        }
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_report.ComplianceText))
+                {
+                    <aside class="compliance-note" role="note" aria-label="Survey information">
+                        <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="M12 11v6" />
+                            <circle cx="12" cy="7.5" r=".8" fill="currentColor" stroke="none" />
+                        </svg>
+                        <p>@_report.ComplianceText</p>
+                    </aside>
+                }
+            </section>
+        }
+
         @if (_report.Actions.Count > 0 && ChecklistBlocks.Count > 0)
         {
             <section class="report-panel operational-section action-checklist-section print-only" aria-labelledby="action-checklist-title">
@@ -376,6 +317,8 @@
             </section>
         }
 
+        @RenderCharts(true)
+
         @if (_report.Photos.Count > 0)
         {
             <section class="report-panel photo-section" aria-labelledby="photos-title">
@@ -412,14 +355,105 @@
             </section>
         }
 
-        <footer class="report-footer">
-            <span>MetaGrow Crop Intelligence</span>
-            <span>Survey @_report.SurveyId</span>
-        </footer>
+        <SurveyReportFooter Brand="@SelectedBrand" PropertyName="@_report.PropertyName"
+                            SurveyDate="@_report.SurveyDate"
+                            AgronomistName="@_report.AgronomistName" AgronomistPhone="@_report.AgronomistPhone"
+                            Reference="@_report.SurveyReference" />
     }
 </div>
 
 @code {
+    private RenderFragment RenderCharts(bool historical) => @<text>
+        @foreach (var reportSection in ReportSections.Where(item => item.Section.IsHistorical == historical))
+        {
+            var section = ReportChartLayout.WithBlocksOnAxis(reportSection.Section);
+            var chartId = $"section-{section.Code}-{reportSection.Sequence}";
+            <section class="report-panel chart-panel" aria-labelledby="@chartId">
+                <img class="section-brand-logo print-only"
+                     src="@SelectedBrand.LogoPath"
+                     alt="@SelectedBrand.AltText" />
+                <div class="section-heading">
+                    <span class="section-kicker">@(section.IsHistorical ? "Survey history" : reportSection.GroupName)</span>
+                    <h2 id="@chartId">@section.Title</h2>
+                    <p class="no-print">Move over a point or bar for its value. Select a legend item to show or hide that series.</p>
+                </div>
+
+                @if (section.Series.Count == 0 && section.Code is "pests-beneficials" or "disease")
+                {
+                    <div class="no-findings">
+                        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" /><circle class="smile-eye" cx="11" cy="12" r="1" /><circle class="smile-eye" cx="21" cy="12" r="1" /><path d="M9 19 Q16 27 23 19" /></svg>
+                        <p>@(section.Code == "disease" ? "No disease found during this survey." : "No pests or beneficials were found during this survey.")</p>
+                    </div>
+                }
+                else if (section.IsHistorical)
+                {
+                    var points = HistoricalChartPoints(section);
+                    <DxChart Data="@points"
+                             Width="100%"
+                             CssClass="report-chart interactive-chart"
+                             Palette="@UtilsService.ChartPalette"
+                             PaletteExtensionMode="ChartPaletteExtensionMode.Blend">
+                        <DxChartArgumentAxis>
+                            <DxChartAxisLabel Format="ChartElementFormat.ShortDate" />
+                        </DxChartArgumentAxis>
+                        @foreach (var series in section.Series)
+                        {
+                            var seriesName = series.Name;
+                            <DxChartLineSeries Name="@seriesName"
+                                               ArgumentField="@((ReportHistoryChartPoint point) => point.Date)"
+                                               ValueField="@((ReportHistoryChartPoint point) => point.Value)"
+                                               Filter="@((ReportHistoryChartPoint point) => point.SeriesName == seriesName)" />
+                        }
+                        <DxChartLegend Position="RelativePosition.Outside" Orientation="Orientation.Horizontal" AllowToggleSeries="true" />
+                        <DxChartTooltip Enabled="true" Position="RelativePosition.Outside">
+                            <div class="chart-tooltip">
+                                <strong>@context.Point.SeriesName</strong>
+                                <span>@context.Point.Argument</span>
+                                <span>@context.Point.Value</span>
+                            </div>
+                        </DxChartTooltip>
+                    </DxChart>
+                    <MultiCropPrintChart Section="@section" />
+                }
+                else
+                {
+                    var points = CurrentChartPoints(section);
+                    <DxChart Data="@points"
+                             Width="100%"
+                             CssClass="report-chart interactive-chart"
+                             Palette="@UtilsService.ChartPalette"
+                             PaletteExtensionMode="ChartPaletteExtensionMode.Blend">
+                        <DxChartArgumentAxis Type="ChartAxisType.Discrete" DiscreteDivisionMode="ChartDiscreteAxisDivisionMode.CrossLabels">
+                            <DxChartAxisMinorTick Visible="false" />
+                            <DxChartAxisLabel Overlap="ChartAxisLabelOverlap.None"><DxChartFont Size="10" /></DxChartAxisLabel>
+                        </DxChartArgumentAxis>
+                        <DxChartValueAxis>
+                            <DxChartAxisRange StartValue="@(0d)" EndValue="@(100d)" />
+                        </DxChartValueAxis>
+                        @foreach (var series in section.Series)
+                        {
+                            var seriesName = series.Name;
+                            <DxChartBarSeries Name="@seriesName"
+                                              ArgumentField="@((ReportCurrentChartPoint point) => point.MetricLabel)"
+                                              ValueField="@((ReportCurrentChartPoint point) => point.Value)"
+                                              Filter="@((ReportCurrentChartPoint point) => point.SeriesName == seriesName)" />
+                        }
+                        <DxChartLegend Position="RelativePosition.Outside" Orientation="Orientation.Horizontal" AllowToggleSeries="true" />
+                        <DxChartTooltip Enabled="true" Position="RelativePosition.Outside">
+                            <div class="chart-tooltip">
+                                <strong>@context.Point.SeriesName</strong>
+                                <span>@context.Point.Argument</span>
+                                <span>@context.Point.Value</span>
+                            </div>
+                        </DxChartTooltip>
+                    </DxChart>
+                    <MultiCropPrintChart Section="@section" FixedAxisMaximum="100" PercentageAxis="true" />
+                }
+            </section>
+        }
+
+    </text>;
+
     [Parameter] public int SurveyId { get; set; }
     [Parameter] public MultiCropOnlineReportDto? Report { get; set; }
     [Parameter] public bool Shared { get; set; }
@@ -444,6 +478,15 @@
         .GroupBy(metric => metric.MetricCode, StringComparer.OrdinalIgnoreCase)
         .Select(group => group.First())
         .ToList() ?? [];
+
+    private IReadOnlyList<(string Name, int Count)> SummaryColumnGroups =>
+        ReportChartLayout.SummaryGroups(SummaryMetrics);
+
+    private IReadOnlyList<(string Label, string Description)> SummaryScaleKey => SummaryMetrics
+        .Where(metric => !string.IsNullOrWhiteSpace(metric.ScaleText))
+        .GroupBy(metric => metric.ScaleText!)
+        .Select(group => (group.Key, string.Join(", ", group.Select(metric => metric.MetricLabel))))
+        .ToList();
 
     private IReadOnlyList<ReportActionGroup> ActionGroups => _report?.Actions
         .GroupBy(action => new
@@ -503,9 +546,9 @@
                 ];
             foreach (var section in _report.Sections)
             {
-                if (section.IsHistorical)
+                if (section.IsHistorical || section.Series.Count == 0)
                 {
-                    result.Add(new GroupedReportSection(++sequence, "Survey history", section));
+                    result.Add(new GroupedReportSection(++sequence, section.IsHistorical ? "Survey history" : "Current survey", section));
                     continue;
                 }
 
@@ -596,13 +639,13 @@
     }
 
     private static string BlockDisplayName(MultiCropReportBlockDto block) =>
-        string.IsNullOrWhiteSpace(block.ShortCode) ? block.BlockName : block.ShortCode;
+        block.BlockName;
 
     private static double? SummaryValue(MultiCropReportBlockDto block, string metricCode) =>
         block.SummaryValues.FirstOrDefault(metric =>
             string.Equals(metric.MetricCode, metricCode, StringComparison.OrdinalIgnoreCase))?.Value;
 
-    private static string FormatValue(double? value) => value?.ToString("0.##") ?? "—";
+    private static string FormatValue(double? value, string format = "0.##") => value?.ToString(format) ?? "—";
 
     private static string ActionGroupTitle(string name)
     {

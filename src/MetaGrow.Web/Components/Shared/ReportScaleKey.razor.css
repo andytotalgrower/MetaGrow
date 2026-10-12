@@ -1,0 +1,12 @@
+.report-scale-key { border: 1px solid #a6b5bd; border-radius: .4rem; background: #f5f8fa; color: #22323a; padding: .55rem .75rem; margin: .7rem 0; font-size: .75rem; break-inside: avoid; }
+.report-scale-key > strong { display: block; font-size: .72rem; margin-bottom: .35rem; }
+dl { display: flex; flex-wrap: wrap; gap: .45rem 1.5rem; margin: 0; }
+dl > div { display: flex; align-items: baseline; gap: .45rem; }
+dt { font-weight: 700; white-space: nowrap; }
+dd { margin: 0; }
+@media print {
+    .report-scale-key { border-color: #88979f; border-radius: 2mm; padding: 2mm 2.5mm; margin: 2mm 0; font-size: 7pt; line-height: 1.3; }
+    .report-scale-key > strong { font-size: 7pt; margin-bottom: 1mm; }
+    dl { gap: 1mm 5mm; }
+    dl > div { gap: 1.5mm; }
+}

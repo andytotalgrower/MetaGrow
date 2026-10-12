@@ -4,7 +4,8 @@ public sealed record ReportBrandOption(
     string Key,
     string Label,
     string LogoPath,
-    string AltText);
+    string AltText,
+    string CompanyName);
 
 public static class ReportBranding
 {
@@ -17,12 +18,14 @@ public static class ReportBranding
             MetagenKey,
             "Metagen",
             "/images/branding/metagen-australia.jpg",
-            "Metagen Australia"),
+            "Metagen Australia",
+            "Metagen Pty Ltd"),
         new(
             TotalGrowerServicesKey,
             "Total Grower Services",
             "/images/branding/total-grower-services.png",
-            "Total Grower Services")
+            "Total Grower Services",
+            "TGS Pty Ltd")
     ];
 
     public static ReportBrandOption Get(string? key) =>

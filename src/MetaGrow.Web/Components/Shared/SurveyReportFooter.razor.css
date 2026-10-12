@@ -1,0 +1,4 @@
+.survey-report-footer { border-top: 1px solid #999; color: #444; font-size: .75rem; padding: .75rem 0; }
+.survey-report-footer > div { display: flex; flex-wrap: wrap; gap: .5rem 2rem; }
+.survey-report-footer p { font-size: .68rem; line-height: 1.4; margin: .4rem 0 0; }
+@media print { .survey-report-footer { display: none; } }

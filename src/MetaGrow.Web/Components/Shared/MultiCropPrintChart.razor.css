@@ -9,7 +9,7 @@
 
     .print-chart ::deep svg {
         display: block;
-        height: 140mm;
+        height: auto;
         max-width: none;
         overflow: visible;
         width: 273mm;
@@ -32,8 +32,12 @@
     .print-chart ::deep .axis-label { fill: #333; font-family: Arial, sans-serif; font-size: 15px; }
     .print-chart ::deep .y-label { font-size: 14px; }
     .print-chart ::deep .category-label { font-size: 12px; }
-    .print-chart ::deep .bar-value { fill: #222; font-family: Arial, sans-serif; font-size: 13px; }
-    .print-chart ::deep .legend-label { fill: #222; font-family: Arial, sans-serif; font-size: 14px; }
+    .print-chart ::deep .bar-value { fill: #111; stroke: #fff; stroke-width: 1px; paint-order: stroke; font-family: Arial, sans-serif; font-weight: 400; font-size: 11px; }
+    .print-chart ::deep .legend-box { fill: #f5f8fa; stroke: #a6b5bd; stroke-width: 1; }
+    .print-chart ::deep .legend-label { fill: #222; font-family: Arial, sans-serif; font-size: 15px; }
     .print-chart ::deep .history-line { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 4; }
     .print-chart ::deep .history-point { stroke: #fff; stroke-width: 2; }
+    .print-chart ::deep .area-average { stroke-dasharray: 12 9; }
+    .print-chart-compact ::deep .legend-label { font-size: 18px; }
+    .print-chart-compact ::deep .axis-label { font-size: 18px; }
 }

@@ -3,6 +3,7 @@
 @using System.Text
 @using ApiModels
 @using Metagen.Shared.Services
+@using MetaGrow.Web.Services
 
 <div class="print-chart @(Compact ? "print-chart-compact" : string.Empty)" aria-label="Printable chart for @Section.Title">
     @if (ChartSeries.Count > 0)
@@ -20,14 +21,20 @@
     [Parameter] public bool Compact { get; set; }
     [Parameter] public bool Rotated { get; set; }
     [Parameter] public double? FixedAxisMaximum { get; set; }
+    [Parameter] public bool PercentageAxis { get; set; }
+    [Parameter] public IReadOnlyList<string> Palette { get; set; } = UtilsService.ChartPalette;
 
     private const int TickCount = 5;
 
-    private double PlotLeft => Rotated ? 250 : 70;
+    private double PlotLeft => Rotated
+        ? Math.Clamp(Categories.Select(c => c.Label.Length * 8 + 18).DefaultIfEmpty(70).Max(), 75, 235)
+        : 45;
     private double PlotRight => 980;
-    private double PlotTop => 65;
+    private int LegendColumns => Math.Clamp(900 / Math.Max(180, ChartSeries.Select(s => s.Name.Length * 7 + 35).DefaultIfEmpty(180).Max()), 1, 5);
+    private double LegendHeight => Math.Ceiling(ChartSeries.Count / (double)LegendColumns) * 27 + 18;
+    private double PlotTop => LegendHeight + 28;
     private double PlotBottom => Compact ? 780 : 385;
-    private double ViewBoxHeight => Compact ? 900 : 560;
+    private double ViewBoxHeight => Compact ? 840 : 470;
 
     private sealed record Category(string Code, string Label);
     private sealed record BarGeometry(double X, double Y, double Width, double Height);
@@ -105,7 +112,7 @@
     {
         var groupWidth = (PlotRight - PlotLeft) / Math.Max(1, Categories.Count);
         var availableWidth = groupWidth * 0.76;
-        var barWidth = Math.Max(2, Math.Min(34, availableWidth / Math.Max(1, ChartSeries.Count)));
+        var barWidth = Math.Max(2, availableWidth / Math.Max(1, ChartSeries.Count));
         var barsWidth = barWidth * ChartSeries.Count;
         var x = PlotLeft + (categoryIndex * groupWidth) + ((groupWidth - barsWidth) / 2) + (seriesIndex * barWidth);
         var y = ValueY(value);
@@ -161,11 +168,11 @@
                 svg.Append("<line class=\"grid-line\" x1=\"").Append(SvgNumber(PlotLeft))
                     .Append("\" x2=\"").Append(SvgNumber(PlotRight)).Append("\" y1=\"")
                     .Append(SvgNumber(y)).Append("\" y2=\"").Append(SvgNumber(y)).Append("\"/>");
-                AppendText(svg, "axis-label y-label", PlotLeft - 12, y + 5, FormatValue(tick), "end");
+                AppendText(svg, "axis-label y-label", PlotLeft - 8, y + 5, AxisLabel(tick), "end");
             }
 
             svg.Append("<line class=\"axis-line\" x1=\"").Append(SvgNumber(PlotLeft))
-                .Append("\" x2=\"").Append(SvgNumber(PlotLeft)).Append("\" y1=\"25\" y2=\"")
+                .Append("\" x2=\"").Append(SvgNumber(PlotLeft)).Append("\" y1=\"").Append(SvgNumber(PlotTop)).Append("\" y2=\"")
                 .Append(SvgNumber(PlotBottom)).Append("\"/>")
                 .Append("<line class=\"axis-line\" x1=\"").Append(SvgNumber(PlotLeft))
                 .Append("\" x2=\"").Append(SvgNumber(PlotRight)).Append("\" y1=\"")
@@ -192,12 +199,14 @@
             var points = HistoricalPoints(series);
             if (points.Count > 1)
             {
-                svg.Append("<polyline class=\"history-line\" points=\"")
+                svg.Append("<polyline class=\"history-line")
+                    .Append(ReportChartLayout.IsAreaAverage(series.Name) ? " area-average" : "")
+                    .Append("\" points=\"")
                     .Append(LinePoints(points)).Append("\" stroke=\"")
                     .Append(SeriesColour(seriesIndex)).Append("\"/>");
             }
 
-            foreach (var point in points)
+            foreach (var point in points.Where(_ => !ReportChartLayout.IsAreaAverage(series.Name)))
             {
                 svg.Append("<circle class=\"history-point\" cx=\"")
                     .Append(SvgNumber(DateX(point.Date!.Value))).Append("\" cy=\"")
@@ -220,15 +229,26 @@
 
     private void AppendLegend(StringBuilder svg)
     {
+        svg.Append("<rect class=\"legend-box\" x=\"4\" y=\"2\" width=\"992\" height=\"")
+            .Append(SvgNumber(LegendHeight)).Append("\" rx=\"7\"/>");
         for (var seriesIndex = 0; seriesIndex < ChartSeries.Count; seriesIndex++)
         {
-            var column = seriesIndex % 5;
-            var row = seriesIndex / 5;
-            var x = 72 + (column * 180);
-            var y = 12 + (row * 23);
-            svg.Append("<rect class=\"legend-swatch\" x=\"").Append(x).Append("\" y=\"").Append(y)
-                .Append("\" width=\"14\" height=\"14\" fill=\"").Append(SeriesColour(seriesIndex)).Append("\"/>");
-            AppendText(svg, "legend-label", x + 21, y + 12, ChartSeries[seriesIndex].Name, "start");
+            var column = seriesIndex % LegendColumns;
+            var row = seriesIndex / LegendColumns;
+            var x = 18 + (column * 970 / LegendColumns);
+            var y = 14 + (row * 27);
+            if (Section.IsHistorical)
+            {
+                svg.Append("<line class=\"history-line")
+                    .Append(ReportChartLayout.IsAreaAverage(ChartSeries[seriesIndex].Name) ? " area-average" : "")
+                    .Append("\" x1=\"").Append(x).Append("\" x2=\"").Append(x + 28)
+                    .Append("\" y1=\"").Append(y + 7).Append("\" y2=\"").Append(y + 7)
+                    .Append("\" stroke=\"").Append(SeriesColour(seriesIndex)).Append("\"/>");
+            }
+            else
+                svg.Append("<rect class=\"legend-swatch\" x=\"").Append(x).Append("\" y=\"").Append(y)
+                    .Append("\" width=\"18\" height=\"16\" rx=\"2\" fill=\"").Append(SeriesColour(seriesIndex)).Append("\"/>");
+            AppendText(svg, "legend-label", x + 36, y + 13, ChartSeries[seriesIndex].Name, "start");
         }
     }
 
@@ -251,17 +271,22 @@
                     .Append(Encode($"{ChartSeries[seriesIndex].Name} - {category.Label}: {value.Value:0.##}"))
                     .Append("</title></rect>");
 
-                if (Categories.Count <= 12 && value.Value != 0)
+                // Keep labels inside bars only where they fit. Dense charts retain
+                // their exact values in the summary and interactive tooltips.
+                if (value.Value != 0 && bar.Height >= 18 && bar.Width >= value.Value.ToString("0.##").Length * 6 + 4)
                 {
-                    AppendText(svg, "bar-value", bar.X + (bar.Width / 2), Math.Max(18, bar.Y - 6),
+                    AppendText(svg, "bar-value", bar.X + (bar.Width / 2), bar.Y + 13,
                         value.Value.ToString("0.##"), "middle");
                 }
             }
 
             var labelX = CategoryX(categoryIndex);
             var labelY = PlotBottom + 25;
-            AppendText(svg, "axis-label category-label", labelX, labelY, ShortLabel(category.Label), "end",
-                $"rotate(-60 {SvgNumber(labelX)} {SvgNumber(labelY)})");
+            var columnWidth = (PlotRight - PlotLeft) / Math.Max(1, Categories.Count);
+            var fontSize = Math.Clamp(columnWidth / 7, 10, 13);
+            var lines = WrapLabel(category.Label, Math.Max(6, (int)(columnWidth / (fontSize * .55))));
+            for (var line = 0; line < lines.Count; line++)
+                AppendText(svg, "axis-label category-label", labelX, labelY + line * (fontSize + 2), lines[line], "middle", fontSize: fontSize);
         }
     }
 
@@ -273,7 +298,7 @@
             svg.Append("<line class=\"grid-line\" x1=\"").Append(SvgNumber(x))
                 .Append("\" x2=\"").Append(SvgNumber(x)).Append("\" y1=\"").Append(SvgNumber(PlotTop))
                 .Append("\" y2=\"").Append(SvgNumber(PlotBottom)).Append("\"/>");
-            AppendText(svg, "axis-label", x, PlotBottom + 29, FormatValue(tick), "middle");
+            AppendText(svg, "axis-label", x, PlotBottom + 29, AxisLabel(tick), "middle");
         }
 
         svg.Append("<line class=\"axis-line\" x1=\"").Append(SvgNumber(PlotLeft))
@@ -288,7 +313,8 @@
             var category = Categories[categoryIndex];
             var groupHeight = (PlotBottom - PlotTop) / Math.Max(1, Categories.Count);
             var labelY = PlotTop + ((categoryIndex + 0.5) * groupHeight) + 4;
-            AppendText(svg, "axis-label category-label", PlotLeft - 12, labelY, ShortLabel(category.Label, 31), "end");
+            AppendText(svg, "axis-label category-label", PlotLeft - 10, labelY, category.Label, "end",
+                fontSize: Math.Clamp((PlotLeft - 18) / Math.Max(1, category.Label.Length) / .55, 12, 18));
 
             for (var seriesIndex = 0; seriesIndex < ChartSeries.Count; seriesIndex++)
             {
@@ -308,11 +334,12 @@
     }
 
     private static void AppendText(StringBuilder svg, string cssClass, double x, double y, string value,
-        string anchor, string? transform = null)
+        string anchor, string? transform = null, double? fontSize = null)
     {
         svg.Append("<text class=\"").Append(cssClass).Append("\" x=\"").Append(SvgNumber(x))
             .Append("\" y=\"").Append(SvgNumber(y)).Append("\" text-anchor=\"").Append(anchor).Append('"');
         if (transform is not null) svg.Append(" transform=\"").Append(transform).Append('"');
+        if (fontSize.HasValue) svg.Append(" style=\"font-size:").Append(SvgNumber(fontSize.Value)).Append("px\"");
         svg.Append('>').Append(Encode(value)).Append("</text>");
     }
 
@@ -326,13 +353,22 @@
     }
 
     private static string FormatValue(double value) => value.ToString(value >= 10 ? "0" : "0.##");
+    private string AxisLabel(double value) => FormatValue(value) + (PercentageAxis ? "%" : "");
     private static string SvgNumber(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
-    private static string ShortLabel(string value, int maximumLength = 22) =>
-        value.Length <= maximumLength ? value : $"{value[..(maximumLength - 3)]}...";
+    private static List<string> WrapLabel(string value, int maximumLength)
+    {
+        var lines = new List<string>();
+        foreach (var word in value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (lines.Count > 0 && lines[^1].Length + word.Length + 1 <= maximumLength) lines[^1] += " " + word;
+            else lines.Add(word);
+        }
+        return lines;
+    }
     private static string Encode(string value) => WebUtility.HtmlEncode(value);
 
-    private static string SeriesColour(int index)
+    private string SeriesColour(int index)
     {
-        return UtilsService.ChartPalette[index % UtilsService.ChartPalette.Length];
+        return Palette[index % Palette.Count];
     }
 }
