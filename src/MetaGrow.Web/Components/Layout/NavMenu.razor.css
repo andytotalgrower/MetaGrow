@@ -7,6 +7,9 @@
     --dxbl-menu-item-padding-y: 0.5rem;
     --dxbl-menu-item-color: var(--dxds-color-content-neutral-default-static-dark-rest);
     --dxbl-menu-item-image-color: var(--dxds-color-content-neutral-default-static-dark-rest);
+    /* The blue drawer stays dark in both themes, including its submenu chevrons. */
+    --dxbl-menu-item-dropdown-toggle-color: var(--dxds-color-content-neutral-default-static-dark-rest);
+    --dxbl-menu-item-hover-dropdown-toggle-color: var(--dxds-color-content-neutral-default-static-dark-hovered);
     --dxbl-menu-item-hover-bg: rgb(from var(--dxds-color-surface-neutral-default-static-light-rest) r g b / 0.15);
     --dxbl-menu-item-hover-color: var(--dxds-color-content-neutral-default-static-dark-hovered);
     --dxbl-menu-item-hover-image-color: var(--dxds-color-content-neutral-default-static-dark-hovered);

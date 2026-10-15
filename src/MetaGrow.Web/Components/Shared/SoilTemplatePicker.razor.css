@@ -1,0 +1,4 @@
+.soil-template-picker { padding: 1.2rem; margin: 1rem 0; border: 1px solid var(--mg-border, #d9e0d7); border-radius: 12px; background: var(--mg-surface, var(--bs-body-bg)); }
+.soil-template-picker h3 { font-size: 1.1rem; }
+.soil-template-picker p, .soil-template-picker small { color: var(--bs-secondary-color); }
+.soil-template-picker small { display: block; margin: .75rem 0; }

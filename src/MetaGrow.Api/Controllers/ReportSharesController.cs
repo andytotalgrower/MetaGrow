@@ -1,3 +1,4 @@
+using MetaGrow.Shared.Models;
 using System.Security.Claims;
 using ApiModels.MetaGrow;
 using MetaGrow.Api.Data;
@@ -43,11 +44,21 @@ public sealed class ReportSharesController(
         var email = User.FindFirstValue(ClaimTypes.Email) ?? User.Identity?.Name;
         if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(email)) return Forbid();
 
+        if (request.ReportArea.Equals(MetaGrowReportAreas.Soil, StringComparison.OrdinalIgnoreCase))
+        {
+            var soil = await database.SoilReportStates.SingleOrDefaultAsync(item => item.SurveyId == request.SurveyId);
+            if (soil?.Status != "Approved" || !request.SoilRevisionId.HasValue || soil.CurrentRevisionId != request.SoilRevisionId)
+                return BadRequest("Only the current approved soil report revision can be shared. Refresh the report first.");
+            // The approved revision remains immutable even if another user starts a later edit while this link is created.
+            // Sharing therefore does not invalidate the report editor's optimistic-concurrency version.
+        }
+
         var token = tokens.CreateToken();
         var share = new ReportShare
         {
             Id = Guid.NewGuid(),
             SurveyId = request.SurveyId,
+            SoilRevisionId = request.ReportArea.Equals(MetaGrowReportAreas.Soil, StringComparison.OrdinalIgnoreCase) ? request.SoilRevisionId : null,
             ReportArea = request.ReportArea.ToLowerInvariant(),
             Name = string.IsNullOrWhiteSpace(request.Name) ? $"Survey {request.SurveyId}" : request.Name.Trim(),
             TokenHash = tokens.HashToken(token),
@@ -58,7 +69,8 @@ public sealed class ReportSharesController(
         };
 
         database.ReportShares.Add(share);
-        await database.SaveChangesAsync();
+        try { await database.SaveChangesAsync(); }
+        catch (DbUpdateConcurrencyException) { return Conflict("The report changed while creating the link. Refresh before sharing."); }
         return Ok(ToDto(share, token));
     }
 
@@ -80,13 +92,28 @@ public sealed class ReportSharesController(
     [AllowAnonymous]
     [EnableRateLimiting("report-share")]
     [HttpPost("{id:guid}/resolve")]
-    public async Task<ActionResult<MetaGrowReportShareResolveResponse>> Resolve(
+    public async Task<ActionResult<SharedReportAccess>> Resolve(
         Guid id,
         MetaGrowReportShareResolveRequest request)
     {
         var share = await database.ReportShares.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == id && item.RevokedUtc == null);
         if (share is null || !tokens.TokenMatches(request.Token, share.TokenHash)) return NotFound();
+
+        SoilReportDocument? soilDocument = null;
+        if (share.ReportArea == MetaGrowReportAreas.Soil)
+        {
+            var revision = await database.SoilReportRevisions.AsNoTracking().SingleOrDefaultAsync(item => item.Id == share.SoilRevisionId && item.SurveyId == share.SurveyId);
+            if (revision is null || !await database.SoilReportAudits.AnyAsync(item => item.RevisionId == revision.Id && item.Action == "approve")) return NotFound();
+            soilDocument = System.Text.Json.JsonSerializer.Deserialize<SoilReportDocument>(revision.DocumentJson)!;
+            soilDocument.Status = "Approved";
+            // Public reports contain the result and application notes; internal calculation operands remain staff-only.
+            soilDocument.Trace = []; soilDocument.DefinitionSnapshot = [];
+            // Matching evidence and staff attribution are internal QA/audit information.
+            soilDocument.SampleMatches = [];
+            // Tissue matching reasons and confirmer identities are internal audit evidence too.
+            soilDocument.Tissue.Matches = [];
+        }
 
         var now = DateTime.UtcNow;
         var updated = await database.ReportShares
@@ -96,10 +123,13 @@ public sealed class ReportSharesController(
                 .SetProperty(item => item.ViewCount, item => item.ViewCount + 1));
         if (updated == 0) return NotFound();
 
-        return Ok(new MetaGrowReportShareResolveResponse
+        return Ok(new SharedReportAccess
         {
             SurveyId = share.SurveyId,
-            ReportArea = share.ReportArea
+            ReportArea = share.ReportArea,
+            SoilReport = soilDocument,
+            // Use the creator's current preference only after validating this share token.
+            BrandKey = await new ReportBrandPreferenceStore(database).GetAsync(share.CreatedByUserId)
         });
     }
 

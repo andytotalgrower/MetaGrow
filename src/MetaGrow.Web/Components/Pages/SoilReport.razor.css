@@ -1,0 +1,75 @@
+.soil-report-workspace { padding:1rem; background:var(--mg-surface-muted); display:flex; flex-direction:column; flex:1 1 0; min-height:0; min-width:0; overflow:hidden; }
+/* Let the flex layout reserve space for the tools/footer instead of overlaying report content. */
+.report-scroll { flex:1 1 0; min-height:0; min-width:0; overflow:auto; scrollbar-gutter:stable; padding:0 .35rem; }
+/* Keep keyboard scrolling without outlining the whole viewport; controls inside retain their focus indicators. */
+.report-scroll:focus { outline:none; }
+.tools,.workspace-footer { flex-shrink:0; }
+.workspace-footer { background:var(--mg-surface); padding:0 1rem; border-radius:0 0 10px 10px; }
+.tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; padding:1rem; border:1px solid var(--mg-border); background:var(--mg-surface); border-radius:10px; }
+.tools-navigation,.tools-actions { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; }
+/* The DevExpress theme's default Info is blue-violet. Use Bootstrap-like cyan here
+   to distinguish review from Print, with dark ink for readable contrast in both themes. */
+.tools-actions ::deep .dxbl-btn-info {
+    --dxbl-btn-bg:#0dcaf0;
+    --dxbl-btn-color:#083344;
+    --dxbl-btn-border-color:#0dcaf0;
+    --dxbl-btn-hover-bg:#31d2f2;
+    --dxbl-btn-hover-color:#083344;
+    --dxbl-btn-hover-border-color:#25cff2;
+    --dxbl-btn-active-bg:#3dd5f3;
+    --dxbl-btn-active-color:#083344;
+    --dxbl-btn-active-border-color:#25cff2;
+}
+/* Preparation is separate from peer QA, with the actual saved report visible underneath the steps. */
+.preparation-steps { padding:1rem 1.25rem; margin:1rem 0; border:1px solid var(--mg-border); border-radius:10px; background:var(--mg-surface); }
+.preparation-steps ol { display:flex; flex-wrap:wrap; gap:.75rem 1.5rem; list-style:none; padding:0; margin:0 0 .5rem; color:var(--mg-muted); }
+.preparation-steps .current { color:var(--mg-link); font-weight:700; }
+.preparation-steps .complete { color:var(--mg-success-text); }
+.preparation-steps p { margin:0; color:var(--mg-muted); }
+.popup-progress { display:inline-flex; align-items:center; gap:.5rem; margin-right:auto; color:var(--mg-muted); }
+.status { font-weight:600; color:var(--mg-muted); }.loading { display:flex; align-items:center; gap:.6rem; padding:1rem; }
+.error { color:var(--mg-danger-text); background:var(--mg-danger-surface); padding:1rem; margin:1rem 0; border-radius:6px; }
+.report-editor { display:grid; gap:1rem; }
+.report-editor > p { margin:0; color:var(--mg-muted); }
+/* Each review responsibility has its own boundary; action fields remain full width within their card. */
+.editor-section { display:grid; gap:.75rem; padding:1rem; border:1px solid var(--mg-border); border-radius:8px; background:var(--mg-surface); min-width:0; }
+.editor-section h3 { font-size:1rem; margin:0; }
+.editor-section > p { margin:0; color:var(--mg-muted); }
+.action-editor { display:grid; gap:.5rem; padding:.75rem; border:1px solid var(--mg-border); border-radius:8px; background:var(--mg-surface-muted); min-width:0; }
+.action-editor-heading { display:flex; align-items:center; justify-content:space-between; font-size:.8rem; font-weight:600; color:var(--mg-muted); }
+.action-field { min-width:0; }
+.action-field ::deep .dxbl-text-edit { width:100%; }
+.editor-footer { display:flex; justify-content:flex-end; align-items:center; flex-wrap:wrap; gap:.75rem; width:100%; }
+/* Pair products alphabetically while keeping rates, compact actions and reasons inside each card. */
+.rate-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; align-items:start; }
+.rate-editor { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.5rem; align-items:center; min-width:0; border:1px solid var(--mg-border); border-radius:6px; padding:.65rem; }
+.rate-heading { min-width:0; overflow-wrap:anywhere; }
+.rate-editor small { display:block; color:var(--mg-muted); font-size:.75rem; }
+.rate-input { display:flex; gap:.25rem; align-items:center; }
+.rate-input ::deep dxbl-spinedit { width:110px; min-width:0; }
+.rate-input ::deep button { flex-shrink:0; }
+.rate-reason { grid-column:1 / -1; min-width:0; }
+.rate-reason ::deep .dxbl-text-edit { width:100%; }
+.rate-removed { background:var(--mg-surface-muted); }
+.rate-removal-status { margin-bottom:.35rem; }
+.block-choices { display:flex; flex-wrap:wrap; gap:.8rem; }
+/* A bounded selector and non-stretching row prevent the product button from making the input tall. */
+.add-product { display:flex; align-items:center; gap:.75rem; }
+.product-selector,.block-selector { width:50%; min-width:0; }
+.add-product ::deep button { flex-shrink:0; white-space:nowrap; }
+@media(max-width:600px) {
+    .rate-grid { grid-template-columns:1fr; }
+    .soil-report-workspace { padding:.3rem; }
+    .tools { padding:.6rem; gap:.5rem; }
+    .workspace-footer { padding:0 .6rem; }
+    .editor-section { padding:.75rem; }
+    .product-selector { flex:1; }
+    .block-selector { width:100%; }
+}
+/* Printing must expand the entire scrollable document and keep the existing native page footer. */
+@media print {
+    .no-print { display:none!important; }
+    .soil-report-workspace { display:block; height:auto; overflow:visible; padding:0; background:white; }
+    .report-scroll { display:block; height:auto; overflow:visible; padding:0; }
+    .workspace-footer { padding:0; }
+}

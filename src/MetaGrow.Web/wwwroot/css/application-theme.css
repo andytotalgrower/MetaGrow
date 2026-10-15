@@ -1,0 +1,141 @@
+/* Application semantics shared by pages, dialogs and native controls.
+   Brand bands, photographs and report colour scales keep their original colours. */
+:root {
+    color-scheme: light;
+    --mg-surface: #ffffff;
+    --mg-surface-muted: #f5f7f9;
+    --mg-text: #25343d;
+    --mg-muted: #596b76;
+    --mg-border: #cbd5dc;
+    --mg-link: #00699e;
+    --mg-info-surface: #e5f4fb;
+    --mg-info-text: #015682;
+    --mg-info-border: #79acc6;
+    --mg-success-surface: #e6f4eb;
+    --mg-success-text: #176447;
+    --mg-success-border: #78a995;
+    --mg-warning-surface: #fff3cd;
+    --mg-warning-text: #684d05;
+    --mg-warning-border: #c5a34a;
+    --mg-danger-surface: #fce5e8;
+    --mg-danger-text: #842029;
+    --mg-danger-border: #d68c93;
+    /* Soil deficiencies need a stronger distinction from the pale green in-range cells. */
+    --mg-report-low-surface: #f2a0ad;
+    --mg-report-low-text: #76172a;
+    --mg-purple-surface: #ede5f7;
+    --mg-purple-text: #5b2b84;
+}
+
+:root[data-bs-theme="dark"] {
+    color-scheme: dark;
+    --mg-surface: #2e2e2e;
+    --mg-surface-muted: #242424;
+    --mg-text: #e2e6e9;
+    --mg-muted: #b3bec6;
+    --mg-border: #56616b;
+    --mg-link: #81caff;
+    --mg-info-surface: #193e52;
+    --mg-info-text: #a7dfff;
+    --mg-info-border: #5287a1;
+    --mg-success-surface: #203f32;
+    --mg-success-text: #a4e5be;
+    --mg-success-border: #53866c;
+    --mg-warning-surface: #493b20;
+    --mg-warning-text: #ffe09a;
+    --mg-warning-border: #9e8245;
+    --mg-danger-surface: #4a272e;
+    --mg-danger-text: #ffb9c0;
+    --mg-danger-border: #ae626d;
+    --mg-report-low-surface: #9f3349;
+    --mg-report-low-text: #ffffff;
+    --mg-purple-surface: #3e2b50;
+    --mg-purple-text: #dec0ff;
+}
+
+/* Bridge the Bootstrap-style variables used by custom pages even where Bootstrap isn't loaded. */
+body {
+    background-color: var(--mg-surface-muted);
+    color: var(--mg-text);
+    --bs-body-bg: var(--mg-surface);
+    --bs-body-color: var(--mg-text);
+    --bs-secondary-color: var(--mg-muted);
+    --bs-tertiary-bg: var(--mg-surface-muted);
+    --bs-border-color: var(--mg-border);
+    --bs-primary-bg-subtle: var(--mg-info-surface);
+    --bs-danger-bg-subtle: var(--mg-danger-surface);
+    --bs-danger-text-emphasis: var(--mg-danger-text);
+    --bs-danger: var(--mg-danger-text);
+    --bs-success-bg-subtle: var(--mg-success-surface);
+    --bs-success-text-emphasis: var(--mg-success-text);
+    --bs-warning-bg-subtle: var(--mg-warning-surface);
+    --bs-warning-text-emphasis: var(--mg-warning-text);
+}
+
+/* Native fields used in setup/account pages need the same surfaces as DevExpress editors. */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="submit"]):not([type="button"]),
+select, textarea) {
+    color: var(--mg-text);
+    background-color: var(--mg-surface);
+}
+
+/* The branded hero stays dark in either scheme, so its links/eyebrow always need light ink. */
+.mg-hero { --mg-link: #a7dfff; }
+
+/* Shared account components distinguish readable link ink from filled button backgrounds. */
+.account-settings.account-settings--fluent {
+    --account-settings-brand-blue-deep: var(--mg-link);
+    --account-settings-text-muted: var(--mg-muted);
+}
+.account-settings .account-settings-button--primary { background: var(--mg-blue); }
+.account-settings .account-settings-button--danger { background: var(--mg-red); }
+
+@media screen {
+    /* Supplied report logos contain dark lettering; a paper backing keeps the original artwork legible. */
+    :root[data-bs-theme="dark"] .report-cover-logo,
+    :root[data-bs-theme="dark"] .handout-brand-logo {
+        background: #fff;
+        border-radius: .25rem;
+        padding: .4rem .6rem;
+    }
+}
+
+/* Report/export output stays paper-coloured, regardless of the editor's selected theme. */
+@media print {
+    :root[data-bs-theme] {
+        color-scheme: light;
+        --mg-surface: #fff;
+        --mg-surface-muted: #f5f7f9;
+        --mg-text: #25343d;
+        --mg-muted: #596b76;
+        --mg-border: #cbd5dc;
+        --mg-link: #00699e;
+        --mg-info-surface: #e5f4fb;
+        --mg-info-text: #015682;
+        --mg-info-border: #79acc6;
+        --mg-success-surface: #e6f4eb;
+        --mg-success-text: #176447;
+        --mg-success-border: #78a995;
+        --mg-warning-surface: #fff3cd;
+        --mg-warning-text: #684d05;
+        --mg-warning-border: #c5a34a;
+        --mg-danger-surface: #fce5e8;
+        --mg-danger-text: #842029;
+        --mg-danger-border: #d68c93;
+        --mg-report-low-surface: #f2a0ad;
+        --mg-report-low-text: #76172a;
+        --mg-purple-surface: #ede5f7;
+        --mg-purple-text: #5b2b84;
+    }
+    body {
+        background: #fff;
+        color: #111;
+        /* Report metadata uses DevExpress neutral tokens as well as application tokens. */
+        --dxds-color-surface-neutral-default-rest: #fff;
+        --dxds-color-surface-neutral-subdued-rest: #f5f7f9;
+        --dxds-color-content-neutral-default-rest: #25343d;
+        --dxds-color-content-neutral-subdued-rest: #596b76;
+        --dxds-color-border-neutral-default-rest: #cbd5dc;
+        --dxds-color-border-neutral-subdued-rest: #cbd5dc;
+    }
+}

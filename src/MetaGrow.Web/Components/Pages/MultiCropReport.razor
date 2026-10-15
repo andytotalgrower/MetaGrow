@@ -7,6 +7,7 @@
 @inject ITgsApiService TgsApi
 @inject NavigationManager Navigation
 @inject IJSRuntime JavaScript
+@inject IReportPreferenceApiClient _reportPreferences
 
 <PageTitle>Multi-crop survey @SurveyId | MetaGrow</PageTitle>
 
@@ -463,6 +464,8 @@
     private bool _loading;
     private bool _printInvoked;
     private bool _includePhotosForPrint;
+    // Shared reports receive the creator preference from the validated share response.
+    [Parameter] public string? SharedBrandKey { get; set; }
     private string _reportBrandKey = ReportBranding.MetagenKey;
     private string? _errorMessage;
 
@@ -586,6 +589,8 @@
 
         try
         {
+            // Load before rendering or automatic printing to avoid a flash of the wrong brand.
+            _reportBrandKey = Shared ? ReportBranding.Get(SharedBrandKey).Key : await _reportPreferences.GetAsync();
             if (Report is not null)
             {
                 _report = Report;

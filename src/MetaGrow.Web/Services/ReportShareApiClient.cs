@@ -1,3 +1,4 @@
+using MetaGrow.Shared.Models;
 using System.Net.Http.Json;
 using ApiModels.MetaGrow;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -16,9 +17,9 @@ public sealed class ReportShareApiClient(
         SendAuthenticated<MetaGrowReportShareDto[]>(HttpMethod.Get,
             $"report-shares/survey/{surveyId}?reportArea={Uri.EscapeDataString(reportArea)}");
 
-    public Task<(MetaGrowReportShareDto?, string?)> CreateAsync(int surveyId, string reportArea, string? name) =>
+    public Task<(MetaGrowReportShareDto?, string?)> CreateAsync(int surveyId, string reportArea, string? name, Guid? soilRevisionId = null) =>
         SendAuthenticated<MetaGrowReportShareDto>(HttpMethod.Post, "report-shares",
-            new MetaGrowReportShareCreateRequest { SurveyId = surveyId, ReportArea = reportArea, Name = name });
+            new MetaGrowReportShareCreateRequest { SurveyId = surveyId, ReportArea = reportArea, Name = name, SoilRevisionId = soilRevisionId });
 
     public async Task<string?> RevokeAsync(Guid id)
     {
@@ -26,14 +27,14 @@ public sealed class ReportShareApiClient(
         return error;
     }
 
-    public async Task<(MetaGrowReportShareResolveResponse?, string?)> ResolveAsync(Guid id, string token)
+    public async Task<(SharedReportAccess?, string?)> ResolveAsync(Guid id, string token)
     {
         try
         {
             var response = await Client.PostAsJsonAsync($"report-shares/{id}/resolve",
                 new MetaGrowReportShareResolveRequest { Token = token });
             if (response.IsSuccessStatusCode)
-                return (await response.Content.ReadFromJsonAsync<MetaGrowReportShareResolveResponse>(), null);
+                return (await response.Content.ReadFromJsonAsync<SharedReportAccess>(), null);
 
             return (null, response.StatusCode == System.Net.HttpStatusCode.NotFound
                 ? "This report link is invalid or has been revoked."
@@ -74,6 +75,9 @@ public sealed class ReportShareApiClient(
 
     private static async Task<string> ReadError(HttpResponseMessage response)
     {
+        if (response.StatusCode is System.Net.HttpStatusCode.BadRequest or System.Net.HttpStatusCode.Conflict
+            && response.Content.Headers.ContentType?.MediaType == "text/plain")
+            return await response.Content.ReadAsStringAsync();
         try
         {
             var error = await response.Content.ReadFromJsonAsync<MetaGrowAuthError>();

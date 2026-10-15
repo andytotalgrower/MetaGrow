@@ -8,14 +8,22 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 {
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<ReportShare> ReportShares => Set<ReportShare>();
+    public DbSet<SoilReportState> SoilReportStates => Set<SoilReportState>();
+    public DbSet<SoilReportRevision> SoilReportRevisions => Set<SoilReportRevision>();
+    public DbSet<SoilReportAudit> SoilReportAudits => Set<SoilReportAudit>();
     public DbSet<PropertyDeletionRequest> PropertyDeletionRequests => Set<PropertyDeletionRequest>();
     public DbSet<PropertyMergeRequest> PropertyMergeRequests => Set<PropertyMergeRequest>();
     public DbSet<SampleSurveyDeletionRequest> SampleSurveyDeletionRequests => Set<SampleSurveyDeletionRequest>();
     public DbSet<UserEmailAddress> UserEmailAddresses => Set<UserEmailAddress>();
+    public DbSet<MetaGrow.Shared.Models.SoilReportDefinition> SoilReportDefinitions => Set<MetaGrow.Shared.Models.SoilReportDefinition>();
+    public DbSet<SoilReportDefinitionAudit> SoilReportDefinitionAudits => Set<SoilReportDefinitionAudit>();
+    public DbSet<MetaGrow.Shared.Models.SoilDefinitionField> SoilReportDefinitionFields => Set<MetaGrow.Shared.Models.SoilDefinitionField>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        SoilReportDefinitionMapping.Configure(builder);
+        SoilReportMapping.Configure(builder);
 
         if (Database.IsSqlServer())
         {

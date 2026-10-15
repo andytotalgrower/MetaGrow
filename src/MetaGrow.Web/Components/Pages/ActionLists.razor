@@ -1,0 +1,222 @@
+@page "/admin/action-lists"
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@using MetaGrow.Web.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager)]
+@inject ITgsApiService Api
+@inject ApiTokenService Tokens
+@inject AuthenticationStateProvider AuthenticationState
+@inject IToastNotificationService Toasts
+@inject IJSRuntime JS
+@inject ILogger<ActionLists> Logger
+
+<PageTitle>Actions list | MetaGrow</PageTitle>
+<NavigationLock ConfirmExternalNavigation="@Dirty" OnBeforeInternalNavigation="BeforeNavigation" />
+<DxToastProvider Name="ActionListMessages" MaxToastCount="3" AnimationType="ToastAnimationType.Slide"
+                 HorizontalAlignment="HorizontalAlignment.Right" StickToViewport="true"
+                 DisplayTime="TimeSpan.FromSeconds(10)" Width="400px" />
+
+<div class="setup-page">
+    <header class="setup-header">
+        <div><AdminBackLink /><h1>Actions list</h1><p>Maintain the actions available when recording survey recommendations.</p></div>
+        <DxButton Text="Refresh" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="Refresh" />
+    </header>
+    @if (_options is not null)
+    {
+        <section class="scope-picker" aria-label="Action list scope">
+            <div><label for="action-survey">Survey type</label>
+                <DxComboBox @key="_selectorVersion" TData="ActionSurveyOption" TValue="int" Data="_options.Surveys"
+                            Value="_applicationId" ValueChanged="SelectSurvey" InputId="action-survey"
+                            TextFieldName="ApplicationName" ValueFieldName="ApplicationId" AllowUserInput="true"
+                            SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_busy)" />
+            </div>
+            <div><label for="action-category">Category</label>
+                <DxComboBox @key="_categoryVersion" TData="ActionCategoryOption" TValue="int" Data="_options.Categories"
+                            Value="_groupId" ValueChanged="SelectCategory" InputId="action-category"
+                            TextFieldName="ActionGroupName" ValueFieldName="ActionGroupId" AllowUserInput="true"
+                            SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_busy)" />
+            </div>
+        </section>
+    }
+    @if (_loading) { <p role="status">Loading actions…</p> }
+    else if (_options is null || _rows is null)
+    {
+        <section class="setup-card"><p>Actions could not be loaded. Use Refresh to try again.</p></section>
+    }
+    else if (_options.Surveys.Count == 0 || _options.Categories.Count == 0)
+    {
+        <p>No survey types or action categories are available.</p>
+    }
+    else
+    {
+        <div class="setup-workspace">
+            <main class="setup-card">
+                <div class="section-heading"><div><h2>@CategoryName actions</h2><p class="muted">@SurveyName · @_rows.Count actions</p></div>
+                    <DxButton Text="New action" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="NewAction" />
+                </div>
+                <p class="muted">Action names are shared by survey types using the same crop and by any categories using the action. Renaming also changes the name shown on existing reports.</p>
+                @if (UsesDefaults)
+                {
+                    <p class="scope-note">This survey currently uses shared default actions. Editing these affects other surveys using the defaults. Creating the first crop-specific action replaces the default list for this crop across all categories.</p>
+                }
+                <label for="action-search">Find an action</label>
+                <input id="action-search" type="search" placeholder="Search action names" @bind="_search" @bind:event="oninput" />
+                <div class="table-scroll"><table><thead><tr><th>Action</th><th>Survey use</th><th>Actions</th></tr></thead><tbody>
+                    @foreach (var item in FilteredRows)
+                    {
+                        <tr @key="item.ActionId" class="@(_draft?.ActionId == item.ActionId ? "selected" : "")">
+                            <td>@item.ActionName @if (item.CropTypeId == 0) { <small class="muted">(shared default)</small> }</td>
+                            <td>@(item.UsageCount > 0 ? $"{item.UsageCount:N0} references" : "Not used")</td>
+                            <td class="actions">
+                                <DxButton IconCssClass="oi oi-pencil" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Edit {item.ActionName}")" title="@($"Edit {item.ActionName}")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="@(() => Edit(item))" />
+                                <DxButton IconCssClass="oi oi-trash" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" aria-label="@($"Delete {item.ActionName}")" title="@(item.UsageCount > 0 ? "Used by surveys; cannot be deleted" : $"Delete {item.ActionName}")" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy && item.UsageCount == 0)" Click="@(() => Delete(item))" />
+                            </td>
+                        </tr>
+                    }
+                </tbody></table></div>
+                @if (!FilteredRows.Any()) { <p class="empty-state">@(_rows.Count == 0 ? "No actions in this category. Create an action to get started." : "No actions match your search.")</p> }
+                <p class="muted">Actions referenced by existing surveys cannot be deleted.</p>
+            </main>
+            <aside class="setup-editor" aria-label="Action editor">
+                <h2>@(_draft is null ? "Action editor" : _draft.ActionId == 0 ? "New action" : "Edit action")</h2>
+                @if (_draft is null) { <p class="muted">Choose New action or an edit button to show its settings here.</p> }
+                else
+                {
+                    <p class="muted">@SurveyName · @CategoryName</p>
+                    <label for="action-name">Action name</label>
+                    <input id="action-name" maxlength="50" @bind="_draft.ActionName" @bind:event="oninput" disabled="@_busy" />
+                    <p class="muted">Up to 50 characters. Names must be unique within the crop, including other categories.</p>
+                    @if (_draft.ActionId == 0 && UsesDefaults) { <p class="scope-note">Saving creates a crop-specific list and stops using the shared defaults for this crop.</p> }
+                    <div class="editor-actions">
+                        <DxButton Text="@(_busy ? "Saving…" : "Save changes")" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy && Dirty)" Click="Save" />
+                        <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!_busy)" Click="Cancel" />
+                    </div>
+                }
+            </aside>
+        </div>
+    }
+</div>
+
+@code {
+    private ActionListOptions? _options;
+    private List<ActionListEntry>? _rows;
+    private SaveActionListRequest? _draft;
+    private int _applicationId, _groupId, _selectorVersion, _categoryVersion;
+    private bool _busy, _loading = true;
+    private string _search = "";
+    private bool Dirty => _draft is not null && _draft.ActionName != _draft.OriginalName;
+    private string SurveyName => _options?.Surveys.FirstOrDefault(s => s.ApplicationId == _applicationId)?.ApplicationName ?? "Survey";
+    private string CategoryName => _options?.Categories.FirstOrDefault(s => s.ActionGroupId == _groupId)?.ActionGroupName ?? "Category";
+    private bool UsesDefaults;
+    private IEnumerable<ActionListEntry> FilteredRows => (_rows ?? []).Where(a => string.IsNullOrWhiteSpace(_search) || a.ActionName.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase));
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        // The toast provider must be rendered before reporting initial load errors.
+        await Load();
+        StateHasChanged();
+    }
+    private async Task<string> Token() => await Tokens.GetAccessTokenAsync((await AuthenticationState.GetAuthenticationStateAsync()).User)
+        ?? throw new InvalidOperationException("Your session has expired. Please sign in again.");
+
+    private async Task Load()
+    {
+        _busy = _loading = true;
+        try
+        {
+            _options = await Api.GetActionListOptions(await Token()) ?? throw new InvalidOperationException(Api.ErrorMessage ?? "Could not load survey types and categories.");
+            // Biology Survey is excluded from this page's survey selector.
+            _options.Surveys.RemoveAll(survey => string.Equals(survey.ApplicationName.Trim(), "Biology Survey", StringComparison.OrdinalIgnoreCase));
+            if (!_options.Surveys.Any(s => s.ApplicationId == _applicationId)) _applicationId = _options.Surveys.FirstOrDefault()?.ApplicationId ?? 0;
+            if (!_options.Categories.Any(c => c.ActionGroupId == _groupId)) _groupId = _options.Categories.FirstOrDefault()?.ActionGroupId ?? 0;
+            await LoadRows();
+        }
+        catch (Exception e) { _options = null; _rows = null; Error(e); }
+        finally { _busy = _loading = false; }
+    }
+    private async Task LoadRows()
+    {
+        _rows = null;
+        if (_groupId == 0) { _rows = []; return; }
+        var result = await Api.GetActionList(_applicationId, _groupId, await Token())
+            ?? throw new InvalidOperationException(Api.ErrorMessage ?? "Could not load actions.");
+        _rows = result.Actions;
+        UsesDefaults = result.UsesSharedDefaults;
+    }
+    private async Task<bool> Discard() => !_busy && (!Dirty || await JS.InvokeAsync<bool>("confirm", "Discard your unsaved action changes?"));
+    private async Task Refresh() { if (!await Discard()) return; _draft = null; await Load(); }
+    private async Task SelectSurvey(int id)
+    {
+        if (id == _applicationId) return;
+        if (!await Discard()) { _selectorVersion++; return; }
+        _applicationId = id; await ChangeScope();
+    }
+    private async Task SelectCategory(int id)
+    {
+        if (id == _groupId) return;
+        if (!await Discard()) { _categoryVersion++; return; }
+        _groupId = id; await ChangeScope();
+    }
+    private async Task ChangeScope()
+    {
+        _draft = null; _search = ""; _busy = _loading = true;
+        try { await LoadRows(); }
+        catch (Exception e) { Error(e); }
+        finally { _busy = _loading = false; }
+    }
+    private async Task NewAction() { if (await Discard()) _draft = new(); }
+    private async Task Edit(ActionListEntry item)
+    {
+        if (await Discard()) _draft = new() { ActionId = item.ActionId, ActionName = item.ActionName, OriginalName = item.OriginalName };
+    }
+    private async Task Cancel() { if (await Discard()) _draft = null; }
+    private async Task Save()
+    {
+        if (_busy || _draft is null) return;
+        var name = _draft.ActionName.Trim();
+        if (name.Length is 0 or > 50) { Notify("Action name required", "Enter a name of 1–50 characters.", ToastRenderStyle.Warning); return; }
+        _busy = true;
+        try
+        {
+            _draft.ActionName = name;
+            var saved = await Api.SaveActionList(_applicationId, _groupId, _draft, await Token())
+                ?? throw new InvalidOperationException(Api.ErrorMessage ?? "The action could not be saved.");
+            _draft = null;
+            Notify("Action saved", saved.ActionName, ToastRenderStyle.Success);
+            try { await LoadRows(); }
+            catch (Exception e) { Error(e, "Saved, but the list could not be refreshed"); }
+        }
+        catch (Exception e) { Error(e); }
+        finally { _busy = false; }
+    }
+    private async Task Delete(ActionListEntry item)
+    {
+        if (item.UsageCount > 0 || !await Discard()) return;
+        if (!await JS.InvokeAsync<bool>("confirm", $"Delete '{item.ActionName}' from all categories and survey types sharing it? Actions used by surveys cannot be deleted.")) return;
+        _busy = true;
+        try
+        {
+            if (!await Api.DeleteActionList(_applicationId, _groupId, item.ActionId, await Token()))
+                throw new InvalidOperationException(Api.ErrorMessage ?? "The action could not be deleted.");
+            _draft = null;
+            Notify("Action deleted", item.ActionName, ToastRenderStyle.Success);
+            try { await LoadRows(); }
+            catch (Exception e) { Error(e, "Deleted, but the list could not be refreshed"); }
+        }
+        catch (Exception e) { Error(e); }
+        finally { _busy = false; }
+    }
+    private void Error(Exception e, string title = "Action list could not be updated")
+    {
+        Logger.LogWarning(e, "Action list request failed");
+        Notify(title, e is InvalidOperationException or TokenRefreshUnavailableException ? e.Message : "Please try again. If the problem continues, contact your administrator.", ToastRenderStyle.Danger);
+    }
+    private void Notify(string title, string text, ToastRenderStyle style) => Toasts.ShowToast(new ToastOptions
+    {
+        ProviderName = "ActionListMessages", Title = title, Text = text, RenderStyle = style, DisplayTime = TimeSpan.FromSeconds(10)
+    });
+    private async Task BeforeNavigation(Microsoft.AspNetCore.Components.Routing.LocationChangingContext context)
+    {
+        if (_busy || Dirty && !await JS.InvokeAsync<bool>("confirm", "Discard your unsaved action changes?")) context.PreventNavigation();
+    }
+}

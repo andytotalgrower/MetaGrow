@@ -1,0 +1,81 @@
+@using MetaGrow.Web.Services
+@inject IReportPreferenceApiClient _preferences
+@inject IToastNotificationService _toasts
+@inject ILogger<ReportBrandPreferenceEditor> _logger
+
+<DxToastProvider Name="ReportBrandMessages" MaxToastCount="3" />
+<section class="report-preferences" aria-labelledby="report-brand-heading">
+    <h2 id="report-brand-heading">Your report branding</h2>
+    @* Match the Administration tiles while keeping the editable controls inside a non-link card. *@
+    <div class="branding-card" aria-busy="@(_busy ? "true" : "false")">
+    <div class="branding-card-heading">
+        <span class="branding-card-icon"><span class="icon icon-settings" aria-hidden="true"></span></span>
+        <label for="default-report-brand">Default report brand</label>
+    </div>
+    <p>Choose the default branding for your reports and shared report links.</p>
+    @if (_busy)
+    {
+        @* Positioned outside normal flow so saving does not move the controls or nearby sections. *@
+        <span class="branding-busy" role="status">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            <span class="visually-hidden">Updating report branding...</span>
+        </span>
+    }
+    @if (_loaded)
+    {
+        <div class="brand-field">
+        <DxComboBox Id="default-report-brand" Data="@ReportBranding.Options" @bind-Value="_brandKey"
+                    CssClass="brand-selector"
+                    TextFieldName="Label" ValueFieldName="Key" AllowUserInput="false" Enabled="@(!_busy)" />
+        <DxButton IconCssClass="icon icon-save" RenderStyle="ButtonRenderStyle.Primary"
+                  aria-label="Save default branding" title="Save default branding"
+                  Click="SaveAsync" Enabled="@(!_busy && _brandKey != _savedBrandKey)" />
+        </div>
+    }
+    else if (!_busy)
+    {
+        <DxButton Text="Retry loading branding" Click="LoadAsync" />
+    }
+    </div>
+</section>
+
+@code {
+    private string _brandKey = ReportBranding.MetagenKey;
+    private string _savedBrandKey = ReportBranding.MetagenKey;
+    private bool _busy = true;
+    private bool _loaded;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _busy = true;
+        try
+        {
+            _brandKey = _savedBrandKey = await _preferences.GetAsync();
+            _loaded = true;
+        }
+        catch (Exception exception) { ShowError(exception); }
+        finally { _busy = false; }
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            await _preferences.SaveAsync(_brandKey);
+            // Only mark the choice saved after the account service confirms persistence.
+            _savedBrandKey = _brandKey;
+            _toasts.ShowToast(new ToastOptions { ProviderName = "ReportBrandMessages", Title = "Report branding saved", Text = "Your default will apply when reports are opened.", RenderStyle = ToastRenderStyle.Success });
+        }
+        catch (Exception exception) { ShowError(exception); }
+        finally { _busy = false; }
+    }
+
+    private void ShowError(Exception exception)
+    {
+        _logger.LogWarning(exception, "Unable to load or save report branding.");
+        _toasts.ShowToast(new ToastOptions { ProviderName = "ReportBrandMessages", Title = "Report branding unavailable", Text = "Please try again. Your saved preference has not been changed.", RenderStyle = ToastRenderStyle.Danger });
+    }
+}

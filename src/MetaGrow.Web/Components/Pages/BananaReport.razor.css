@@ -1,3 +1,4 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
 .banana-report {
     display: flex;
     flex-direction: column;
@@ -92,7 +93,7 @@
 
 .report-eyebrow,
 .section-kicker {
-    color: var(--mg-blue, #007cba);
+    color: var(--mg-link);
     font-size: .75rem;
     font-weight: 700;
     letter-spacing: .08em;
@@ -148,7 +149,7 @@
 
 .summary-table th,
 .summary-table td {
-    border-bottom: .5px solid #c5ccd1;
+    border-bottom: .5px solid var(--mg-border);
     padding: .55rem .7rem;
     text-align: right;
     white-space: nowrap;
@@ -197,13 +198,13 @@
 .rust-thrips-status { font-weight: 700; }
 
 .rust-thrips-present {
-    background-color: #f8d7da;
-    color: #58151c;
+    background-color: var(--mg-danger-surface);
+    color: var(--mg-danger-text);
 }
 
 .rust-thrips-marks {
-    background-color: #cff4fc;
-    color: #055160;
+    background-color: var(--mg-info-surface);
+    color: var(--mg-info-text);
 }
 
 .chart-pairs,
@@ -227,7 +228,7 @@
 .comment-grid article { border-left: 3px solid var(--mg-blue-1, #bfe0f0); padding-left: 1rem; }
 .comment-grid h3 { font-size: 1rem; margin: 0 0 .35rem; }
 .comment-grid p { margin: 0; white-space: pre-line; }
-.no-comments { border-left: 3px solid var(--mg-blue-1, #bfe0f0); padding: .5rem 1rem; margin: 0; color: #52616b; }
+.no-comments { border-left: 3px solid var(--mg-blue-1, #bfe0f0); padding: .5rem 1rem; margin: 0; color: var(--mg-muted); }
 
 .operational-heading {
     align-items: flex-start;
@@ -276,14 +277,14 @@
 .action-table th:nth-child(3) { width: 22%; }
 .action-table th:nth-child(4) { width: 28%; }
 .action-table th,
-.action-table td { border: .5px solid #c5ccd1; }
+.action-table td { border: .5px solid var(--mg-border); }
 
 .action-checklist-table th,
 .action-checklist-table td { padding: .45rem; vertical-align: middle; }
 .action-checklist-table .checklist-date { width: 7.5rem; }
 .action-checklist-table .checklist-action { width: 32%; }
 .action-checklist-table .checklist-target { font-size: 1.15rem; font-weight: 700; text-align: center; }
-.action-checklist-table .checklist-not-applicable { background: #d1d5db; }
+.action-checklist-table .checklist-not-applicable { background: var(--mg-surface-muted); }
 .action-checklist-table td strong,
 .action-checklist-table td span { display: block; }
 .checklist-note { color: var(--dxds-color-content-neutral-subdued-rest); font-size: .78rem; margin: .65rem 0 0; }

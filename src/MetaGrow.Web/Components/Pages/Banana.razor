@@ -106,6 +106,30 @@
                         TextWrapEnabled="false" HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn"
                         CssClass="banana-grid">
                     <Columns>
+                        @* Keep row actions visible while the survey details scroll horizontally. *@
+                        <DxGridDataColumn Caption="Actions" Width="150px" AllowSort="false" FixedPosition="GridColumnFixedPosition.Left">
+                            <CellDisplayTemplate Context="cell">
+                                @{ var survey = (BananaSurveySummaryDto)cell.DataItem; }
+                                <div class="mg-grid-actions" role="group" aria-label="Survey actions">
+                                    <DxButton NavigateUrl="@EditSurveyUrl(survey)"
+                                              aria-label="Edit survey" title="Edit survey"
+                                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-pencil" />
+                                    <DxButton NavigateUrl="@OnlineReportUrl(survey)"
+                                              aria-label="View online report" title="View online report"
+                                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-external-link" />
+                                    <DxButton NavigateUrl="@PrintReportUrl(survey)"
+                                              aria-label="Print report" title="Print report"
+                                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-print" />
+                                    <DxButton aria-label="Delete survey" title="Delete survey"
+                                              RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-trash"
+                                              Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.Banana, survey.SurveyId))" />
+                                </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
                         <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.SurveyDate)" Caption="Date" Width="110px" DisplayFormat="dd/MM/yyyy" />
                         <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.PropertyName)" Caption="Property" MinWidth="190" />
                         <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.AgronomistName)" Caption="Agronomist" MinWidth="150" />
@@ -130,29 +154,6 @@
                         <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.SurveyHours)" Caption="Survey hours" Width="110px" DisplayFormat="N2" Visible="false" />
                         <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.ReportHours)" Caption="Report hours" Width="110px" DisplayFormat="N2" Visible="false" />
                         <DxGridDataColumn FieldName="@nameof(BananaSurveySummaryDto.ModifiedBy)" Caption="Modified by" MinWidth="150" Visible="false" />
-                        <DxGridDataColumn Caption="Actions" Width="150px" AllowSort="false">
-                            <CellDisplayTemplate Context="cell">
-                                @{ var survey = (BananaSurveySummaryDto)cell.DataItem; }
-                                <div class="mg-grid-actions" role="group" aria-label="Survey actions">
-                                    <DxButton NavigateUrl="@EditSurveyUrl(survey)"
-                                              aria-label="Edit survey" title="Edit survey"
-                                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-pencil" />
-                                    <DxButton NavigateUrl="@OnlineReportUrl(survey)"
-                                              aria-label="View online report" title="View online report"
-                                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-external-link" />
-                                    <DxButton NavigateUrl="@PrintReportUrl(survey)"
-                                              aria-label="Print report" title="Print report"
-                                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-print" />
-                                    <DxButton aria-label="Delete survey" title="Delete survey"
-                                              RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-trash"
-                                              Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.Banana, survey.SurveyId))" />
-                                </div>
-                            </CellDisplayTemplate>
-                        </DxGridDataColumn>
                     </Columns>
                 </DxGrid>
             </div>

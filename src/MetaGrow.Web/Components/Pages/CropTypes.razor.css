@@ -1,4 +1,4 @@
-.crop-types-page { width: 100%; max-width: 1200px; min-width: 0; box-sizing: border-box; margin: auto; padding: 1.5rem; }
+.crop-types-page { width: 100%; min-width: 0; box-sizing: border-box; margin: 0; padding: 1.5rem; }
 header, .crop-row, .editor-actions { display: flex; align-items: center; gap: .75rem; }
 header { justify-content: space-between; margin-bottom: 1.5rem; }
 h1 { margin: .5rem 0; }

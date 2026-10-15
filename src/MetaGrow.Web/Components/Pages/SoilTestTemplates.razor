@@ -1,0 +1,467 @@
+@page "/surveys/samples/test-templates"
+@using ApiModels.MetaGrow
+@using Metagen.Shared.Services
+@using MetaGrow.Web.Services
+@using MetaGrow.Web.Models
+@implements IDisposable
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager)]
+@inject ITgsApiService _api
+@inject ApiTokenService _tokens
+@inject AuthenticationStateProvider _authentication
+@inject IToastNotificationService _toasts
+@inject ILogger<SoilTestTemplates> _logger
+@inject IJSRuntime _js
+
+<PageTitle>Test templates | MetaGrow</PageTitle>
+<NavigationLock ConfirmExternalNavigation="@Dirty" OnBeforeInternalNavigation="BeforeNavigation" />
+<DxToastProvider Name="SoilTemplateMessages" MaxToastCount="3" HorizontalAlignment="HorizontalAlignment.Right"
+                 StickToViewport="true" DisplayTime="TimeSpan.FromSeconds(10)" Width="410px" />
+
+<div class="template-page">
+    <header class="page-heading">
+        <div><span class="eyebrow">Samples · Configuration</span><h1>Test templates</h1><p>Maintain crop targets and calculation settings for laboratory reports.</p></div>
+        @* Filtering is immediate; reloading is only needed to recover a failed load or uncertain save. *@
+        @if (!_busy && (_options is null || _session?.NeedsReload == true))
+        {
+            <DxButton Text="Reload templates" RenderStyle="ButtonRenderStyle.Secondary" Click="Refresh" />
+        }
+    </header>
+    <SampleAreaNavigation ActivePage="templates" ShowGuide="false" />
+    @if (_busy) { <div class="loading" role="status"><DxWaitIndicator Visible="true" /><span>@_progress</span></div> }
+    @if (_options is null)
+    {
+        @if (!_busy) { <p role="alert">Templates could not be loaded. Select Reload templates to try again.</p> }
+    }
+    else
+    {
+        @* A DevExpress splitter gives the list and editor their own panes and an adjustable divider. *@
+        <div class="template-workspace">
+        <DxSplitter CssClass="template-splitter" Width="100%" Height="100%" Orientation="Orientation.Horizontal">
+            <Panes>
+                <DxSplitterPane Size="34%" MinSize="25%" MaxSize="50%" AllowResize="true">
+        <section class="template-card template-browser" aria-label="Available templates">
+            @* Short labels clarify the plus icons while keeping both actions on their heading lines. *@
+            <div class="section-heading heading-actions"><h2>Templates</h2>
+                <DxButton Text="New" IconCssClass="oi oi-plus" aria-label="New template" title="New template" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!_busy)" Click="NewTemplate" />
+            </div>
+            <div class="filters">
+                <div><label for="template-type-filter">Test type</label><DxComboBox Data="_filterTypes" @bind-Value="_filterType" @bind-Value:after="RememberTestType" InputId="template-type-filter" TextFieldName="Name" ValueFieldName="Id" Enabled="@(!_busy)" /></div>
+                <div><label for="template-crop-filter">Crop</label><DxComboBox Data="FilterCrops" @bind-Value="_filterCrop" InputId="template-crop-filter" TextFieldName="CropName" ValueFieldName="CropId" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_busy)" /></div>
+            </div>
+            <DxGrid Data="FilteredTemplates" KeyFieldName="TemplateId" ShowSearchBox="true" SearchBoxNullText="Find a template…" PageSize="20" CssClass="template-list-grid" TextWrapEnabled="false" RowClick="TemplateRowClicked" CustomizeElement="CustomizeTemplateElement">
+                <Columns>
+                    <DxGridDataColumn FieldName="TemplateName" Caption="Template" MinWidth="160" />
+                    <DxGridDataColumn FieldName="CropName" Caption="Crop" MinWidth="90" />
+                    <DxGridDataColumn FieldName="UsageCount" Caption="Refs" Width="52px" />
+                    <DxGridDataColumn Name="TemplateActions" Caption="Actions" Width="120px" AllowSort="false">
+                        <CellDisplayTemplate Context="cell">
+                            @{ var item = (SoilTemplateSummary)cell.DataItem; }
+                            <div class="mg-grid-actions" role="group" aria-label="Template actions">
+                                <DxButton IconCssClass="oi oi-pencil" aria-label="Edit template" title="Edit template" CssClass="mg-grid-icon-button" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="@(() => Open(item, false))" />
+                                <DxButton IconCssClass="oi oi-copywriting" aria-label="Copy template" title="Copy template" CssClass="mg-grid-icon-button" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="@(() => Open(item, true))" />
+                                <DxButton IconCssClass="oi oi-trash" aria-label="Delete template" title="@(item.UsageCount > 0 ? "Used by reports or product limits" : "Delete template")" CssClass="mg-grid-icon-button" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Danger" Enabled="@(!_busy && item.UsageCount == 0)" Click="@(() => Delete(item))" />
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+            </DxGrid>
+        </section>
+                </DxSplitterPane>
+                <DxSplitterPane MinSize="50%" AllowResize="true">
+        @if (_draft is not null)
+        {
+            <section class="template-card editor" aria-label="Template editor" aria-busy="@_busy.ToString().ToLowerInvariant()">
+                <div class="section-heading"><div><h2 @ref="_editorHeading" tabindex="-1">@(_draft.TemplateId > 0 ? "Edit template" : _draft.SourceTemplateId > 0 ? "Copy template" : "New template")</h2><p>Valid changes save automatically after a short pause.</p></div>
+                    <div class="editor-actions"><DxButton Text="Close" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy && !_adding && !_confirming)" Click="Cancel" /></div>
+                </div>
+                <p class="save-status" role="status">@SaveStatus</p>
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Template name" ColSpanMd="6"><DxTextBox @bind-Text="_draft.TemplateName" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" MaxLength="80" Enabled="@CanEdit" /></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Crop" ColSpanMd="6"><DxComboBox Data="_options.Crops" @bind-Value="_draft.CropId" @bind-Value:after="QueueSave" TextFieldName="CropName" ValueFieldName="CropId" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@CanEdit" /></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Test type" ColSpanMd="6"><DxComboBox TData="TemplateChoice" TValue="int" Data="_types" Value="_draft.TestTypeId" ValueChanged="ChangeType" TextFieldName="Name" ValueFieldName="Id" Enabled="@(CanEdit && _draft.TemplateId == 0 && _draft.SourceTemplateId == 0)" /></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Water supply" ColSpanMd="6"><DxCheckBox @bind-Checked="_draft.Irrigated" @bind-Checked:after="QueueSave" Enabled="@CanEdit">Irrigated</DxCheckBox></DxFormLayoutItem>
+                </DxFormLayout>
+                <div class="section-heading heading-actions target-heading"><h3>Targets</h3><DxButton Text="Add" IconCssClass="oi oi-plus" aria-label="Add target" title="Add target" SizeMode="SizeMode.Small" Enabled="@CanEdit" Click="AddTarget" /></div>
+                <p>Keep each target between its minimum and maximum. Test item names are fixed; remove a target to replace its item.</p>
+                <div class="target-grid">
+                    <DxGrid Data="OrderedTargets" ShowAllRows="true" PagerVisible="false" TextWrapEnabled="false">
+                        <Columns>
+                            <DxGridDataColumn Caption="Test item" MinWidth="180" AllowSort="false"><CellDisplayTemplate Context="cell">
+                                @{ var target = (SoilTemplateTargetEditor)cell.DataItem; }
+                                <span>@ItemName(target.ItemId)</span>
+                                @if (IsDuplicate(target))
+                                {
+                                    <span class="oi oi-warning duplicate-warning" role="img" tabindex="0" aria-label="Duplicate test item" title="This test item appears more than once. Remove the extra target to resolve this legacy duplicate."></span>
+                                }
+                            </CellDisplayTemplate></DxGridDataColumn>
+                            <DxGridDataColumn Caption="Minimum" Width="110px" AllowSort="false"><CellDisplayTemplate Context="cell">
+                                @{ var target = (SoilTemplateTargetEditor)cell.DataItem; }
+                                <DxSpinEdit BindValueMode="BindValueMode.OnInput" @bind-Value="target.AcceptableRangeMin" @bind-Value:after="QueueSave" Enabled="@CanEdit" aria-label="Minimum" />
+                            </CellDisplayTemplate></DxGridDataColumn>
+                            <DxGridDataColumn Caption="Target" Width="110px" AllowSort="false"><CellDisplayTemplate Context="cell">
+                                @{ var target = (SoilTemplateTargetEditor)cell.DataItem; }
+                                <DxSpinEdit BindValueMode="BindValueMode.OnInput" @bind-Value="target.Target" @bind-Value:after="QueueSave" Enabled="@CanEdit" aria-label="Target" />
+                            </CellDisplayTemplate></DxGridDataColumn>
+                            <DxGridDataColumn Caption="Maximum" Width="110px" AllowSort="false"><CellDisplayTemplate Context="cell">
+                                @{ var target = (SoilTemplateTargetEditor)cell.DataItem; }
+                                <DxSpinEdit BindValueMode="BindValueMode.OnInput" @bind-Value="target.AcceptableRangeMax" @bind-Value:after="QueueSave" Enabled="@CanEdit" aria-label="Maximum" />
+                            </CellDisplayTemplate></DxGridDataColumn>
+                            <DxGridDataColumn Caption="Required amount formula" MinWidth="180" AllowSort="false"><CellDisplayTemplate Context="cell">
+                                @{ var target = (SoilTemplateTargetEditor)cell.DataItem; }
+                                <DxComboBox Data="_formulas" @bind-Value="target.FormulaEnum" @bind-Value:after="@(() => FormulaChanged(target))" TextFieldName="Name" ValueFieldName="Id" Enabled="@CanEdit" aria-label="Formula" />
+                            </CellDisplayTemplate></DxGridDataColumn>
+                            <DxGridDataColumn Caption="Parameters" Width="120px" AllowSort="false"><CellDisplayTemplate Context="cell">
+                                @{ var target = (SoilTemplateTargetEditor)cell.DataItem; }
+                                <DxTextBox @bind-Text="target.Params" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" MaxLength="200" Enabled="@CanEdit" aria-label="Formula parameters" />
+                            </CellDisplayTemplate></DxGridDataColumn>
+                            <DxGridDataColumn Caption="" Width="55px" AllowSort="false"><CellDisplayTemplate Context="cell">
+                                <DxButton IconCssClass="oi oi-trash" title="Remove target" aria-label="Remove target" CssClass="mg-grid-icon-button" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Danger" Enabled="@CanEdit" Click="@(() => RemoveTarget((SoilTemplateTargetEditor)cell.DataItem))" />
+                            </CellDisplayTemplate></DxGridDataColumn>
+                        </Columns>
+                    </DxGrid>
+                </div>
+                <p class="muted">The rounded TEC formula takes one numeric multiplier. Other formulas take no parameters.</p>
+                <div class="boron-settings">
+                    <DxCheckBox @bind-Checked="_draft.IsCationBoron" @bind-Checked:after="QueueSave" Enabled="@CanEdit">Cation boron adjustments</DxCheckBox>
+                    @if (_draft.IsCationBoron)
+                    {
+                        <p>CEC thresholds and boron values retain the website's calculation rules. Rule 1 supports [ACTUAL]; its target and maximum also support [MINORACTUAL].</p>
+                        <DxFormLayout>
+                            <DxFormLayoutGroup Caption="Rule 1 · CEC below threshold" ColSpanMd="12">
+                                <DxFormLayoutItem Caption="CEC below" ColSpanMd="3"><DxTextBox @bind-Text="_draft.CatRule1Val1" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Minimum" ColSpanMd="3"><DxTextBox @bind-Text="_draft.CatRule1Min" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Target" ColSpanMd="3"><DxTextBox @bind-Text="_draft.CatRule1Target" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Maximum" ColSpanMd="3"><DxTextBox @bind-Text="_draft.CatRule1Max" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+                            <DxFormLayoutGroup Caption="Rule 2 · CEC in range" ColSpanMd="12">
+                                <DxFormLayoutItem Caption="CEC at least" ColSpanMd="6"><DxTextBox @bind-Text="_draft.CatRule2Val1" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="CEC below" ColSpanMd="6"><DxTextBox @bind-Text="_draft.CatRule2Val2" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Minimum" ColSpanMd="4"><DxTextBox @bind-Text="_draft.CatRule2Min" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Target" ColSpanMd="4"><DxTextBox @bind-Text="_draft.CatRule2Target" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Maximum" ColSpanMd="4"><DxTextBox @bind-Text="_draft.CatRule2Max" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+                            <DxFormLayoutGroup Caption="Rule 3 · CEC at or above threshold" ColSpanMd="12">
+                                <DxFormLayoutItem Caption="CEC at least" ColSpanMd="3"><DxTextBox @bind-Text="_draft.CatRule3Val1" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Minimum" ColSpanMd="3"><DxTextBox @bind-Text="_draft.CatRule3Min" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Target" ColSpanMd="3"><DxTextBox @bind-Text="_draft.CatRule3Target" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Maximum" ColSpanMd="3"><DxTextBox @bind-Text="_draft.CatRule3Max" @bind-Text:after="QueueSave" BindValueMode="BindValueMode.OnInput" Enabled="@CanEdit" /></DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+                        </DxFormLayout>
+                    }
+                </div>
+            </section>
+        }
+        else
+        {
+            <section class="template-card editor editor-empty" aria-label="Template editor">
+                <h2>Select a template</h2>
+                <p>Choose a template on the left to view and edit its settings, or create a new template.</p>
+            </section>
+        }
+                </DxSplitterPane>
+            </Panes>
+        </DxSplitter>
+        </div>
+    }
+</div>
+<ConfirmDialog @ref="_confirm" />
+@* New rows stay outside the persisted grid until all required columns are valid. *@
+<DxPopup @bind-Visible="_adding" HeaderText="Add target" ShowFooter="true" CloseOnOutsideClick="false" ShowCloseButton="@(!_busy)" CloseOnEscape="@(!_busy)" Width="600px">
+    <BodyContentTemplate Context="popup">
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="Test item" ColSpanMd="12"><DxComboBox Data="AvailableItems" @bind-Value="_newTarget.ItemId" TextFieldName="ItemName" ValueFieldName="ItemId" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_busy)" /></DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Minimum" ColSpanMd="4"><DxSpinEdit @bind-Value="_newTarget.AcceptableRangeMin" BindValueMode="BindValueMode.OnInput" Enabled="@(!_busy)" /></DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Target" ColSpanMd="4"><DxSpinEdit @bind-Value="_newTarget.Target" BindValueMode="BindValueMode.OnInput" Enabled="@(!_busy)" /></DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Maximum" ColSpanMd="4"><DxSpinEdit @bind-Value="_newTarget.AcceptableRangeMax" BindValueMode="BindValueMode.OnInput" Enabled="@(!_busy)" /></DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Formula" ColSpanMd="12"><DxComboBox Data="_formulas" @bind-Value="_newTarget.FormulaEnum" @bind-Value:after="@(() => FormulaChanged(_newTarget))" TextFieldName="Name" ValueFieldName="Id" Enabled="@(!_busy)" /></DxFormLayoutItem>
+            @if (_newTarget.FormulaEnum == 10)
+            {
+                <DxFormLayoutItem Caption="Multiplier" ColSpanMd="12"><DxTextBox @bind-Text="_newTarget.Params" BindValueMode="BindValueMode.OnInput" MaxLength="200" Enabled="@(!_busy)" /></DxFormLayoutItem>
+            }
+        </DxFormLayout>
+        <p role="status">Choose an unused test item and enter its minimum, target and maximum. The target must be within that range. Zero is allowed.</p>
+        @if (_busy) { <DxWaitIndicator Visible="true" /> }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton Text="Add target" Click="CreateTarget" Enabled="@(!_busy && _session?.NeedsReload != true && NewTargetValid)" />
+        <DxButton Text="Cancel" Click="@(() => _adding = false)" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    // The session separates persisted values from unfinished edits and owns the current concurrency version.
+    private SoilTemplateOptions? _options;
+    private List<SoilTemplateSummary> _templates = [];
+    private SoilTemplateEditorSession? _session;
+    private SoilTemplateDetail? _draft => _session?.Draft;
+    private ConfirmDialog? _confirm;
+    private string _progress = "Loading templates…";
+    // First render should show progress until the initial options and templates have loaded.
+    private bool _busy = true;
+    private bool _focusEditor, _adding, _confirming, _disposed;
+    private ElementReference _editorHeading;
+    // Soil is the first-visit default; the browser's saved choice takes precedence, including All test types.
+    private const string _testTypeCookieName = "metagrow.test-templates.test-type";
+    private int _filterType = 10;
+    private int _filterCrop;
+    private CancellationTokenSource? _saveDelay;
+    private SoilTemplateTargetEditor _newTarget = new();
+    private static readonly TemplateChoice[] _types = [new(10, "Soil"), new(20, "Tissue"), new(30, "Quick Soil"), new(40, "Sap")];
+    private static readonly TemplateChoice[] _filterTypes = [new(0, "All test types"), .. _types];
+    private static readonly TemplateChoice[] _formulas = [new(0, "Standard · × 2"), new(30, "High intensity · × 3.2"), new(40, "Ultra high intensity · × 4"), new(10, "Rounded TEC · multiplier"), new(20, "Exchange sodium · TEC")];
+    private sealed record TemplateChoice(int Id, string Name);
+    private bool Dirty => _session?.HasChanges == true || _session?.NeedsReload == true;
+    private bool CanEdit => !_busy && !_adding && !_confirming && _session?.NeedsReload != true;
+    private string SaveStatus => _session is null ? "" : _session.NeedsReload
+        ? "Saving could not be confirmed. Select Reload templates before continuing."
+        : _busy ? _progress : !Dirty ? "All changes saved."
+        : _session.ValidationErrors() is { Count: > 0 } errors ? "Not saved: " + string.Join(" ", errors)
+        : "Changes waiting to save…";
+    private List<SoilTemplateSummary> FilteredTemplates => _templates.Where(t => !SoilTemplateRules.IsLegacy(t.TemplateName)
+        && (_filterType == 0 || t.TestTypeId == _filterType) && (_filterCrop == 0 || t.CropId == _filterCrop)).ToList();
+    private List<SoilTemplateCrop> FilterCrops => [new() { CropName = "All crops" }, .. _options?.Crops ?? []];
+    private List<SoilTemplateItem> AvailableItems => _options?.Items.Where(i => i.TestTypeId == _draft?.TestTypeId
+        && _session?.Targets.Any(target => target.ItemId == i.ItemId) != true)
+        .OrderBy(i => i.ItemName, StringComparer.CurrentCultureIgnoreCase).ToList() ?? [];
+    private string ItemName(int itemId) => _options?.Items.FirstOrDefault(item => item.ItemId == itemId)?.ItemName ?? $"Item {itemId}";
+    // Stable ordering keeps the first occurrence unmarked and flags every extra legacy row.
+    private List<SoilTemplateTargetEditor> OrderedTargets => _session?.Targets
+        .OrderBy(target => ItemName(target.ItemId), StringComparer.CurrentCultureIgnoreCase).ThenBy(target => target.TargetId).ToList() ?? [];
+    private bool IsDuplicate(SoilTemplateTargetEditor target) => !ReferenceEquals(OrderedTargets.First(row => row.ItemId == target.ItemId), target);
+    private bool NewTargetValid => _newTarget.IsComplete && AvailableItems.Any(item => item.ItemId == _newTarget.ItemId)
+        && SoilTemplateRules.Validate(new SoilTemplateDetail { TemplateName = "Target", CropId = 1,
+            TestTypeId = _draft?.TestTypeId ?? 0, Targets = [_newTarget.ToTarget()] }).Count == 0;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusEditor && _draft is not null && !_busy)
+        {
+            _focusEditor = false;
+            await _editorHeading.FocusAsync();
+        }
+        if (!firstRender) return;
+        await RestoreTestType();
+        await Load();
+        StateHasChanged();
+    }
+    private async Task RestoreTestType()
+    {
+        // Reuse the application's filter cookie helper and ignore stale or malformed choices.
+        try
+        {
+            var saved = await _js.InvokeAsync<string?>("metaGrowFilterPreferences.get", _testTypeCookieName);
+            if (int.TryParse(saved, out var testType) && _filterTypes.Any(choice => choice.Id == testType))
+                _filterType = testType;
+        }
+        catch (JSException exception) { _logger.LogWarning(exception, "Could not restore the template test-type filter"); }
+    }
+    private async Task RememberTestType()
+    {
+        // Persist only user changes so loading or refreshing never replaces their preference with the default.
+        try
+        {
+            await _js.InvokeVoidAsync("metaGrowFilterPreferences.set", _testTypeCookieName,
+                _filterType.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        catch (JSException exception) { _logger.LogWarning(exception, "Could not remember the template test-type filter"); }
+    }
+    private async Task<string> Token() => await _tokens.GetAccessTokenAsync((await _authentication.GetAuthenticationStateAsync()).User)
+        ?? throw new InvalidOperationException("Your session expired. Please sign in again.");
+    private SoilTemplateEditorSession Session(SoilTemplateDetail detail) => new(detail,
+        async candidate => { var id = await _api.SaveSoilTemplate(candidate, await Token()); return id > 0 ? id : throw Failure(); },
+        async id => await _api.GetSoilTemplate(id, await Token()) ?? throw Failure());
+    private async Task Load()
+    {
+        _busy = true; _progress = "Loading templates…";
+        try
+        {
+            var token = await Token();
+            _options = await _api.GetSoilTemplateOptions(token) ?? throw Failure();
+            _templates = await _api.GetSoilTemplates(token) ?? throw Failure();
+        }
+        catch (Exception exception) { _options = null; Error(exception); }
+        finally { _busy = false; }
+    }
+    private InvalidOperationException Failure() => new(_api.ErrorMessage ?? "The template request could not be completed.");
+    private void StopDelay() { _saveDelay?.Cancel(); _saveDelay?.Dispose(); _saveDelay = null; }
+    private void QueueSave()
+    {
+        StopDelay();
+        if (!CanEdit || _session is null) return;
+        _saveDelay = new();
+        _ = SaveAfterPause(_session, _saveDelay.Token);
+    }
+    private async Task SaveAfterPause(SoilTemplateEditorSession session, CancellationToken cancellation)
+    {
+        try
+        {
+            await Task.Delay(900, cancellation);
+            await InvokeAsync(async () =>
+            {
+                // A delayed callback must never save a different template after selection changes.
+                if (!cancellation.IsCancellationRequested && !_disposed && ReferenceEquals(session, _session))
+                { await Save(); StateHasChanged(); }
+            });
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) when (_disposed) { }
+    }
+    private async Task<bool> Save()
+    {
+        StopDelay();
+        if (_session is null) return true;
+        if (_busy || _session.NeedsReload) return false;
+        if (!_session.HasChanges) return true;
+        if (_session.ValidationErrors().Count > 0) return false;
+        _busy = true; _progress = "Saving changes…";
+        StateHasChanged();
+        try
+        {
+            await _session.SaveAsync();
+            // Only the list query supplies reference counts and crop names; detail defaults must never overwrite them.
+            _templates = await _api.GetSoilTemplates(await Token()) ?? throw Failure();
+            return true;
+        }
+        catch (Exception exception) { Error(exception); return false; }
+        finally { _busy = false; }
+    }
+    private async Task<bool> Discard()
+    {
+        if (_busy || _confirming || _adding) return false;
+        StopDelay();
+        if (!Dirty || await Save()) return true;
+        _confirming = true;
+        try { return await _confirm!.ShowAsync("Some changes have not been saved. Discard those edits and continue?", "Unsaved changes", "Discard"); }
+        finally { _confirming = false; }
+    }
+    private async Task Refresh()
+    {
+        if (!await Discard()) return;
+        var id = _draft?.TemplateId ?? 0;
+        _session = null;
+        await Load();
+        if (id > 0 && _templates.FirstOrDefault(item => item.TemplateId == id) is { } item) await Open(item, false);
+    }
+    private async Task Cancel() { if (await Discard()) _session = null; }
+    private async Task NewTemplate()
+    {
+        if (!await Discard()) return;
+        // Required header fields must be valid before the first write; rules are defaults for new templates only.
+        _session = Session(new()
+        {
+            TestTypeId = _filterType == 0 ? 10 : _filterType, CropId = _filterCrop,
+            CatRule1Val1 = "5", CatRule1Target = "[ACTUAL]", CatRule1Min = "0", CatRule1Max = "[ACTUAL]",
+            CatRule2Val1 = "5", CatRule2Val2 = "10", CatRule2Target = "2", CatRule2Min = "1.5", CatRule2Max = "2.5",
+            CatRule3Val1 = "10", CatRule3Target = "3", CatRule3Min = "2.5", CatRule3Max = "3.5"
+        });
+        _focusEditor = true;
+    }
+    private void CustomizeTemplateElement(GridCustomizeElementEventArgs args)
+    {
+        // Follow the open editor by ID so saves, sorting and cancelled navigation retain the correct highlight.
+        if (args.ElementType != GridElementType.DataRow) return;
+        var selected = _draft?.TemplateId > 0
+            && args.Grid.GetDataItem(args.VisibleIndex) is SoilTemplateSummary template
+            && template.TemplateId == _draft.TemplateId;
+        args.Attributes["aria-selected"] = selected ? "true" : "false";
+        if (selected) args.CssClass = "template-row-selected";
+    }
+    private async Task TemplateRowClicked(GridRowClickEventArgs args)
+    {
+        if (!CanEdit || args.VisibleIndex < 0 || args.Column?.Name == "TemplateActions") return;
+        if (args.Grid.GetDataItem(args.VisibleIndex) is SoilTemplateSummary template) await Open(template, false);
+    }
+    private async Task Open(SoilTemplateSummary item, bool copy)
+    {
+        if (!CanEdit) return;
+        if (!copy && _draft?.TemplateId == item.TemplateId) { _focusEditor = true; return; }
+        if (!await Discard()) return;
+        _busy = true; _progress = "Loading template details…";
+        try
+        {
+            var detail = await _api.GetSoilTemplate(item.TemplateId, await Token()) ?? throw Failure();
+            if (copy)
+            {
+                // Keep source identities so SQL can preserve report-only settings when creating the copy.
+                detail.SourceTemplateId = detail.TemplateId; detail.TemplateId = 0;
+                detail.TemplateName = "Copy of " + detail.TemplateName;
+            }
+            _session = Session(detail); _focusEditor = true;
+        }
+        catch (Exception exception) { Error(exception); }
+        finally { _busy = false; }
+        if (copy) QueueSave();
+    }
+    private void ChangeType(int id)
+    {
+        if (_draft is null || !CanEdit || _draft.TemplateId > 0 || _draft.SourceTemplateId > 0) return;
+        _draft.TestTypeId = id; QueueSave();
+    }
+    private void FormulaChanged(SoilTemplateTargetEditor target)
+    {
+        // Only the multiplier formula accepts parameters; switching formulas clears obsolete input.
+        if (target.FormulaEnum != 10) target.Params = null;
+        if (!_adding) QueueSave();
+    }
+    private async Task AddTarget()
+    {
+        if (!CanEdit || _session is null) return;
+        if (!await Save()) { Notify("Complete the template", SaveStatus, ToastRenderStyle.Warning); return; }
+        if (AvailableItems.Count == 0) { Notify("No unused items", "Every available test item is already in this template.", ToastRenderStyle.Info); return; }
+        _newTarget = new(); _adding = true;
+    }
+    private async Task CreateTarget()
+    {
+        if (_busy || !NewTargetValid || _session is null || _session.NeedsReload) return;
+        _busy = true; _progress = "Adding target…";
+        try { await _session.AddTargetAsync(_newTarget); _adding = false; }
+        catch (Exception exception) { _adding = false; Error(exception); }
+        finally { _busy = false; }
+    }
+    private async Task RemoveTarget(SoilTemplateTargetEditor target)
+    {
+        if (!CanEdit || _session is null) return;
+        StopDelay(); _confirming = true;
+        bool confirmed;
+        try { confirmed = await _confirm!.ShowAsync($"Remove '{ItemName(target.ItemId)}' from this template? This takes effect immediately.", "Remove target", "Remove", true); }
+        finally { _confirming = false; }
+        if (!confirmed) { QueueSave(); return; }
+        _busy = true; _progress = "Removing target…";
+        try
+        {
+            await _session.DeleteTargetAsync(target.TargetId);
+            Notify("Target removed", ItemName(target.ItemId), ToastRenderStyle.Success);
+        }
+        catch (Exception exception) { Error(exception); }
+        finally { _busy = false; }
+        QueueSave();
+    }
+    private async Task Delete(SoilTemplateSummary item)
+    {
+        if (!await Discard() || !await _confirm!.ShowAsync($"Delete '{item.TemplateName}' and its targets?", "Delete template", "Delete", true)) return;
+        _busy = true; _progress = "Deleting template…";
+        try
+        {
+            var token = await Token();
+            var detail = await _api.GetSoilTemplate(item.TemplateId, token) ?? throw Failure();
+            if (!await _api.DeleteSoilTemplate(item.TemplateId, detail.Version, token)) throw Failure();
+            _session = null;
+            Notify("Template deleted", item.TemplateName, ToastRenderStyle.Success);
+            await Load();
+        }
+        catch (Exception exception) { Error(exception); }
+        finally { _busy = false; }
+    }
+    private void Error(Exception exception)
+    {
+        _logger.LogWarning(exception, "Test template operation failed");
+        Notify("Template request failed", exception is InvalidOperationException ? exception.Message : "Please retry or contact an administrator.", ToastRenderStyle.Danger);
+    }
+    private void Notify(string title, string text, ToastRenderStyle style) => _toasts.ShowToast(new ToastOptions
+    { ProviderName = "SoilTemplateMessages", Title = title, Text = text, RenderStyle = style });
+    private async Task BeforeNavigation(Microsoft.AspNetCore.Components.Routing.LocationChangingContext context)
+    {
+        if (!await Discard()) context.PreventNavigation();
+    }
+    public void Dispose() { _disposed = true; StopDelay(); }
+}

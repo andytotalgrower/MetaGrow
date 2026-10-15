@@ -17,7 +17,7 @@ namespace MetaGrow.Api.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -321,6 +321,9 @@ namespace MetaGrow.Api.Data.Migrations
                     b.Property<DateTime?>("RevokedUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("SoilRevisionId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("SurveyId")
                         .HasColumnType("int");
 
@@ -441,6 +444,206 @@ namespace MetaGrow.Api.Data.Migrations
                     b.ToTable("SampleSurveyDeletionRequests");
                 });
 
+            modelBuilder.Entity("MetaGrow.Api.Data.SoilReportAudit", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("OccurredUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PreviousStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<double>("QaHours")
+                        .HasColumnType("float");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("RevisionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("SurveyId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SurveyId", "OccurredUtc");
+
+                    b.ToTable("SoilReportAudits", (string)null);
+                });
+
+            modelBuilder.Entity("MetaGrow.Api.Data.SoilReportDefinitionAudit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AfterJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("BeforeJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ChangedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("ChangedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("ChangedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DefinitionKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("Version")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DefinitionKey", "ChangedUtc");
+
+                    b.ToTable("SoilReportDefinitionAudits", (string)null);
+                });
+
+            modelBuilder.Entity("MetaGrow.Api.Data.SoilReportRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DocumentJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("InputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SourceJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("SurveyId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SurveyId", "Number")
+                        .IsUnique();
+
+                    b.ToTable("SoilReportRevisions", (string)null);
+                });
+
+            modelBuilder.Entity("MetaGrow.Api.Data.SoilReportState", b =>
+                {
+                    b.Property<int>("SurveyId")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("CurrentRevisionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NotSampledJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("nvarchar(max)")
+                        .HasDefaultValue("[]");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SampleMatchesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("nvarchar(max)")
+                        .HasDefaultValue("[]");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("TemplateId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TissueMatchesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("nvarchar(max)")
+                        .HasDefaultValue("[]");
+
+                    b.Property<string>("TissueTemplatesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("nvarchar(max)")
+                        .HasDefaultValue("[]");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("SurveyId");
+
+                    b.ToTable("SoilReportStates", (string)null);
+                });
+
             modelBuilder.Entity("MetaGrow.Api.Data.UserEmailAddress", b =>
                 {
                     b.Property<long>("Id")
@@ -485,6 +688,42 @@ namespace MetaGrow.Api.Data.Migrations
                         .HasFilter("[IsPrimary] = 1");
 
                     b.ToTable("UserEmailAddresses");
+                });
+
+            modelBuilder.Entity("MetaGrow.Shared.Models.SoilDefinitionField", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("SoilReportDefinitionFields", (string)null);
+                });
+
+            modelBuilder.Entity("MetaGrow.Shared.Models.SoilReportDefinition", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("SoilReportDefinitions", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -652,6 +891,24 @@ namespace MetaGrow.Api.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MetaGrow.Api.Data.SoilReportAudit", b =>
+                {
+                    b.HasOne("MetaGrow.Api.Data.SoilReportState", null)
+                        .WithMany()
+                        .HasForeignKey("SurveyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MetaGrow.Api.Data.SoilReportRevision", b =>
+                {
+                    b.HasOne("MetaGrow.Api.Data.SoilReportState", null)
+                        .WithMany()
+                        .HasForeignKey("SurveyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("MetaGrow.Api.Data.UserEmailAddress", b =>
                 {
                     b.HasOne("MetaGrow.Api.Data.ApplicationUser", "User")
@@ -661,6 +918,99 @@ namespace MetaGrow.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MetaGrow.Shared.Models.SoilReportDefinition", b =>
+                {
+                    b.OwnsMany("MetaGrow.Shared.Models.SoilReportDefinitionSection", "Sections", b1 =>
+                        {
+                            b1.Property<string>("DefinitionKey")
+                                .HasColumnType("nvarchar(100)");
+
+                            b1.Property<int>("Id")
+                                .HasColumnType("int");
+
+                            b1.Property<string>("Colour")
+                                .IsRequired()
+                                .HasMaxLength(7)
+                                .HasColumnType("nvarchar(7)");
+
+                            b1.Property<string>("Name")
+                                .IsRequired()
+                                .HasMaxLength(120)
+                                .HasColumnType("nvarchar(120)");
+
+                            b1.Property<int>("Order")
+                                .HasColumnType("int");
+
+                            b1.Property<bool>("SampleSurveyVisible")
+                                .HasColumnType("bit");
+
+                            b1.HasKey("DefinitionKey", "Id");
+
+                            b1.ToTable("SoilReportDefinitionSections", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("DefinitionKey");
+
+                            b1.OwnsMany("MetaGrow.Shared.Models.SoilReportDefinitionItem", "Items", b2 =>
+                                {
+                                    b2.Property<string>("DefinitionKey")
+                                        .HasColumnType("nvarchar(100)");
+
+                                    b2.Property<int>("SectionId")
+                                        .HasColumnType("int");
+
+                                    b2.Property<int>("Id")
+                                        .HasColumnType("int");
+
+                                    b2.Property<string>("BackgroundColour")
+                                        .HasMaxLength(7)
+                                        .HasColumnType("nvarchar(7)");
+
+                                    b2.Property<string>("Field")
+                                        .IsRequired()
+                                        .HasMaxLength(100)
+                                        .HasColumnType("nvarchar(100)");
+
+                                    b2.Property<string>("Label")
+                                        .IsRequired()
+                                        .HasMaxLength(160)
+                                        .HasColumnType("nvarchar(160)");
+
+                                    b2.Property<int?>("LegacyItemId")
+                                        .HasColumnType("int");
+
+                                    b2.Property<string>("NumberFormat")
+                                        .IsRequired()
+                                        .HasMaxLength(30)
+                                        .HasColumnType("nvarchar(30)");
+
+                                    b2.Property<int>("Order")
+                                        .HasColumnType("int");
+
+                                    b2.Property<string>("ShortName")
+                                        .HasMaxLength(40)
+                                        .HasColumnType("nvarchar(40)");
+
+                                    b2.Property<bool>("ShowIfZero")
+                                        .HasColumnType("bit");
+
+                                    b2.HasKey("DefinitionKey", "SectionId", "Id");
+
+                                    b2.HasIndex("DefinitionKey", "Field")
+                                        .IsUnique();
+
+                                    b2.ToTable("SoilReportDefinitionItems", (string)null);
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("DefinitionKey", "SectionId");
+                                });
+
+                            b1.Navigation("Items");
+                        });
+
+                    b.Navigation("Sections");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

@@ -1,0 +1,55 @@
+@page "/surveys/samples/soil-reports"
+@using ApiModels.MetaGrow
+@using MetaGrow.Shared.Models
+@using MetaGrow.Web.Services
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject SoilReportApiClient _api
+@inject IToastNotificationService _toasts
+<PageTitle>Soil and tissue reports | MetaGrow</PageTitle>
+<DxToastProvider Name="SoilQueueMessages" MaxToastCount="3" HorizontalAlignment="HorizontalAlignment.Right" StickToViewport="true" />
+<div class="soil-queue">
+    <div class="title">
+        <div class="title-header-text">Soil and tissue reports</div>
+        <div class="title-content-text">Review soil and tissue reports and complete QA. Open a Sample survey to start a new report.</div>
+    </div>
+    <SampleAreaNavigation ActivePage="soil-reports" ShowGuide="false" />
+    @* Match the Samples filter pattern: selection changes load results automatically, with retry only after an error. *@
+    <section class="filter-panel" aria-labelledby="soil-report-filter-heading">
+        <div class="filter-heading"><h2 id="soil-report-filter-heading">Filter reports</h2><p>Results update automatically when you change the status.</p></div>
+        <div class="filter-field"><label for="soil-report-status">Report status</label><DxComboBox InputId="soil-report-status" Data="_statuses" @bind-Value="_status" @bind-Value:after="Load" AllowUserInput="false" Enabled="@(!_busy)" /></div>
+    </section>
+    @if (_busy) { <div class="loading-state" role="status"><DxWaitIndicator Visible="true" /><span>Loading soil and tissue reports…</span></div> }
+    else if (_error.Length > 0)
+    {
+        <div class="error-state" role="alert"><span>@_error</span><DxButton Text="Retry" Click="Load" RenderStyle="ButtonRenderStyle.Secondary" /></div>
+    }
+    else if (_reports.Count == 0)
+    {
+        <div class="empty-state"><strong>@EmptyHeading</strong><span>Open a Sample survey to select its template and view its report.</span><DxButton Text="Open Sample surveys" NavigateUrl="/surveys/samples" RenderStyle="ButtonRenderStyle.Secondary" /></div>
+    }
+    else
+    {
+    <div class="result-heading"><h2>Results</h2><span>@_reports.Count report@(_reports.Count == 1 ? "" : "s")</span></div>
+    <DxGrid Data="_reports" ShowSearchBox="true" PageSize="25" KeyFieldName="SurveyId" HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn"><Columns>
+        <DxGridDataColumn FieldName="SurveyDate" Caption="Survey date" DisplayFormat="dd MMM yyyy" Width="130px" /><DxGridDataColumn FieldName="PropertyName" Caption="Farm" /><DxGridDataColumn FieldName="Agronomist" /><DxGridDataColumn FieldName="Status" Width="130px" /><DxGridDataColumn FieldName="Revision" Width="80px" />
+        <DxGridDataColumn Caption="" Width="55px"><CellDisplayTemplate Context="cell"><DxButton IconCssClass="oi oi-document" CssClass="mg-grid-icon-button" aria-label="Open report" title="Open report" NavigateUrl="@($"/surveys/samples/{((SoilReportListItem)cell.DataItem).SurveyId}/soil-report")" RenderStyle="ButtonRenderStyle.Secondary" /></CellDisplayTemplate></DxGridDataColumn>
+    </Columns></DxGrid>
+    @if (_reports.Count == 200) { <small>Showing the 200 most recently revised reports. Older reports remain available from their Sample survey.</small> }
+    }
+</div>
+@code {
+    // Saved agronomist reviews are distinct from reports already sent to the peer QA queue.
+    private static readonly string[] _statuses = ["Awaiting QA", "Editing", "Ready for QA", "Approved"];
+    private List<SoilReportListItem> _reports = [];
+    private string _status = "Awaiting QA", _error = "";
+    private bool _busy = true;
+    private string EmptyHeading => _status switch { "Editing" => "No reports being edited", "Ready for QA" => "No reports ready for QA", "Approved" => "No approved reports", _ => "No reports awaiting QA" };
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) { await Load(); StateHasChanged(); } }
+    private async Task Load()
+    {
+        _busy = true; _error = "";
+        try { _reports = await _api.List(_status); }
+        catch (Exception exception) { _error = exception.Message; _toasts.ShowToast(new ToastOptions { ProviderName = "SoilQueueMessages", Title = "Soil and tissue reports unavailable", Text = _error, RenderStyle = ToastRenderStyle.Danger }); }
+        finally { _busy = false; }
+    }
+}

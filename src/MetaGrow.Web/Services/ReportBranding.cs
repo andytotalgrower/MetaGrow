@@ -9,8 +9,9 @@ public sealed record ReportBrandOption(
 
 public static class ReportBranding
 {
-    public const string MetagenKey = "metagen";
-    public const string TotalGrowerServicesKey = "total-grower-services";
+    // Keep presentation choices aligned with the account preference contract.
+    public const string MetagenKey = MetaGrow.Shared.Models.ReportBrandPreference._metagen;
+    public const string TotalGrowerServicesKey = MetaGrow.Shared.Models.ReportBrandPreference._tgs;
 
     public static IReadOnlyList<ReportBrandOption> Options { get; } =
     [

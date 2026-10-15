@@ -1,15 +1,16 @@
-.import-guide { background: #e7f5fb; border: 2px solid #007cba; border-left-width: 7px; border-radius: .8rem; color: #123e55; padding: 1.25rem 1.4rem; }
-.guide-kicker { color: #005b88; font-size: .8rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+/* Shared semantic colours follow the saved light/dark scheme. */
+.import-guide { background: var(--mg-info-surface); border: 2px solid #007cba; border-left-width: 7px; border-radius: .8rem; color: var(--mg-info-text); padding: 1.25rem 1.4rem; }
+.guide-kicker { color: var(--mg-info-text); font-size: .8rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .import-guide h2 { font-size: clamp(1.15rem, 2vw, 1.5rem); line-height: 1.35; margin: .4rem 0 1rem; }
 .guide-choices { display: grid; gap: .85rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.guide-choice, .guide-unavailable { background: #fff; border: 2px solid #79acc6; border-radius: .55rem; color: #123e55; display: flex; flex-direction: column; gap: .4rem; padding: 1rem 1.1rem; text-align: left; }
+.guide-choice, .guide-unavailable { background: var(--mg-surface); border: 2px solid var(--mg-info-border); border-radius: .55rem; color: var(--mg-info-text); display: flex; flex-direction: column; gap: .4rem; padding: 1rem 1.1rem; text-align: left; }
 .guide-choice { cursor: pointer; }
 .guide-choice strong, .guide-unavailable strong { font-size: 1.1rem; }
 .guide-choice strong { display: flex; gap: .75rem; justify-content: space-between; }
 .guide-choice > span, .guide-unavailable > span { font-size: .88rem; line-height: 1.5; }
-.guide-choice:hover { background: #f2fbff; border-color: #005b88; }
-.guide-choice:focus-visible, .sample-nav a:focus-visible { outline: 3px solid #005b88; outline-offset: 3px; }
-.guide-unavailable { background: #edf3f6; border-style: dashed; }
+.guide-choice:hover { background: var(--mg-info-surface); border-color: var(--mg-info-text); }
+.guide-choice:focus-visible, .sample-nav a:focus-visible { outline: 3px solid var(--mg-info-text); outline-offset: 3px; }
+.guide-unavailable { background: var(--mg-surface-muted); border-style: dashed; }
 .sample-nav { align-items: center; border-bottom: 1px solid var(--dxds-color-border-neutral-subdued-rest); display: flex; flex-wrap: wrap; gap: .25rem; }
 .sample-nav a { border-bottom: 3px solid transparent; color: inherit; padding: .65rem .9rem; text-decoration: none; }
 .sample-nav a:hover { background: var(--dxds-color-surface-neutral-subdued-rest); }

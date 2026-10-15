@@ -1,0 +1,17 @@
+/* Match cards keep the laboratory evidence beside the editable survey choice in both themes. */
+.matching-body { display: flex; flex-direction: column; gap: .8rem; }
+.matching-body > p { margin: 0; }
+.match-card { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(0, 2fr); gap: 1rem; padding: .9rem; border: 1px solid var(--mg-border); border-radius: .45rem; }
+.match-review { border-color: var(--mg-warning-text); }
+.lab-result, .sample-selection { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.lab-result span, .lab-result small, .sample-selection small { overflow-wrap: anywhere; }
+.match-label, .sample-selection label { font-size: .8rem; font-weight: 600; }
+.lab-result small, .sample-selection small { color: var(--mg-muted); }
+.match-input { display: flex; align-items: center; gap: .35rem; }
+.match-input ::deep dxbl-combo-box { flex: 1; min-width: 0; }
+.sample-selection ::deep dxbl-input-editor { width: 100%; }
+.matching-warning { padding: .7rem; border-radius: .35rem; background: var(--mg-warning-surface); color: var(--mg-warning-text); }
+.matching-error { color: var(--mg-danger-text); }
+.matching-progress, .matching-footer { display: flex; align-items: center; gap: .75rem; }
+.matching-footer { justify-content: flex-end; width: 100%; }
+@media (max-width: 700px) { .match-card { grid-template-columns: minmax(0, 1fr); } }

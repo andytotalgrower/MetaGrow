@@ -13,6 +13,11 @@
 .icon-close {
     --icon-mask-image: url("/images/close.svg");
 }
+
+/* Reusable save glyph for icon-only DevExpress actions. */
+.icon-save {
+    --icon-mask-image: url("/images/save.svg");
+}
 .icon-demos {
     --icon-mask-image: url("/images/demos.svg");
 }

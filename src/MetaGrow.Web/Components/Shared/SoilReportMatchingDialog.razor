@@ -1,0 +1,104 @@
+@using MetaGrow.Shared.Models
+@using MetaGrow.Web.Services
+@inject SoilReportApiClient _api
+@inject IToastNotificationService _toasts
+
+<DxToastProvider Name="SoilMatchingMessages" MaxToastCount="2" HorizontalAlignment="HorizontalAlignment.Right" StickToViewport="true" />
+<DxPopup @bind-Visible="_visible" HeaderText="@($"Match {Material} samples")" Width="1040px" MaxWidth="calc(100vw - 2rem)" MaxHeight="calc(100dvh - 2rem)"
+         Scrollable="true" ShowFooter="true" CloseOnOutsideClick="false" CloseOnEscape="@(!_busy)" ShowCloseButton="@(!_busy)">
+    <BodyContentTemplate>
+        <div class="matching-body">
+            <p>Check each laboratory result against its collected sample. Block matches are suggested automatically; references and barcodes are optional. A sample can be used only once.</p>
+            @if (_busy) { <div class="matching-progress" role="status"><DxWaitIndicator Visible="true" /> Loading or saving sample matches…</div> }
+            @if (_error.Length > 0) { <div class="matching-error" role="alert">@_error <DxButton Text="Reload matches" RenderStyle="ButtonRenderStyle.Secondary" Click="Load" Enabled="@(!_busy)" /></div> }
+            @if (_session is { } session)
+            {
+                @if (!session.Review.CanEdit) { <p>Return the report to editing before changing its sample matches.</p> }
+                @foreach (var issue in session.Review.Issues) { <p class="matching-warning" role="alert">@issue</p> }
+                @if (session.Review.Rows.Count == 0) { <p>No @Material laboratory results have been imported for this survey.</p> }
+                @foreach (var row in session.Review.Rows)
+                {
+                    <section @key="row.LabSoilId" class="match-card @(row.RequiresReview || session.IsDuplicate(row) ? "match-review" : "")" aria-label="@($"Lab result {row.LabSoilId}")">
+                        <div class="lab-result">
+                            <span class="match-label">Laboratory result</span>
+                            <strong>@row.BlockName</strong>
+                            <span>@row.Laboratory</span>
+                            <span>Reference: @(string.IsNullOrWhiteSpace(row.Reference) ? "None" : row.Reference)</span>
+                            <small>Result @row.LabSoilId</small>
+                        </div>
+                        <div class="sample-selection">
+                            <label for="@($"soil-match-{row.LabSoilId}")">Collected @Material sample</label>
+                            <div class="match-input">
+                                <DxComboBox Data="row.Choices" TextFieldName="Label" ValueFieldName="SurveyItemId" Value="row.SurveyItemId"
+                                            ValueChanged="@((int value) => session.Select(row, value))" AllowUserInput="true" SearchMode="ListSearchMode.AutoSearch"
+                                            aria-label="@($"Survey sample for lab result {row.LabSoilId}")"
+                                            NullText="Choose the matching sample" Enabled="@(!_busy && session.Review.CanEdit)" Id="@($"soil-match-{row.LabSoilId}")" />
+                                @if (row.IsManual || row.RequiresReview)
+                                {
+                                    <DxButton IconCssClass="oi oi-action-undo" aria-label="@($"Restore automatic match for result {row.LabSoilId}")" title="Restore automatic matching"
+                                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Text" CssClass="btn-icon-only"
+                                              Enabled="@(!_busy && session.Review.CanEdit)" Click="@(() => session.RestoreAutomatic(row))" />
+                                }
+                            </div>
+                            @if (session.IsDuplicate(row)) { <span class="matching-error" role="alert">This sample is selected for more than one result.</span> }
+                            @if (row.IsManual)
+                            {
+                                <label for="@($"soil-match-reason-{row.LabSoilId}")">Reason for this match</label>
+                                <DxTextBox @bind-Text="row.Reason" BindValueMode="BindValueMode.OnInput" MaxLength="500" NullText="Explain how you identified this sample"
+                                           aria-label="@($"Reason for matching result {row.LabSoilId}")"
+                                           Enabled="@(!_busy && session.Review.CanEdit)" Id="@($"soil-match-reason-{row.LabSoilId}")" />
+                            }
+                            else { <small>@(row.RequiresReview ? row.Message : "Automatic match — " + row.Message)</small> }
+                        </div>
+                    </section>
+                }
+            }
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="matching-footer"><DxButton Text="Save and view report" Enabled="@(!_busy && _session?.CanSave == true)" Click="Save" />
+        <DxButton Text="Cancel" Enabled="@(!_busy)" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => _visible = false)" /></div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public EventCallback Saved { get; set; }
+    private bool _visible, _busy, _tissue;
+    private string Material => _tissue ? "tissue" : "soil";
+    private int _surveyId;
+    private string _error = "";
+    private SoilReportMatchingSession? _session;
+
+    public async Task ShowAsync(int surveyId, SoilReportMatchingReview? review = null, bool tissue = false)
+    {
+        _tissue = tissue; _surveyId = surveyId; _visible = true; _error = ""; _session = null;
+        if (review is not null) { _session = new(review); StateHasChanged(); }
+        else await Load();
+    }
+    private async Task Load()
+    {
+        _busy = true; _error = ""; StateHasChanged();
+        try { _session = new(await _api.Matching(_surveyId, _tissue)); }
+        catch (Exception exception) { Error(exception); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+    private async Task Save()
+    {
+        if (_session?.CanSave != true) return;
+        _busy = true; _error = "";
+        try
+        {
+            await _api.SaveMatching(_surveyId, _session.Change(), _tissue);
+            _visible = false;
+            _toasts.ShowToast(new ToastOptions { ProviderName = "SoilMatchingMessages", Title = "Sample matches saved", RenderStyle = ToastRenderStyle.Success });
+            await Saved.InvokeAsync();
+        }
+        catch (Exception exception) { Error(exception); }
+        finally { _busy = false; }
+    }
+    private void Error(Exception exception)
+    {
+        _error = exception.Message;
+        _toasts.ShowToast(new ToastOptions { ProviderName = "SoilMatchingMessages", Title = "Sample matches could not be saved or loaded", Text = _error, RenderStyle = ToastRenderStyle.Danger });
+    }
+}

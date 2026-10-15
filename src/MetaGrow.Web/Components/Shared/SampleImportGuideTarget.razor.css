@@ -1,3 +1,4 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
 .guide-target { border-radius: .65rem; min-width: 0; scroll-margin-block: 6rem 1rem; }
 .guide-target:focus { outline: none; }
-.guide-instruction { background: #e7f5fb; border-radius: .5rem; color: #123e55; font-size: 1rem; line-height: 1.5; margin: 0 0 .8rem; padding: .85rem 1rem; }
+.guide-instruction { background: var(--mg-info-surface); border-radius: .5rem; color: var(--mg-info-text); font-size: 1rem; line-height: 1.5; margin: 0 0 .8rem; padding: .85rem 1rem; }

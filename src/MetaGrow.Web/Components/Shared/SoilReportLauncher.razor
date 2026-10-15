@@ -1,0 +1,41 @@
+@using MetaGrow.Web.Services
+@inject SoilReportApiClient _api
+@inject NavigationManager _navigation
+@inject IToastNotificationService _toasts
+
+<DxToastProvider Name="SoilLauncherMessages" MaxToastCount="2" HorizontalAlignment="HorizontalAlignment.Right" StickToViewport="true" />
+@if (_checking) { <div role="status"><DxWaitIndicator Visible="true" /> Opening report…</div> }
+<DxPopup @bind-Visible="_visible" HeaderText="Select report templates" Width="680px" CloseOnOutsideClick="false">
+    <BodyContentTemplate>
+        <SoilTemplatePicker @key="_surveyId" SurveyId="_surveyId" ShowHeading="false" ViewRequested="Continue" />
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    private bool _checking, _visible;
+    private int _surveyId;
+
+    public async Task OpenAsync(int surveyId)
+    {
+        if (_checking || _visible) return;
+        _checking = true; _surveyId = surveyId;
+        StateHasChanged();
+        try
+        {
+            // Check before leaving the survey list so a missing template is completed in context.
+            var settings = await _api.Settings(surveyId);
+            if (settings.TemplatesComplete) Continue(); else _visible = true;
+        }
+        catch (Exception exception)
+        {
+            _toasts.ShowToast(new ToastOptions { ProviderName = "SoilLauncherMessages", Title = "Report unavailable", Text = exception.Message, RenderStyle = ToastRenderStyle.Danger });
+        }
+        finally { _checking = false; StateHasChanged(); }
+    }
+
+    private void Continue()
+    {
+        _visible = false;
+        _navigation.NavigateTo($"/surveys/samples/{_surveyId}/soil-report");
+    }
+}

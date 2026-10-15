@@ -1,0 +1,294 @@
+@page "/admin/soil-report-definitions"
+@using ApiModels.MetaGrow
+@using MetaGrow.Shared.Models
+@using MetaGrow.Web.Services
+@using System.Text.Json
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager)]
+@inject SoilReportDefinitionApiClient _api
+@inject IToastNotificationService _toasts
+@inject ILogger<SoilReportDefinitions> _logger
+
+<PageTitle>Soil and tissue report definitions | MetaGrow</PageTitle>
+<DxToastProvider Name="SoilDefinitionMessages" MaxToastCount="3" HorizontalAlignment="HorizontalAlignment.Right" StickToViewport="true" Width="420px" />
+<div class="definitions-page">
+    <header class="heading">
+        <div><AdminBackLink /><h1>Soil and tissue report definitions</h1><p>Maintain the sections and measures shown on soil and tissue reports.</p></div>
+        @* Search and selection update immediately; retain a reload action only for request recovery. *@
+        @if (!_busy && (_definitions is null || _error.Length > 0))
+        {
+            <DxButton Text="Reload definitions" RenderStyle="ButtonRenderStyle.Secondary" Click="Load" />
+        }
+    </header>
+    @if (_busy) { <div class="loading" role="status"><DxWaitIndicator Visible="true" /><span>Loading or saving definitions…</span></div> }
+    @if (_definitions is null)
+    {
+        @if (!_busy) { <p role="alert">Definitions could not be loaded. Select Reload definitions to try again.</p> }
+    }
+    else if (_definitions.Count == 0) { <p>The soil report definitions have not been installed in MetaGrow yet.</p> }
+    else
+    {
+        <div class="workspace">
+            <section class="card-panel" aria-label="Report definitions">
+                <h2>Definitions</h2>
+                <DxGrid Data="_definitions" KeyFieldName="Key" ShowAllRows="true" PagerVisible="false" ShowSearchBox="true" RowClick="SelectDefinition" CustomizeElement="HighlightSelection">
+                    <Columns>
+                        <DxGridDataColumn FieldName="Name" Caption="Definition" />
+                        <DxGridDataColumn Caption="" Width="48px" AllowSort="false"><CellDisplayTemplate Context="cell">
+                            <DxButton IconCssClass="oi oi-pencil" aria-label="Open definition" title="Open definition" CssClass="mg-grid-icon-button" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="@(() => Select((SoilReportDefinition)cell.DataItem))" />
+                        </CellDisplayTemplate></DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+                <p class="help">Definitions are selected using the block’s survey crop and available laboratory measures. Calculation targets remain in Samples → Test templates.</p>
+            </section>
+            @if (_selected is not null)
+            {
+                <section class="card-panel details" aria-label="Definition details">
+                    <div class="heading"><h2>@_selected.Name</h2><div class="buttons">
+                        <DxButton IconCssClass="oi oi-pencil" aria-label="Rename definition" title="Rename definition" Enabled="@(!_busy)" Click="Rename" RenderStyle="ButtonRenderStyle.Secondary" />
+                        <DxButton Text="Change history" Enabled="@(!_busy)" Click="History" RenderStyle="ButtonRenderStyle.Secondary" />
+                    </div></div>
+                    <p class="help">Changes apply to new report calculations. Approved reports keep their saved definition.</p>
+                    <div class="heading"><h3>Sections</h3><DxButton Text="Add section" Enabled="@(!_busy)" Click="@(() => EditSection(null))" /></div>
+                    <DxGrid Data="OrderedSections" KeyFieldName="Id" ShowAllRows="true" PagerVisible="false" RowClick="SelectSection" CustomizeElement="HighlightSelection">
+                        <Columns>
+                            <DxGridDataColumn FieldName="Name" Caption="Section" />
+                            <DxGridDataColumn FieldName="Order" Width="75px" />
+                            <DxGridDataColumn FieldName="SampleSurveyVisible" Caption="Show" Width="65px" />
+                            <DxGridDataColumn Caption="" Width="90px" AllowSort="false"><CellDisplayTemplate Context="cell">
+                                @{ var section = (SoilReportDefinitionSection)cell.DataItem; }
+                                <div class="mg-grid-actions">
+                                    <DxButton IconCssClass="oi oi-pencil" aria-label="Edit section" title="Edit section" CssClass="mg-grid-icon-button" SizeMode="SizeMode.Small" Enabled="@(!_busy)" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => EditSection(section))" />
+                                    <DxButton IconCssClass="oi oi-trash" aria-label="Delete section" title="Delete section and its measures" CssClass="mg-grid-icon-button" SizeMode="SizeMode.Small" Enabled="@(!_busy)" RenderStyle="ButtonRenderStyle.Danger" Click="@(() => DeleteSection(section))" />
+                                </div>
+                            </CellDisplayTemplate></DxGridDataColumn>
+                        </Columns>
+                    </DxGrid>
+                    @if (SelectedSection is { } currentSection)
+                    {
+                        <div class="heading measure-heading"><h3>@currentSection.Name measures</h3><DxButton Text="Add measure" Enabled="@(!_busy)" Click="@(() => EditItem(null))" /></div>
+                        <DxGrid Data="currentSection.Items.OrderBy(item => item.Order).ThenBy(item => item.Label)" KeyFieldName="Id" ShowAllRows="true" PagerVisible="false" ShowSearchBox="true">
+                            <Columns>
+                                <DxGridDataColumn FieldName="Label" Caption="Measure" MinWidth="140" />
+                                <DxGridDataColumn FieldName="Order" Width="65px" />
+                                <DxGridDataColumn FieldName="ShortName" Caption="Short name" Width="120px" />
+                                <DxGridDataColumn FieldName="NumberFormat" Caption="Format" Width="100px" />
+                                <DxGridDataColumn FieldName="ShowIfZero" Caption="Show zero" Width="90px" />
+                                <DxGridDataColumn Caption="" Width="90px" AllowSort="false"><CellDisplayTemplate Context="cell">
+                                    @{ var item = (SoilReportDefinitionItem)cell.DataItem; }
+                                    <div class="mg-grid-actions">
+                                        <DxButton IconCssClass="oi oi-pencil" aria-label="Edit measure" title="Edit measure" CssClass="mg-grid-icon-button" SizeMode="SizeMode.Small" Enabled="@(!_busy)" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => EditItem(item))" />
+                                        <DxButton IconCssClass="oi oi-trash" aria-label="Delete measure" title="Delete measure" CssClass="mg-grid-icon-button" SizeMode="SizeMode.Small" Enabled="@(!_busy)" RenderStyle="ButtonRenderStyle.Danger" Click="@(() => DeleteItem(item))" />
+                                    </div>
+                                </CellDisplayTemplate></DxGridDataColumn>
+                            </Columns>
+                        </DxGrid>
+                    }
+                </section>
+            }
+        </div>
+    }
+</div>
+@* Each popup saves one complete, validated change. Delete confirmation applies immediately. *@
+<DxPopup @bind-Visible="_editing" HeaderText="@_title" Width="650px" ShowFooter="true" CloseOnOutsideClick="false" CloseOnEscape="@(!_busy)" ShowCloseButton="@(!_busy)">
+    <BodyContentTemplate Context="editorPopup">
+        @if (_deleting) { <p>@_deleteMessage</p> }
+        else if (_item is not null)
+        {
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Measure" ColSpanMd="12"><DxComboBox Data="AvailableFields" TValue="string" TData="SoilDefinitionField" Value="_item.Field" ValueChanged="ChooseField" TextFieldName="Label" ValueFieldName="Key" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!_busy && _newItem)" /></DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Display label" ColSpanMd="12"><DxTextBox @bind-Text="_item.Label" BindValueMode="BindValueMode.OnInput" MaxLength="160" Enabled="@(!_busy)" /></DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Overview short name" ColSpanMd="12"><DxTextBox @bind-Text="_item.ShortName" BindValueMode="BindValueMode.OnInput" MaxLength="40" NullText="Optional — uses display label when blank" Enabled="@(!_busy)" /><small class="help">Used only in the Status overview. Include the unit where needed, for example Mg ppm.</small></DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Section" ColSpanMd="12"><DxComboBox Data="OrderedSections" @bind-Value="_destinationSectionId" TextFieldName="Name" ValueFieldName="Id" Enabled="@(!_busy)" /></DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Order" ColSpanMd="6"><DxSpinEdit @bind-Value="_item.Order" MinValue="0" Enabled="@(!_busy)" /></DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Number format" ColSpanMd="6"><DxComboBox Data="_formats" @bind-Value="_item.NumberFormat" Enabled="@(!_busy)" /></DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Display" ColSpanMd="12"><DxCheckBox @bind-Checked="_item.ShowIfZero" Enabled="@(!_busy)">Show when every result is zero</DxCheckBox></DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Background colour" ColSpanMd="12"><DxTextBox @bind-Text="_item.BackgroundColour" NullText="Optional #RRGGBB" Enabled="@(!_busy)" /></DxFormLayoutItem>
+            </DxFormLayout>
+        }
+        else if (_section is not null)
+        {
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Section name" ColSpanMd="12"><DxTextBox @bind-Text="_section.Name" BindValueMode="BindValueMode.OnInput" MaxLength="120" Enabled="@(!_busy)" /></DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Order" ColSpanMd="6"><DxSpinEdit @bind-Value="_section.Order" MinValue="0" Enabled="@(!_busy)" /></DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Colour" ColSpanMd="6"><DxTextBox @bind-Text="_section.Colour" NullText="#RRGGBB" Enabled="@(!_busy)" /></DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Visibility" ColSpanMd="12"><DxCheckBox @bind-Checked="_section.SampleSurveyVisible" Enabled="@(!_busy)">Show on Sample survey reports</DxCheckBox></DxFormLayoutItem>
+            </DxFormLayout>
+        }
+        else { <label for="definition-name">Definition name</label><DxTextBox InputId="definition-name" @bind-Text="_name" BindValueMode="BindValueMode.OnInput" MaxLength="120" Enabled="@(!_busy)" /> }
+        <label class="reason-label" for="definition-change-reason">Reason for change</label>
+        <DxMemo InputId="definition-change-reason" @bind-Text="_reason" BindValueMode="BindValueMode.OnInput" Rows="2" MaxLength="500" Enabled="@(!_busy)" />
+        @if (!string.IsNullOrEmpty(_error)) { <p role="alert" class="error">@_error</p> }
+        @if (_busy) { <DxWaitIndicator Visible="true" /> }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton Text="@(_deleting ? "Delete" : "Save change")" RenderStyle="@(_deleting ? ButtonRenderStyle.Danger : ButtonRenderStyle.Primary)" Enabled="@(!_busy && !string.IsNullOrWhiteSpace(_reason))" Click="Save" />
+        <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="@(() => _editing = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+<DxPopup @bind-Visible="_historyVisible" HeaderText="Definition change history" Width="850px">
+    <BodyContentTemplate>
+        <DxGrid Data="_history" PageSize="15">
+            <Columns>
+                <DxGridDataColumn FieldName="ChangedUtc" Caption="Changed (UTC)" DisplayFormat="yyyy-MM-dd HH:mm" Width="160px" />
+                <DxGridDataColumn FieldName="ChangedBy" Caption="By" />
+                <DxGridDataColumn FieldName="Reason" />
+            </Columns>
+        </DxGrid>
+        <p>Latest 100 changes. Full before-and-after definitions are retained in the audit.</p>
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    private List<SoilReportDefinition>? _definitions;
+    private List<SoilDefinitionField> _fields = [];
+    private List<SoilDefinitionChange> _history = [];
+    private SoilReportDefinition? _selected;
+    private SoilReportDefinitionSection? _section;
+    private SoilReportDefinitionItem? _item;
+    private int _sectionId, _destinationSectionId;
+    // Initial markup is rendered before OnAfterRenderAsync starts the first API request.
+    // Show the loading indicator immediately instead of briefly displaying a failed-load message.
+    private bool _busy = true;
+    private bool _editing, _deleting, _newItem, _historyVisible;
+    private string _name = "", _reason = "", _title = "", _error = "", _deleteMessage = "";
+    private static readonly string[] _formats = ["#,##0", "#,##0.0", "#,##0.00", "#,##0.000", "#,##0.0000", "N0", "N1", "N2", "N3", "N4"];
+    private SoilReportDefinitionSection? SelectedSection => _selected?.Sections.FirstOrDefault(section => section.Id == _sectionId);
+    private IEnumerable<SoilReportDefinitionSection> OrderedSections => _selected?.Sections.OrderBy(section => section.Order).ThenBy(section => section.Id) ?? Enumerable.Empty<SoilReportDefinitionSection>();
+    private IEnumerable<SoilDefinitionField> AvailableFields => _fields
+        .Where(option => option.Key == _item?.Field || !(_selected?.Sections.SelectMany(section => section.Items).Any(item => item.Field == option.Key) ?? false))
+        // Both legacy bindings have the same label, but only OrganicCarbon estimates a missing lab result.
+        .Select(option => option.Key switch
+        {
+            "OrganicCarbon" => new SoilDefinitionField(option.Key, "Organic carbon % (reported or estimated)"),
+            "OrganicCarbonPc" => new SoilDefinitionField(option.Key, "Organic carbon % (laboratory result)"),
+            _ => option
+        });
+    private static T Clone<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value))!;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await Load();
+        StateHasChanged();
+    }
+    private async Task Load()
+    {
+        _busy = true;
+        try
+        {
+            _fields = await _api.FieldsAsync();
+            _definitions = await _api.GetAsync();
+            var selected = _definitions.FirstOrDefault(item => item.Key == _selected?.Key) ?? _definitions.FirstOrDefault();
+            if (selected is not null) Select(selected); else _selected = null;
+            _error = "";
+        }
+        catch (Exception exception) { Error(exception); }
+        finally { _busy = false; }
+    }
+    private void Select(SoilReportDefinition definition)
+    {
+        _selected = definition;
+        _sectionId = OrderedSections.FirstOrDefault()?.Id ?? 0;
+    }
+    private void SelectDefinition(GridRowClickEventArgs args)
+    {
+        if (!_busy && args.Grid.GetDataItem(args.VisibleIndex) is SoilReportDefinition definition) Select(definition);
+    }
+    private void SelectSection(GridRowClickEventArgs args)
+    {
+        if (!_busy && args.Grid.GetDataItem(args.VisibleIndex) is SoilReportDefinitionSection section) _sectionId = section.Id;
+    }
+    private void HighlightSelection(GridCustomizeElementEventArgs args)
+    {
+        // Keep the current definition/section identifiable after focus moves into its popup or measure grid.
+        if (args.ElementType != GridElementType.DataRow) return;
+        var selected = args.Grid.GetDataItem(args.VisibleIndex) switch
+        {
+            SoilReportDefinition definition => definition.Key == _selected?.Key,
+            SoilReportDefinitionSection section => section.Id == _sectionId,
+            _ => false
+        };
+        args.Attributes["aria-selected"] = selected ? "true" : "false";
+        if (selected) args.CssClass = "definition-row-selected";
+    }
+    private void Begin(string title)
+    {
+        _title = title; _reason = ""; _error = ""; _deleting = false; _section = null; _item = null; _editing = true;
+    }
+    private void Rename() { Begin("Rename definition"); _name = _selected!.Name; }
+    private void EditSection(SoilReportDefinitionSection? section)
+    {
+        Begin(section is null ? "Add section" : "Edit section");
+        _section = section is not null ? Clone(section) : new() { Id = _selected!.Sections.Select(item => item.Id).DefaultIfEmpty().Max() + 1, Order = _selected.Sections.Select(item => item.Order).DefaultIfEmpty().Max() + 10 };
+    }
+    private void EditItem(SoilReportDefinitionItem? item)
+    {
+        Begin(item is null ? "Add measure" : "Edit measure");
+        _newItem = item is null;
+        _destinationSectionId = _sectionId;
+        _item = item is not null ? Clone(item) : new() { Id = _selected!.Sections.SelectMany(section => section.Items).Select(row => row.Id).DefaultIfEmpty().Max() + 1, Order = SelectedSection!.Items.Select(row => row.Order).DefaultIfEmpty().Max() + 10 };
+    }
+    private void ChooseField(string value)
+    {
+        if (_item is null) return;
+        // Suggest the legacy display label without overwriting a label the user has already customised.
+        var previousLabel = _fields.FirstOrDefault(option => option.Key == _item.Field)?.Label;
+        if (string.IsNullOrWhiteSpace(_item.Label) || _item.Label == previousLabel)
+            _item.Label = _fields.FirstOrDefault(option => option.Key == value)?.Label ?? "";
+        _item.Field = value;
+    }
+    private void DeleteSection(SoilReportDefinitionSection section)
+    {
+        Begin("Delete section"); _deleting = true; _section = Clone(section);
+        _deleteMessage = $"Delete {section.Name} and its {section.Items.Count} measures? This applies immediately after confirmation.";
+    }
+    private void DeleteItem(SoilReportDefinitionItem item)
+    {
+        Begin("Delete measure"); _deleting = true; _item = Clone(item);
+        _deleteMessage = $"Delete {item.Label} from this definition? This applies immediately after confirmation.";
+    }
+    private async Task Save()
+    {
+        if (_busy || _selected is null) return;
+        _busy = true; _error = "";
+        try
+        {
+            // Work on a copy: failed validation or a concurrency conflict must not alter the visible saved layout.
+            var draft = Clone(_selected);
+            if (_item is not null)
+            {
+                if (!_newItem || _deleting) draft.Sections.Single(section => section.Id == _sectionId).Items.RemoveAll(item => item.Id == _item.Id);
+                if (!_deleting) draft.Sections.Single(section => section.Id == _destinationSectionId).Items.Add(Clone(_item));
+            }
+            else if (_section is not null)
+            {
+                draft.Sections.RemoveAll(section => section.Id == _section.Id);
+                if (!_deleting) draft.Sections.Add(Clone(_section));
+            }
+            else draft.Name = _name;
+            var saved = await _api.SaveAsync(draft, _reason);
+            var index = _definitions!.FindIndex(item => item.Key == saved.Key);
+            _definitions[index] = saved;
+            _definitions = _definitions.OrderBy(item => item.Name).ToList();
+            _selected = saved;
+            if (SelectedSection is null) _sectionId = OrderedSections.FirstOrDefault()?.Id ?? 0;
+            _editing = false;
+            _toasts.ShowToast(new ToastOptions { ProviderName = "SoilDefinitionMessages", Title = "Definition saved", Text = saved.Name, RenderStyle = ToastRenderStyle.Success });
+        }
+        catch (Exception exception) { Error(exception); }
+        finally { _busy = false; }
+    }
+    private async Task History()
+    {
+        _busy = true;
+        try { _history = await _api.HistoryAsync(_selected!.Key); _historyVisible = true; }
+        catch (Exception exception) { Error(exception); }
+        finally { _busy = false; }
+    }
+    private void Error(Exception exception)
+    {
+        _logger.LogWarning(exception, "Soil report definition request failed");
+        _error = exception is InvalidOperationException ? exception.Message : "The request could not be completed. Reload definitions and try again.";
+        _toasts.ShowToast(new ToastOptions { ProviderName = "SoilDefinitionMessages", Title = "Definition request failed", Text = _error, RenderStyle = ToastRenderStyle.Danger });
+    }
+}

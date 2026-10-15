@@ -1,0 +1,104 @@
+@using MetaGrow.Shared.Models
+@using MetaGrow.Web.Services
+@inject SoilReportApiClient _api
+@inject IToastNotificationService _toasts
+
+<DxToastProvider Name="NotSampledMessages" MaxToastCount="2" HorizontalAlignment="HorizontalAlignment.Right" StickToViewport="true" />
+<DxPopup @bind-Visible="_visible" HeaderText="Blocks not sampled" Width="900px" ShowFooter="true" CloseOnOutsideClick="false" CloseOnEscape="@(!_busy)" ShowCloseButton="@(!_busy)">
+    <BodyContentTemplate>
+        <p>Mark only samples that were never collected. Each needs a reason. This is recorded in MetaGrow and the report; survey and laboratory data stay unchanged.</p>
+        @if (_busy) { <div role="status"><DxWaitIndicator Visible="true" /> Loading or saving sample exclusions…</div> }
+        @if (_error.Length > 0) { <p role="alert">@_error</p> }
+        @if (_preparation is not null)
+        {
+            @if (!_preparation.CanEdit) { <p>Return the report to editing before changing these exclusions.</p> }
+            @if (Candidates.Count == 0) { <p>Every soil sample has a laboratory result. No not-sampled exclusions are needed.</p> }
+            else
+            {
+                <DxGrid Data="Candidates" KeyFieldName="SurveyItemId" ShowAllRows="true" PagerVisible="false" TextWrapEnabled="true">
+                    <Columns>
+                        <DxGridDataColumn FieldName="BlockName" Caption="Block" MinWidth="130" />
+                        <DxGridDataColumn FieldName="Barcode" DisplayFormat="0" Width="100px" />
+                        <DxGridDataColumn Caption="Not sampled" Width="110px"><CellDisplayTemplate Context="cell">
+                            @{ var sample = (SoilReportSampleChoice)cell.DataItem; }
+                            <DxCheckBox Checked="@_change.Items.Any(item => item.SurveyItemId == sample.SurveyItemId)" CheckedChanged="@((bool value) => Toggle(sample.SurveyItemId, value))" Enabled="@(!_busy && _preparation.CanEdit)" aria-label="@($"Not sampled: {sample.BlockName}")" />
+                        </CellDisplayTemplate></DxGridDataColumn>
+                        <DxGridDataColumn Caption="Reason" MinWidth="260"><CellDisplayTemplate Context="cell">
+                            @{ var sample = (SoilReportSampleChoice)cell.DataItem; var exclusion = _change.Items.FirstOrDefault(item => item.SurveyItemId == sample.SurveyItemId); }
+                            @if (sample.HasLabResult) { <span role="alert">A lab result now exists. Clear this exclusion.</span> }
+                            @if (exclusion is not null) { <DxTextBox @bind-Text="exclusion.Reason" BindValueMode="BindValueMode.OnInput" MaxLength="500" Enabled="@(!_busy && _preparation.CanEdit)" NullText="Required reason" aria-label="@($"Reason: {sample.BlockName}")" /> }
+                        </CellDisplayTemplate></DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            }
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        @if (_preparation is null) { <DxButton Text="Retry" Enabled="@(!_busy)" RenderStyle="ButtonRenderStyle.Secondary" Click="Load" /> }
+        <DxButton Text="Save and view report" Enabled="@CanSave" Click="Save" />
+        <DxButton Text="Cancel" Enabled="@(!_busy)" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => _visible = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public EventCallback Saved { get; set; }
+    private bool _visible, _busy;
+    private int _surveyId;
+    private string _error = "";
+    private SoilReportPreparation? _preparation;
+    private SoilReportNotSampledChange _change = new();
+    // Existing exceptions remain visible if a subsequent import makes them invalid, so they can be cleared.
+    private List<SoilReportSampleChoice> Candidates => _preparation?.Samples.Where(sample => !sample.HasLabResult
+        || _preparation.NotSampled.Any(item => item.SurveyItemId == sample.SurveyItemId)).ToList() ?? [];
+    private bool CanSave => !_busy && _preparation?.CanEdit == true && Candidates.Count > 0
+        // Allow clearing existing exclusions, but do not offer an empty initial save that cannot resolve missing results.
+        && (_change.Items.Count > 0 || _preparation.NotSampled.Count > 0)
+        && _change.Items.All(item => !string.IsNullOrWhiteSpace(item.Reason) && item.Reason.Length <= 500
+            && _preparation.Samples.Any(sample => sample.SurveyItemId == item.SurveyItemId && !sample.HasLabResult));
+
+    public async Task ShowAsync(int surveyId)
+    {
+        _surveyId = surveyId; _visible = true; _preparation = null;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _busy = true; _error = ""; StateHasChanged();
+        try
+        {
+            _preparation = await _api.Preparation(_surveyId);
+            _change = new() { ExpectedVersion = _preparation.Version,
+                Items = _preparation.NotSampled.Select(item => new SoilReportNotSampled { SurveyItemId = item.SurveyItemId, Reason = item.Reason }).ToList() };
+        }
+        catch (Exception exception) { Error(exception); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    private void Toggle(int surveyItemId, bool value)
+    {
+        _change.Items.RemoveAll(item => item.SurveyItemId == surveyItemId);
+        if (value) _change.Items.Add(new() { SurveyItemId = surveyItemId });
+    }
+
+    private async Task Save()
+    {
+        if (!CanSave) return;
+        _busy = true; _error = "";
+        try
+        {
+            await _api.SaveNotSampled(_surveyId, _change);
+            _visible = false;
+            _toasts.ShowToast(new ToastOptions { ProviderName = "NotSampledMessages", Title = "Sample exclusions saved", RenderStyle = ToastRenderStyle.Success });
+            await Saved.InvokeAsync();
+        }
+        catch (Exception exception) { Error(exception); }
+        finally { _busy = false; }
+    }
+
+    private void Error(Exception exception)
+    {
+        _error = exception.Message;
+        _toasts.ShowToast(new ToastOptions { ProviderName = "NotSampledMessages", Title = "Sample exclusions", Text = _error, RenderStyle = ToastRenderStyle.Danger });
+    }
+}

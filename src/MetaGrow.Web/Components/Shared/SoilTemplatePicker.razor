@@ -1,0 +1,98 @@
+@using ApiModels.MetaGrow
+@using MetaGrow.Shared.Models
+@using MetaGrow.Web.Services
+@inject SoilReportApiClient _api
+@inject IToastNotificationService _toasts
+@inject NavigationManager _navigation
+
+<DxToastProvider Name="@_provider" MaxToastCount="2" HorizontalAlignment="HorizontalAlignment.Right" StickToViewport="true" />
+<section class="soil-template-picker">
+    @if (ShowHeading) { <h3>Report templates</h3> }
+    <p>Use one calculation template for every soil block in this survey. Each block’s survey crop controls crop-specific notes. Select tissue targets separately for each crop; template names do not need to match.</p>
+    @if (_busy) { <div role="status"><DxWaitIndicator Visible="true" /> Loading or saving report settings…</div> }
+    @if (_error.Length > 0) { <p role="alert">@_error</p><DxButton Text="Retry" Click="Load" Enabled="@(!_busy)" /> }
+    @if (_choices is not null)
+    {
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="Soil template" ColSpanMd="12"><DxComboBox Data="_choices.Templates" Value="TemplateId" ValueChanged="ChangeTemplate" TData="SoilTemplateSummary" TValue="int" TextFieldName="TemplateName" ValueFieldName="TemplateId" NullText="Choose a soil template" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" Enabled="@(!Disabled && !_busy)" /></DxFormLayoutItem>
+            @foreach (var crop in _settings.TissueCrops)
+            {
+                <DxFormLayoutItem Caption="@($"Tissue template — {crop.CropName}")" ColSpanMd="12">
+                    <DxComboBox TData="SoilTemplateSummary" TValue="int" Data="_choices.TissueTemplates" Value="@TissueTemplate(crop.CropId)"
+                                ValueChanged="@((int id) => ChangeTissueTemplate(crop.CropId, id))" TextFieldName="TemplateName" ValueFieldName="TemplateId"
+                                NullText="Choose a tissue template" SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                Enabled="@(!Disabled && !_busy)" />
+                </DxFormLayoutItem>
+            }
+        </DxFormLayout>
+        @if (SurveyId > 0)
+        {
+            <small>Settings save automatically in MetaGrow. Soil and tissue template names do not need to match.</small>
+            <DxButton Text="View report" IconCssClass="oi oi-document" Enabled="@(TemplateId > 0 && _settings.TemplatesComplete && !_busy && _error.Length == 0)" Click="OpenReport" />
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public int SurveyId { get; set; }
+    [Parameter] public int TemplateId { get; set; }
+    [Parameter] public EventCallback<int> TemplateIdChanged { get; set; }
+    [Parameter] public bool ShowHeading { get; set; } = true;
+    [Parameter] public bool Disabled { get; set; }
+    // The report setup page can load in place; navigating to the same route would otherwise leave it uncalculated.
+    [Parameter] public EventCallback ViewRequested { get; set; }
+    private readonly string _provider = "SoilTemplate-" + Guid.NewGuid().ToString("N");
+    private SoilReportSourceOptions? _choices;
+    private SoilReportSettings _settings = new();
+    private bool _busy = true;
+    private string _error = "";
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) { await Load(); StateHasChanged(); } }
+    private async Task Load()
+    {
+        _busy = true; _error = "";
+        try
+        {
+            _choices = await _api.Options();
+            if (SurveyId > 0)
+            {
+                _settings = await _api.Settings(SurveyId);
+                TemplateId = _settings.TemplateId;
+            }
+        }
+        catch (Exception exception) { Error(exception.Message); }
+        finally { _busy = false; }
+    }
+    private async Task ChangeTemplate(int id) { TemplateId = id; await TemplateIdChanged.InvokeAsync(id); await Save(); }
+    private int TissueTemplate(int cropId) => _settings.TissueTemplates.FirstOrDefault(item => item.CropId == cropId)?.TemplateId ?? 0;
+    private async Task ChangeTissueTemplate(int cropId, int templateId)
+    {
+        // Stable IDs allow unrelated template names, including different choices for mixed-crop surveys.
+        _settings.TissueTemplates.RemoveAll(item => item.CropId == cropId);
+        if (templateId > 0) _settings.TissueTemplates.Add(new() { CropId = cropId, TemplateId = templateId });
+        await Save();
+    }
+    private async Task OpenReport()
+    {
+        if (ViewRequested.HasDelegate) await ViewRequested.InvokeAsync();
+        else _navigation.NavigateTo($"/surveys/samples/{SurveyId}/soil-report");
+    }
+    private async Task Save()
+    {
+        if (SurveyId <= 0 || TemplateId <= 0 || _busy || Disabled) return;
+        _busy = true; _error = "";
+        try
+        {
+            // Default region is fixed for both interactive and CSV-generated reports.
+            _settings.SurveyId = SurveyId; _settings.TemplateId = TemplateId;
+            _settings = await _api.SaveSettings(_settings);
+            _toasts.ShowToast(new ToastOptions { ProviderName = _provider, Title = "Report templates saved", RenderStyle = ToastRenderStyle.Success });
+        }
+        catch (Exception exception) { Error(exception.Message); }
+        finally { _busy = false; }
+    }
+    private void Error(string message)
+    {
+        _error = message;
+        _toasts.ShowToast(new ToastOptions { ProviderName = _provider, Title = "Report settings", Text = message, RenderStyle = ToastRenderStyle.Danger });
+    }
+}

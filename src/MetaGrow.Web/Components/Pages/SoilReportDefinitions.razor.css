@@ -1,0 +1,21 @@
+/* Semantic surfaces use the same light/dark palette as the Samples workspace. */
+.definitions-page { padding: 1rem; width: 100%; color: var(--mg-text); }
+.heading, .buttons, .loading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+h1 { font-size: 1.85rem; margin: .3rem 0; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.1rem; }
+p, .help { color: var(--mg-muted); }
+.workspace { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2.2fr); gap: 1rem; align-items: start; }
+.card-panel { background: var(--bs-body-bg); border: 1px solid var(--mg-border); border-radius: 14px; padding: 1rem; min-width: 0; }
+.help { font-size: .88rem; margin: .8rem 0; }
+.measure-heading { margin-top: 1.25rem; }
+.details { overflow: auto; }
+.loading { justify-content: flex-start; margin: .75rem 0; }
+.reason-label { display: block; margin: 1rem 0 .4rem; font-weight: 600; }
+.error { color: var(--mg-danger-text); margin-top: .75rem; }
+.card-panel ::deep .definition-row-selected > td { background: var(--mg-info-surface); color: var(--mg-info-text); font-weight: 600; }
+.card-panel ::deep .definition-row-selected > td:first-child { box-shadow: inset 4px 0 0 var(--mg-link); }
+@container page-content (max-width: 850px) {
+    .workspace { grid-template-columns: 1fr; }
+    .heading { flex-wrap: wrap; }
+}

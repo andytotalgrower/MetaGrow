@@ -1,0 +1,12 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
+/* Use the same border, icon treatment and typography as Administration's IndexTile cards. */
+.branding-card { position: relative; border: 1px solid var(--dxds-color-border-neutral-default-rest); border-radius: .75rem; padding: 1rem; width: 100%; max-width: 28rem; display: flex; flex-direction: column; gap: .75rem; }
+/* Reserve corner space even when idle to prevent heading reflow during saves. */
+.branding-busy { position: absolute; top: 1rem; right: 1rem; display: flex; color: var(--mg-link); }
+.branding-card-heading { display: flex; align-items: center; gap: .75rem; padding-right: 1.75rem; color: var(--dxds-color-content-neutral-default-rest); font-weight: var(--dxds-font-weight-base-strong); }
+.branding-card-icon { display: flex; align-items: center; justify-content: center; border: 1px solid var(--dxds-color-border-neutral-default-rest); border-radius: .375rem; color: var(--mg-link); width: 2.75rem; height: 2.75rem; flex-shrink: 0; }
+.branding-card p { margin: 0; color: var(--dxds-color-content-neutral-subdued-rest); font-size: var(--dxds-font-size-base-sm); }
+/* Let the selector shrink on narrow screens while keeping its save action beside it. */
+.brand-field { display: flex; align-items: center; gap: .5rem; width: 100%; }
+.brand-field ::deep .brand-selector { flex: 1; min-width: 0; }
+.brand-field ::deep button { flex-shrink: 0; }

@@ -1,0 +1,55 @@
+/* A quiet, typographic cover shares the report's theme without relying on a full-page ink fill. */
+.soil-cover { position:relative; isolation:isolate; display:flex; flex-direction:column; box-sizing:border-box; min-height:1040px; padding:3rem 3.5rem 2.5rem; color:var(--mg-text); background:var(--mg-surface); border-top:6px solid #639f43; }
+.cover-brand { display:flex; align-items:center; justify-content:space-between; gap:2rem; }
+.cover-brand img { display:block; width:220px; max-width:55%; height:72px; object-fit:contain; object-position:left center; background:#fff; padding:.5rem; border-radius:4px; }
+.cover-brand > span { max-width:9rem; color:var(--mg-muted); font-size:.7rem; line-height:1.6; letter-spacing:.15em; text-transform:uppercase; text-align:right; }
+.cover-introduction { position:relative; z-index:1; margin-top:4rem; }
+.cover-eyebrow { display:flex; flex-wrap:wrap; justify-content:space-between; gap:.5rem 1rem; border-bottom:1px solid var(--mg-border); padding-bottom:1rem; color:var(--mg-muted); font-size:.75rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; }
+h2 { margin:2rem 0 1.75rem; font-size:clamp(2.5rem,5vw,4rem); font-weight:750; line-height:1.08; letter-spacing:-.045em; }
+h2 span { display:block; }
+.cover-rule { width:4rem; height:4px; background:#639f43; margin-bottom:2rem; }
+.cover-label { display:block; color:var(--mg-muted); font-size:.68rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; }
+.cover-client h3 { margin:.5rem 0 0; font-size:2rem; font-weight:600; line-height:1.25; letter-spacing:-.025em; overflow-wrap:anywhere; }
+.cover-description { max-width:28rem; margin:1.3rem 0 2rem; font-size:1rem; line-height:1.7; color:var(--mg-muted); }
+.cover-contours { position:absolute; z-index:-1; right:0; top:39%; width:48%; height:auto; color:#639f43; opacity:.16; stroke:currentColor; stroke-width:1.2; }
+.cover-details { display:grid; grid-template-columns:1.15fr 1fr; gap:1.5rem 2.5rem; border-top:1px solid var(--mg-border); padding-top:1.75rem; margin-top:auto; }
+.cover-adviser,.cover-sampling { display:flex; flex-direction:column; gap:.3rem; min-width:0; overflow-wrap:anywhere; }
+.cover-details strong { font-size:1.05rem; line-height:1.4; font-weight:600; margin:.25rem 0; }
+.cover-adviser > span:not(.cover-label),.cover-sampling > span:not(.cover-label) { color:var(--mg-muted); font-size:.8rem; }
+.cover-crops { grid-column:1/-1; display:flex; align-items:baseline; gap:.75rem; font-size:.85rem; overflow-wrap:anywhere; }
+.cover-crops .cover-label { flex-shrink:0; }
+.cover-reference { display:flex; justify-content:space-between; flex-wrap:wrap; gap:.5rem 1rem; margin-top:2rem; border-top:1px solid var(--mg-border); padding-top:1rem; color:var(--mg-muted); font-size:.68rem; letter-spacing:.02em; }
+.cover-reference > span > span { margin:0 .5rem; color:#639f43; }
+.cover-review { margin:1rem 0 0; border-left:3px solid var(--mg-warning-text); padding:.15rem .75rem; color:var(--mg-warning-text); font-size:.75rem; }
+@media(max-width:600px) {
+    .soil-cover { min-height:850px; padding:1.5rem; }
+    .cover-brand { gap:1rem; }
+    .cover-brand img { height:58px; }
+    .cover-brand > span { font-size:.6rem; }
+    .cover-introduction { margin-top:2.5rem; }
+    h2 { font-size:2.5rem; }
+    .cover-client h3 { font-size:1.6rem; }
+    .cover-details { gap:1.25rem; grid-template-columns:1fr; }
+    .cover-description { font-size:.9rem; }
+    .cover-reference { margin-top:1.5rem; }
+}
+@media print {
+    /* The 267 mm portrait content area reserves the existing report footer. Always print white, including from dark mode. */
+    .soil-cover { min-height:258mm; padding:9mm 8mm 7mm; border-top:1mm solid #639f43; background:#fff!important; color:#25343d; break-inside:avoid; --mg-text:#25343d; --mg-muted:#55636a; --mg-border:#c3ccc0; --mg-warning-text:#684d05; }
+    .cover-brand { gap:10mm; }
+    .cover-brand img { width:58mm; max-width:55%; height:19mm; padding:1mm; }
+    .cover-brand > span { max-width:35mm; font-size:7pt; }
+    .cover-introduction { margin-top:19mm; }
+    .cover-eyebrow { padding-bottom:4mm; font-size:8pt; }
+    h2 { margin:9mm 0 8mm; font-size:39pt; line-height:1.08; }
+    .cover-rule { width:16mm; height:.8mm; margin-bottom:9mm; }
+    .cover-client h3 { font-size:24pt; margin-top:2mm; }
+    .cover-description { max-width:120mm; margin:6mm 0 10mm; font-size:10.5pt; }
+    .cover-contours { display:none; }
+    .cover-details { grid-template-columns:1.15fr 1fr; gap:6mm 10mm; padding-top:7mm; }
+    .cover-label { font-size:7pt; }
+    .cover-details strong { font-size:11pt; }
+    .cover-adviser > span:not(.cover-label),.cover-sampling > span:not(.cover-label),.cover-crops { font-size:9pt; }
+    .cover-reference { margin-top:9mm; padding-top:4mm; font-size:7pt; }
+    .cover-review { margin-top:4mm; padding-left:3mm; font-size:8pt; }
+}

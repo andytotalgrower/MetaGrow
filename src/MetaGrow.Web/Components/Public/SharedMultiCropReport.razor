@@ -3,6 +3,7 @@
 @attribute [AllowAnonymous]
 @using ApiModels
 @using ApiModels.MetaGrow
+@using MetaGrow.Shared.Models
 @using MetaGrow.Web.Components.Pages
 @using MetaGrow.Web.Services
 @using Metagen.Shared.Services
@@ -20,13 +21,20 @@
         <span>Opening shared report...</span>
     </div>
 }
+else if (_soilReport is not null)
+{
+    <div class="soil-share-toolbar"><DxButton Text="Print / save PDF" Click="PrintSoil" /></div>
+    @* Public soil output uses the same resolved brand as the other shared report types. *@
+    <SoilReportContent Document="_soilReport" BrandKey="@_brandKey" />
+    <style>@@media print { .soil-share-toolbar { display:none; } }</style>
+}
 else if (_multiCropReport is not null)
 {
-    <MultiCropReport SurveyId="@_multiCropReport.SurveyId" Report="@_multiCropReport" Shared="true" />
+    <MultiCropReport SurveyId="@_multiCropReport.SurveyId" Report="@_multiCropReport" Shared="true" SharedBrandKey="@_brandKey" />
 }
 else if (_bananaReport is not null)
 {
-    <BananaReport SurveyId="@_bananaReport.SurveyId" Report="@_bananaReport" Shared="true" />
+    <BananaReport SurveyId="@_bananaReport.SurveyId" Report="@_bananaReport" Shared="true" SharedBrandKey="@_brandKey" />
 }
 else
 {
@@ -40,8 +48,11 @@ else
     [Parameter] public Guid ShareId { get; set; }
 
     private MultiCropOnlineReportDto? _multiCropReport;
+    private SoilReportDocument? _soilReport;
+    private async Task PrintSoil() => await JavaScript.InvokeVoidAsync("metaGrowReportPrinting.print", $"{_soilReport!.SurveyDate:yyyyMMdd}_{_soilReport.PropertyName}_{_soilReport.FileMaterialLabel}_Rev{_soilReport.Revision}.pdf", 100);
     private BananaOnlineReportDto? _bananaReport;
     private string _errorMessage = "This report link is invalid or has been revoked.";
+    private string? _brandKey;
     private bool _loading = true;
     private bool _started;
 
@@ -62,12 +73,16 @@ else
                 return;
             }
 
-            if (string.Equals(access.ReportArea, MetaGrowReportAreas.Banana, StringComparison.OrdinalIgnoreCase))
+            // Preserve the share owner preference even when the viewer is logged in.
+            _brandKey = access.BrandKey;
+            if (string.Equals(access.ReportArea, MetaGrowReportAreas.Soil, StringComparison.OrdinalIgnoreCase))
+                _soilReport = access.SoilReport;
+            else if (string.Equals(access.ReportArea, MetaGrowReportAreas.Banana, StringComparison.OrdinalIgnoreCase))
                 _bananaReport = await TgsApi.GetBananaOnlineReport(access.SurveyId);
             else
                 _multiCropReport = await TgsApi.GetMultiCropOnlineReport(access.SurveyId);
 
-            if (_multiCropReport is null && _bananaReport is null)
+            if (_multiCropReport is null && _bananaReport is null && _soilReport is null)
                 _errorMessage = TgsApi.ErrorMessage ?? "The survey report could not be loaded.";
         }
         catch (Exception exception)

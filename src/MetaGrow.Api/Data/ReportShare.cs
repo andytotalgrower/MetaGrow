@@ -5,6 +5,8 @@ public sealed class ReportShare
 {
     public Guid Id { get; set; }
     public int SurveyId { get; set; }
+    // Soil links are pinned; older report types retain their established live-survey behavior.
+    public Guid? SoilRevisionId { get; set; }
     public string ReportArea { get; set; } = ApiModels.MetaGrow.MetaGrowReportAreas.MultiCrop;
     public string Name { get; set; } = string.Empty;
     public string TokenHash { get; set; } = string.Empty;

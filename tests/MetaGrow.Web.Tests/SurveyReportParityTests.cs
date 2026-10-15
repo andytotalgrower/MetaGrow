@@ -20,6 +20,29 @@ namespace MetaGrow.Web.Tests;
 
 public class SurveyReportParityTests
 {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Reports_render_account_or_share_creator_brand(bool banana, bool shared)
+    {
+        // Shared preferences take precedence over the viewer's account default.
+        var parameters = new Dictionary<string, object?>
+        {
+            ["Report"] = banana ? new BananaOnlineReportDto() : new MultiCropOnlineReportDto(),
+            ["Shared"] = shared,
+            ["SharedBrandKey"] = shared ? ReportBranding.TotalGrowerServicesKey : null
+        };
+        var preferences = new TestReportPreferences(shared ? ReportBranding.MetagenKey : ReportBranding.TotalGrowerServicesKey);
+        var html = banana
+            ? await RenderParameters<BananaReport>(parameters, preferences)
+            : await RenderParameters<MultiCropReport>(parameters, preferences);
+        Assert.Contains("/images/branding/total-grower-services.png", html);
+        Assert.Contains("TGS Pty Ltd", html);
+        Assert.Equal(shared ? 0 : 1, preferences.ReadCount);
+    }
+
     [Fact]
     public void Chart_transpose_preserves_block_order_and_each_measurement()
     {
@@ -257,12 +280,15 @@ public class SurveyReportParityTests
     private static Task<string> Render<T>(object report) where T : IComponent =>
         RenderParameters<T>(new() { ["Report"] = report, ["Shared"] = true });
 
-    private static async Task<string> RenderParameters<T>(Dictionary<string, object?> parameters) where T : IComponent
+    private static async Task<string> RenderParameters<T>(Dictionary<string, object?> parameters, IReportPreferenceApiClient? preferences = null) where T : IComponent
     {
         var collection = new ServiceCollection().AddLogging();
         collection.AddDevExpressBlazor();
         collection.AddSingleton(DispatchProxy.Create<ITgsApiService, EmptyProxy>());
         collection.AddSingleton<IJSRuntime, NoJavaScript>();
+        collection.AddSingleton(preferences ?? DispatchProxy.Create<IReportPreferenceApiClient, EmptyProxy>());
+        // The unopened sharing dialog does not issue API requests during report rendering.
+        collection.AddSingleton(new ReportShareApiClient(null!, null!, null!, Microsoft.Extensions.Logging.Abstractions.NullLogger<ReportShareApiClient>.Instance));
         collection.AddSingleton<NavigationManager, TestNavigation>();
         await using var services = collection.BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
@@ -271,6 +297,12 @@ public class SurveyReportParityTests
             var output = await renderer.RenderComponentAsync<T>(ParameterView.FromDictionary(parameters));
             return output.ToHtmlString();
         });
+    }
+    private sealed class TestReportPreferences(string _brand) : IReportPreferenceApiClient
+    {
+        public int ReadCount { get; private set; }
+        public Task<string> GetAsync() { ReadCount++; return Task.FromResult(_brand); }
+        public Task SaveAsync(string brandKey) => throw new NotSupportedException();
     }
     public class EmptyProxy : DispatchProxy { protected override object? Invoke(MethodInfo? method, object?[]? args) => throw new NotSupportedException(); }
     private class TestNavigation : NavigationManager { public TestNavigation() => Initialize("http://localhost/", "http://localhost/"); }

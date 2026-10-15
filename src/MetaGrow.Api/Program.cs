@@ -76,6 +76,9 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<PasskeyService>();
 builder.Services.AddScoped<IReportShareTokenService, ReportShareTokenService>();
+builder.Services.AddScoped<ReportBrandPreferenceStore>();
+builder.Services.AddScoped<MetaGrow.Api.Services.SoilReports.SoilReportDefinitionStore>();
+builder.Services.AddScoped<MetaGrow.Api.Services.SoilReports.SoilReportService>();
 
 var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys");
 Directory.CreateDirectory(dataProtectionKeysPath);

@@ -199,6 +199,42 @@
                 <DxGrid @ref="_grid" Data="@FilteredSurveys" PageSize="20" ShowAllRows="false" TextWrapEnabled="false"
                         HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn" CssClass="sample-grid">
                     <Columns>
+                        @* Keep row actions visible while the survey details scroll horizontally. *@
+                        <DxGridDataColumn Caption="Actions" Width="185px" AllowSort="false" FixedPosition="GridColumnFixedPosition.Left">
+                            <CellDisplayTemplate Context="cell">
+                                @{ var survey = (SampleSurveySummaryDto)cell.DataItem; }
+                                <div class="mg-grid-actions" role="group" aria-label="Survey actions">
+                                    <DxButton NavigateUrl="@EditorUrl(survey)"
+                                              aria-label="Open survey" title="Open survey"
+                                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-pencil" />
+                                    @if (survey.HasImportedLabData)
+                                    {
+                                        @if (survey.SampleTypes.Any(type => type.Id == 10))
+                                        {
+                                        <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)" Context="soilAccess">
+                                            <DxButton Click="@(() => _soilReportLauncher!.OpenAsync(survey.SurveyId))" aria-label="View soil and tissue report" title="View soil and tissue report" IconCssClass="oi oi-document" CssClass="mg-grid-icon-button" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Secondary" />
+                                        </AuthorizeView>
+                                        }
+                                        <DxButton NavigateUrl="@LabResultsUrl(survey)"
+                                                  aria-label="View lab data" title="View lab data"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-spreadsheet" />
+                                    }
+                                    @if (SampleSurveyFilter.CanImportLabData(survey))
+                                    {
+                                        <DxButton NavigateUrl="@ImportUrl(survey)"
+                                                  aria-label="Import lab data" title="Import lab data"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-data-transfer-upload" />
+                                    }
+                                    <DxButton aria-label="Delete survey" title="Delete survey"
+                                              RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-trash"
+                                              Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.Sample, survey.SurveyId))" />
+                                </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
                         <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.SurveyDate)" Caption="Date" Width="110px" DisplayFormat="dd/MM/yyyy" />
                         <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.PropertyName)" Caption="Property" MinWidth="180" />
                         <DxGridDataColumn Caption="Type" Width="125px" AllowSort="false">
@@ -236,35 +272,6 @@
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
                         <DxGridDataColumn FieldName="@nameof(SampleSurveySummaryDto.NutritionSampleCount)" Caption="Chemistry samples" Width="125px" Visible="false" />
-                        <DxGridDataColumn Caption="Actions" Width="150px" AllowSort="false">
-                            <CellDisplayTemplate Context="cell">
-                                @{ var survey = (SampleSurveySummaryDto)cell.DataItem; }
-                                <div class="mg-grid-actions" role="group" aria-label="Survey actions">
-                                    <DxButton NavigateUrl="@EditorUrl(survey)"
-                                              aria-label="Open survey" title="Open survey"
-                                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-pencil" />
-                                    @if (survey.HasImportedLabData)
-                                    {
-                                        <DxButton NavigateUrl="@LabResultsUrl(survey)"
-                                                  aria-label="View lab data" title="View lab data"
-                                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                                  SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-spreadsheet" />
-                                    }
-                                    @if (SampleSurveyFilter.CanImportLabData(survey))
-                                    {
-                                        <DxButton NavigateUrl="@ImportUrl(survey)"
-                                                  aria-label="Import lab data" title="Import lab data"
-                                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                                  SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-data-transfer-upload" />
-                                    }
-                                    <DxButton aria-label="Delete survey" title="Delete survey"
-                                              RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                              SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button" IconCssClass="oi oi-trash"
-                                              Click="@(() => _deletionPopup!.ShowAsync(MetaGrowSurveyType.Sample, survey.SurveyId))" />
-                                </div>
-                            </CellDisplayTemplate>
-                        </DxGridDataColumn>
                     </Columns>
                 </DxGrid>
             </div>
@@ -285,6 +292,12 @@
                             @if (survey.HasImportedLabData)
                             {
                                 <a class="btn btn-outline-secondary" href="@LabResultsUrl(survey)">Lab data</a>
+                                @if (survey.SampleTypes.Any(type => type.Id == 10))
+                                {
+                                    <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)" Context="mobileSoilAccess">
+                                        <DxButton Text="View report" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => _soilReportLauncher!.OpenAsync(survey.SurveyId))" />
+                                    </AuthorizeView>
+                                }
                             }
                             @if (SampleSurveyFilter.CanImportLabData(survey))
                             {
@@ -302,6 +315,7 @@
 
 <ConfirmDialog @ref="_confirm" />
 <SurveyDeletionRequestPopup @ref="_deletionPopup" Requested="OnDeletionRequestedAsync" />
+<SoilReportLauncher @ref="_soilReportLauncher" />
 
 @code {
     [SupplyParameterFromQuery(Name = "property")]
@@ -346,6 +360,7 @@
     private IDisposable? _realtimeSubscription;
     private CancellationTokenSource? _realtimeRefreshCancellation;
     private SurveyDeletionRequestPopup? _deletionPopup;
+    private SoilReportLauncher? _soilReportLauncher;
 
     private sealed record FilterOption(int Id, string Name);
     private sealed record LaneAction(SampleSurveyWorkflowAction Action, string Label);

@@ -1,0 +1,310 @@
+@page "/surveys/samples/{SurveyId:int}/soil-report"
+@using ApiModels.MetaGrow
+@using MetaGrow.Shared.Models
+@using MetaGrow.Web.Services
+@using System.Text.Json
+@attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@inject SoilReportApiClient _api
+@inject IReportPreferenceApiClient _preferences
+@inject IToastNotificationService _toasts
+@inject NavigationManager _navigation
+@inject IJSRuntime _javascript
+
+<PageTitle>@(_workspace?.Document?.Title ?? "Sample report") @SurveyId | MetaGrow</PageTitle>
+<DxToastProvider Name="SoilReportMessages" MaxToastCount="3" HorizontalAlignment="HorizontalAlignment.Right" StickToViewport="true" />
+<div class="soil-report-workspace">
+    @if (_workspace?.Document is null)
+    {
+        <div class="title no-print"><h1 class="title-header-text">Sample report</h1><div class="title-content-text">Sample survey @SurveyId</div></div>
+    }
+    <div class="tools no-print" role="toolbar" aria-label="Report tools">
+        <div class="tools-navigation"><DxButton Text="Back to survey" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="@(() => _navigation.NavigateTo($"/surveys/samples/{SurveyId}/edit"))" />
+            @if (_workspace?.Document is { } summary) { <span class="status">@summary.Status · Revision @summary.Revision</span> }
+            @if (_workspace?.Settings.TemplateId > 0 && (_workspace.Document is null || _workspace.Document.Status == "Editing"))
+            {
+                <DxButton Text="Not sampled" title="Record survey items that were never collected" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="@(() => _notSampledDialog!.ShowAsync(SurveyId))" />
+            }
+            @if (_workspace?.Settings.TemplateId > 0 && (_workspace.Document is null || _workspace.Document.Status is "Editing" or "Ready for QA"))
+            {
+                <DxButton Text="Soil matches" title="Review how laboratory results match collected samples" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="@(() => _matchingDialog!.ShowAsync(SurveyId))" />
+                @if (_workspace.TissueMatching is not null || _workspace.Document?.Tissue.ExpectedSoilLabIds.Count > 0 || _workspace.Document?.Tissue.Samples.Count > 0)
+                {
+                    <DxButton Text="Tissue matches" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="@(() => _matchingDialog!.ShowAsync(SurveyId, tissue: true))" />
+                }
+                @if (_workspace?.Document?.Status == "Editing") { <DxButton Text="Templates" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="@(() => _choosingTemplate = true)" /> }
+            }
+        </div>
+        @if (_workspace?.Document is { } current)
+        {
+            <div class="tools-actions">
+            @* Distinguish agronomist preparation from the primary print action using the themed info style. *@
+            @if (current.Status is "Editing" or "Ready for QA") { <DxButton Text="@(current.Status == "Editing" ? "Review actions and recommendations" : "Edit actions and recommendations")" title="Agronomist review before peer QA" RenderStyle="ButtonRenderStyle.Info" Enabled="@(!_busy)" Click="Edit" /> }
+            @if (current.Status == "Ready for QA") { <DxButton Text="Submit for peer QA" Enabled="@(!_busy)" Click="@(() => StartWorkflow("submit"))" /> }
+            @if (current.Status == "Awaiting QA") { <DxButton Text="Approve QA" Enabled="@(!_busy && _workspace.CanApprove)" title="@_workspace.ApprovalMessage" Click="@(() => StartWorkflow("approve"))" /> }
+            @if (current.Status != "Editing") { <DxButton Text="Return to editing" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="@(() => StartWorkflow("return"))" /> }
+            <DxButton Text="Audit" title="Workflow history, saved revisions and calculation trace" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="History" />
+            @if (current.Status == "Approved") { <ReportShareButton SurveyId="SurveyId" PropertyName="@current.PropertyName" ReportArea="soil" SoilRevisionId="current.Id" /> }
+            <DxButton Text="Print / save PDF" IconCssClass="oi oi-print" Enabled="@(!_busy)" Click="Print" />
+            </div>
+        }
+    </div>
+    @* Only the report body scrolls; tools and the shared report footer stay available at either edge. *@
+    <div class="report-scroll" role="region" aria-label="Report preview" tabindex="0">
+    @if (_busy) { <div class="loading no-print" role="status"><DxWaitIndicator Visible="true" /><span>Loading or saving report…</span></div> }
+    @if (_error.Length > 0) { <div class="error no-print" role="alert">@_error <DxButton Text="Retry" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!_busy)" Click="Load" /></div> }
+    @if (!_busy && (_workspace?.Matching is not null || _workspace?.TissueMatching is not null)) { <p class="no-print">Confirm the sample matches to continue opening this report. Use <strong>@(_workspace.TissueMatching is not null ? "Tissue matches" : "Soil matches")</strong> to reopen the matching window.</p> }
+    @if (_workspace?.Document is { Status: "Editing" or "Ready for QA" } preparation)
+    {
+        @* Keep the saved report visible between agronomist preparation and the separate peer-QA submission. *@
+        <section class="preparation-steps no-print" aria-label="Report preparation">
+            <ol><li class="@(preparation.Status == "Editing" ? "current" : "complete")">1. Agronomist review</li><li class="@(preparation.Status == "Ready for QA" ? "current" : "")">2. Preview report</li><li>3. Peer QA</li></ol>
+            <p>@(preparation.Status == "Editing" ? "Choose the report contents and review the advice, then save to preview the report." : "Review the saved report below. You can make further changes before submitting this revision to another agronomist for QA.")</p>
+        </section>
+    }
+    @* Forward the selected branding value rather than the name of the backing field. *@
+    @if (_workspace?.Document is { } document) { <SoilReportContent Document="document" BrandKey="@_brand" IncludePrintFooter="false" /> }
+    @* Keep setup reachable after closing the popup, including a missing tissue choice on an existing soil report. *@
+    else if (!_busy && (_workspace?.Settings.TemplateId == 0 || _workspace?.TemplateSelectionRequired == true)) { <DxButton Text="Select report templates" Click="@(() => _choosingTemplate = true)" /> }
+    </div>
+    @if (_workspace?.Document is { } footerDocument)
+    {
+        @* Keep one footer and its portrait page rules outside the scrolling preview. *@
+        <div class="workspace-footer"><SurveyReportFooter Brand="ReportBranding.Get(_brand)" PropertyName="@footerDocument.PropertyName" SurveyDate="footerDocument.SurveyDate" AgronomistName="@footerDocument.Agronomist" AgronomistPhone="@footerDocument.AgronomistPhone" Reference="@($"{footerDocument.MaterialLabel} {footerDocument.SurveyId} · rev {footerDocument.Revision}")" Portrait="true" /></div>
+    }
+</div>
+
+<SoilReportNotSampledDialog @ref="_notSampledDialog" Saved="Load" />
+<SoilReportMatchingDialog @ref="_matchingDialog" Saved="Load" />
+@* Direct report links use the same picker as the Samples launch popup. *@
+<DxPopup @bind-Visible="_choosingTemplate" HeaderText="Select report templates" Width="680px" CloseOnOutsideClick="false">
+    <BodyContentTemplate><SoilTemplatePicker SurveyId="SurveyId" ShowHeading="false" ViewRequested="TemplateSelected" /></BodyContentTemplate>
+</DxPopup>
+
+@* DevExpress scrolls only the body within the viewport limit, leaving the review header and footer accessible. *@
+<DxPopup @bind-Visible="_editing" HeaderText="Agronomist review" Width="960px" MaxWidth="calc(100vw - 2rem)" MaxHeight="calc(100dvh - 2rem)" Scrollable="true" ShowFooter="true" CloseOnOutsideClick="false" CloseOnEscape="@(!_busy)" ShowCloseButton="@(!_busy)">
+    <BodyContentTemplate Context="editPopup">
+        @if (_draft is not null && _workspace?.Document is { } report)
+        {
+            <div class="report-editor">
+                <p>Choose the report contents and review the advice for each included block. Save to preview the updated report before sending it to a peer for QA.</p>
+                @* Material selection changes presentation only; hidden recommendations retain their saved edits. *@
+                <section class="editor-section" aria-label="Report contents">
+                    <h3>Report contents</h3>
+                    <div class="block-choices material-choices">
+                        <DxCheckBox CheckType="CheckType.Switch" Checked="_draft.Options.IncludeSoil" CheckedChanged="@((bool include) => SetIncludeSoil(include))" Enabled="@(!_draft.Options.IncludeSoil || _draft.Options.IncludeTissue && TissueAvailable)">Soil</DxCheckBox>
+                        <DxCheckBox CheckType="CheckType.Switch" Checked="@(_draft.Options.IncludeTissue && (TissueAvailable || TissueRequested))" CheckedChanged="@((bool include) => SetIncludeTissue(include))" Enabled="@(_draft.Options.IncludeTissue ? _draft.Options.IncludeSoil && (TissueAvailable || TissueRequested) : TissueAvailable)">Tissue</DxCheckBox>
+                    </div>
+                    <p>Choose Soil, Tissue or both. At least one must stay selected. Your selection applies to the preview, printed report and shared report.</p>
+                    @if (!TissueAvailable) { <p>No tissue results are available for the included blocks. @if (TissueRequested) { <text>Switch Tissue off to prepare a soil-only report while those results are pending.</text> }</p> }
+                </section>
+                <section class="editor-section" aria-label="Key action groups">
+                <h3>Key action groups</h3>
+                @foreach (var action in _draft.Actions)
+                {
+                    @* Wrapper rows give both editors the full card width, with a compact delete action above them. *@
+                    <div class="action-editor" @key="action">
+                        <div class="action-editor-heading"><span>Action group</span><DxButton IconCssClass="oi oi-trash" aria-label="Remove action" title="Remove action" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Text" CssClass="btn-icon-only" Click="@(() => _draft.Actions.Remove(action))" /></div>
+                        <div class="action-field"><DxTextBox @bind-Text="action.Title" aria-label="Action heading" NullText="Action heading" MaxLength="120" BindValueMode="BindValueMode.OnInput" /></div>
+                        <div class="action-field"><DxMemo @bind-Text="action.Text" aria-label="Advice" NullText="Advice" Rows="5" BindValueMode="BindValueMode.OnInput" /></div>
+                    </div>
+                }
+                <div><DxButton Text="Add action group" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => _draft.Actions.Add(new()))" /></div>
+                </section>
+                <section class="editor-section" aria-label="Included blocks">
+                <h3>Blocks</h3>
+                <div class="block-choices">@foreach (var block in report.Blocks) { <DxCheckBox Checked="@(!_draft.ExcludedLabSoilIds.Contains(block.LabSoilId))" CheckedChanged="@((bool include) => IncludeBlock(block.LabSoilId, include))">@block.Name (@block.SampleReference)</DxCheckBox> }</div>
+                </section>
+                @if (_draft.Options.IncludeSoil)
+                {
+                <section class="editor-section" aria-label="Soil balancing recommendations">
+                <h3>Soil balancing recommendations (kg/ha)</h3>
+                <div class="block-selector"><DxComboBox Data="report.Blocks" @bind-Value="_blockId" TextFieldName="Name" ValueFieldName="LabSoilId" aria-label="Block to review" /></div>
+                <p>Use the delete icon to remove a product from this block's recommendations. Enter a reason for each removal or rate change. You can restore the calculated rate before saving.</p>
+                <div class="rate-grid">
+                @foreach (var recommendation in RecommendationRows)
+                {
+                    var product = recommendation.Product;
+                    var change = _draft.Overrides.FirstOrDefault(item => item.LabSoilId == _blockId && item.Product == product);
+                    var removed = change is { Rate: 0 };
+                    <div class="rate-editor @(removed ? "rate-removed" : "")" @key="product">
+                        <div class="rate-heading"><strong>@product</strong><small>Calculated: @recommendation.CalculatedRate.ToString("#,##0.##") kg/ha</small></div>
+                        <div class="rate-input">
+                            <DxSpinEdit Value="@(change?.Rate ?? recommendation.CalculatedRate)" ValueChanged="@((double rate) => SetRate(product, rate))" MinValue="0" MaxValue="100000" aria-label="@($"{product} rate in kg/ha")" />
+                            <DxButton IconCssClass="oi oi-trash" title="Remove recommendation" aria-label="@($"Remove {product} recommendation")" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Text" CssClass="btn-icon-only" Enabled="@(!removed || recommendation.CalculatedRate == 0)" Click="@(() => RemoveRecommendation(product))" />
+                            @if (change is not null) { <DxButton IconCssClass="oi oi-action-undo" title="Restore calculated rate" aria-label="@($"Restore calculated {product} rate")" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Text" CssClass="btn-icon-only" Click="@(() => _draft.Overrides.Remove(change))" /> }
+                        </div>
+                        @if (change is not null)
+                        {
+                            @* Keep removed calculated items recoverable and their required reason visible until Save and preview. *@
+                            <div class="rate-reason">
+                                @if (removed) { <small class="rate-removal-status">Removed from this block's recommendations</small> }
+                                <DxTextBox @bind-Text="change.Reason" NullText="@(removed ? "Reason for removal" : "Reason for adjustment")" aria-label="@($"Reason for {product} {(removed ? "removal" : "adjustment")}")" MaxLength="1000" BindValueMode="BindValueMode.OnInput" />
+                            </div>
+                        }
+                    </div>
+                }
+                </div>
+                @* Sort the displayed catalogue without changing calculation or recommendation ordering. *@
+                <div class="add-product"><div class="product-selector"><DxComboBox Data="_workspace.Products.OrderBy(product => product.ProductName, StringComparer.CurrentCultureIgnoreCase).ToList()" @bind-Value="_product" TextFieldName="ProductName" ValueFieldName="ProductName" NullText="Add a product" aria-label="Product to add" SearchMode="ListSearchMode.AutoSearch" /></div><DxButton Text="Add product" Enabled="@(!string.IsNullOrWhiteSpace(_product))" Click="@(() => SetRate(_product, 0))" /></div>
+                </section>
+                }
+                <section class="editor-section" aria-label="Report sections">
+                <h3>Report sections</h3>
+                <div class="block-choices">
+                    <DxCheckBox @bind-Checked="_draft.Options.ShowStatusOverview">Status overview</DxCheckBox>
+                    <DxCheckBox @bind-Checked="_draft.Options.ShowBlockDetails">Block results</DxCheckBox>
+                    <DxCheckBox @bind-Checked="_draft.Options.ShowIndividualBlockDetails">Individual block details</DxCheckBox>
+                    @if (_draft.Options.IncludeSoil)
+                    {
+                        <DxCheckBox @bind-Checked="_draft.Options.ShowRequiredAmounts">Theoretical amounts</DxCheckBox>
+                        <DxCheckBox @bind-Checked="_draft.Options.ShowHistory">Historical Farm Averages</DxCheckBox>
+                        @* The selected template crop controls availability, even when survey/lab crops differ. *@
+                        @if (_workspace.IsSugarcaneTemplate) { <DxCheckBox @bind-Checked="_draft.Options.ShowSugarInputs">Sugarcane inputs</DxCheckBox> }
+                    }
+                </div>
+                </section>
+                <section class="editor-section" aria-label="Agronomist review note">
+                <h3>Agronomist review note</h3>
+                @* Section-only changes receive an automatic audit entry; agronomic edits still need the reviewer's explanation. *@
+                <p>Optional when only changing report contents or sections. Otherwise, explain your changes or confirm that the calculated recommendations are suitable.</p>
+                <DxMemo @bind-Text="_draft.Reason" NullText="Review note" MaxLength="1000" Rows="2" BindValueMode="BindValueMode.OnInput" />
+                </section>
+                @if (_error.Length > 0) { <p class="error" role="alert">@_error</p> }
+            </div>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate Context="editFooter"><div class="editor-footer">@if (_busy) { <span class="popup-progress" role="status"><DxWaitIndicator Visible="true" /> Saving revision…</span> }<DxButton Text="Save and preview" Enabled="@(!_busy)" Click="Save" /><DxButton Text="Cancel" Enabled="@(!_busy)" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => _editing = false)" /></div></FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="_workflowVisible" HeaderText="@WorkflowTitle" Width="560px" ShowFooter="true" CloseOnOutsideClick="false" CloseOnEscape="@(!_busy)" ShowCloseButton="@(!_busy)">
+    <BodyContentTemplate Context="workflowBody">
+        <p>@(_workflow.Action == "return" ? "This creates an editable revision. Existing approved versions remain in history." : "QA applies to this exact revision, including its inputs, definitions and recommendations. The survey agronomist and anyone who prepared or submitted this revision cannot approve its QA.")</p>
+        @if (_workflow.Action == "submit") { <DxCheckBox @bind-Checked="_previewConfirmed">I have checked the saved report and it is ready for peer QA.</DxCheckBox> }
+        @if (_workflow.Action == "approve") { <label>QA time (hours)</label><DxSpinEdit @bind-Value="_workflow.QaHours" MinValue="0.01" MaxValue="24" Increment="0.25" /> }
+        <label>Review note / reason</label><DxMemo @bind-Text="_workflow.Note" Rows="4" BindValueMode="BindValueMode.OnInput" />
+        @if (_error.Length > 0) { <p class="error" role="alert">@_error</p> }
+    </BodyContentTemplate>
+    <FooterContentTemplate Context="workflowFooter">@if (_busy) { <span class="popup-progress" role="status"><DxWaitIndicator Visible="true" /> Saving workflow…</span> }<DxButton Text="@WorkflowTitle" Enabled="@(!_busy && (_workflow.Action != "submit" || _previewConfirmed))" Click="Transition" /><DxButton Text="Cancel" Enabled="@(!_busy)" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => _workflowVisible = false)" /></FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="_historyVisible" HeaderText="Report audit and calculations" Width="1100px" CloseOnOutsideClick="false">
+    <BodyContentTemplate Context="historyBody">
+        <h3>Workflow history</h3><DxGrid Data="_history" PageSize="10" ShowSearchBox="true"><Columns><DxGridDataColumn FieldName="OccurredUtc" Caption="Time (UTC)" DisplayFormat="dd MMM yyyy HH:mm" /><DxGridDataColumn FieldName="Actor" /><DxGridDataColumn FieldName="Action" /><DxGridDataColumn FieldName="Status" /><DxGridDataColumn FieldName="Reason" /><DxGridDataColumn FieldName="QaHours" Caption="QA hours" /></Columns></DxGrid>
+        <h3>Saved revisions</h3><DxGrid Data="_revisions" PageSize="5"><Columns><DxGridDataColumn FieldName="Number" Caption="Revision" /><DxGridDataColumn FieldName="CreatedUtc" DisplayFormat="dd MMM yyyy HH:mm" /><DxGridDataColumn FieldName="CreatedBy" /><DxGridDataColumn Caption="" Width="50px"><CellDisplayTemplate Context="cell"><DxButton IconCssClass="oi oi-eye" aria-label="View saved revision" title="View saved revision" Click="@(() => ViewRevision(((SoilReportRevisionSummary)cell.DataItem).Id))" /></CellDisplayTemplate></DxGridDataColumn></Columns></DxGrid>
+        <h3>Calculation trace — revision @_workspace?.Document?.Revision</h3><DxGrid Data="TraceRows" ShowSearchBox="true" PageSize="15"><Columns><DxGridDataColumn FieldName="LabSoilId" Caption="Lab ID" Width="75px" /><DxGridDataColumn FieldName="Rule" /><DxGridDataColumn FieldName="Measure" /><DxGridDataColumn FieldName="Explanation" /><DxGridDataColumn FieldName="Operands" /><DxGridDataColumn FieldName="Result" /></Columns></DxGrid>
+        <h3>Sample matching evidence</h3><DxGrid Data="@(_workspace?.Document?.SampleMatches)" ShowAllRows="true" PagerVisible="false" TextWrapEnabled="true"><Columns><DxGridDataColumn FieldName="LabSoilId" Caption="Lab result" Width="90px" /><DxGridDataColumn FieldName="SurveyItemId" Caption="Survey item" Width="90px" /><DxGridDataColumn FieldName="BlockName" Caption="Block" /><DxGridDataColumn FieldName="Method" /><DxGridDataColumn FieldName="Explanation" MinWidth="250" /><DxGridDataColumn FieldName="ConfirmedBy" Caption="Confirmed by" /></Columns></DxGrid>
+    </BodyContentTemplate>
+</DxPopup>
+<DxPopup @bind-Visible="_revisionVisible" HeaderText="Saved report revision" Width="1000px" CloseOnOutsideClick="false"><BodyContentTemplate Context="revisionBody">@if (_historical is not null) { <SoilReportContent Document="_historical" BrandKey="@_brand" IncludePrintFooter="false" /> }</BodyContentTemplate></DxPopup>
+
+@code {
+    [Parameter] public int SurveyId { get; set; }
+    private SoilReportWorkspace? _workspace;
+    private SoilReportEdit? _draft;
+    private SoilReportTransition _workflow = new();
+    private List<SoilReportAuditEntry> _history = [];
+    private List<SoilReportRevisionSummary> _revisions = [];
+    private SoilReportDocument? _historical;
+    private SoilReportNotSampledDialog? _notSampledDialog;
+    private SoilReportMatchingDialog? _matchingDialog;
+    private bool _choosingTemplate;
+    private bool _previewConfirmed;
+    private bool _busy = true, _editing, _workflowVisible, _historyVisible, _revisionVisible;
+    private int _blockId;
+    private string _product = "", _error = "", _brand = ReportBranding.TotalGrowerServicesKey;
+    private string WorkflowTitle => _workflow.Action switch { "submit" => "Submit for peer QA", "approve" => "Approve QA", _ => "Return to editing" };
+    private IEnumerable<SoilReportRecommendation> RecommendationRows => (_workspace?.Document?.Blocks.FirstOrDefault(block => block.LabSoilId == _blockId)?.Recommendations ?? [])
+        .Concat((_draft?.Overrides.Where(item => item.LabSoilId == _blockId) ?? []).Select(item => new SoilReportRecommendation { Product = item.Product }))
+        .DistinctBy(item => item.Product).OrderBy(item => item.Product);
+    private object[] TraceRows => (_workspace?.Document?.Trace ?? []).Select(step => (object)new { step.LabSoilId, step.Rule, step.Measure, step.Explanation,
+        Operands = string.Join("; ", step.Inputs.Select(input => $"{input.Key}={input.Value:G8}")), step.Result }).ToArray();
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) { await Load(); StateHasChanged(); } }
+    private async Task Load() => await Run(async () =>
+    {
+        _brand = await _preferences.GetAsync();
+        var settings = await _api.Settings(SurveyId);
+        // Retain settings when completeness validation fails so the not-sampled action remains available.
+        _workspace = new() { Settings = settings };
+        if (settings.TemplatesComplete)
+        {
+            _workspace = await _api.Open(SurveyId);
+            if (_workspace.Matching is { } matching) await _matchingDialog!.ShowAsync(SurveyId, matching);
+            else if (_workspace.TissueMatching is { } tissueMatching) await _matchingDialog!.ShowAsync(SurveyId, tissueMatching, true);
+            else if (_workspace.TemplateSelectionRequired) _choosingTemplate = true;
+        }
+        else _choosingTemplate = true;
+    });
+    private async Task TemplateSelected() { _choosingTemplate = false; await Load(); }
+    private void Edit()
+    {
+        var document = _workspace!.Document!; _error = "";
+        _draft = new() { ExpectedRevisionId = document.Id, ExpectedVersion = _workspace.Settings.Version,
+            Actions = Clone(document.Actions), Options = Clone(document.Options), ExcludedLabSoilIds = document.Blocks.Where(block => block.Excluded).Select(block => block.LabSoilId).ToList(),
+            Overrides = document.Blocks.SelectMany(block => block.Recommendations.Where(item => item.Overridden).Select(item => new SoilReportOverride { LabSoilId = block.LabSoilId, Product = item.Product, Rate = item.Rate, Reason = item.Reason })).ToList() };
+        _blockId = document.Blocks.First().LabSoilId; _editing = true;
+    }
+    // Count availability against the unsaved block selection, not the last revision's exclusions.
+    private bool TissueAvailable => _workspace?.Document?.Tissue.Samples.Any(sample => sample.SoilLabIds.Any(id =>
+        _workspace.Document.Blocks.Any(block => block.LabSoilId == id && !_draft!.ExcludedLabSoilIds.Contains(id)))) == true;
+    // A requested but pending material can still be switched off for a soil-only QA revision.
+    private bool TissueRequested => _workspace?.Document?.Tissue.ExpectedSoilLabIds.Count > 0;
+    private void SetIncludeSoil(bool include)
+    {
+        if (include || _draft!.Options.IncludeTissue && TissueAvailable) _draft!.Options.IncludeSoil = include;
+    }
+    private void SetIncludeTissue(bool include)
+    {
+        if (include && TissueAvailable || !include && _draft!.Options.IncludeSoil) _draft!.Options.IncludeTissue = include;
+    }
+    private void IncludeBlock(int id, bool include)
+    {
+        _draft!.ExcludedLabSoilIds.Remove(id);
+        if (!include)
+        {
+            _draft.ExcludedLabSoilIds.Add(id);
+            // Keep tissue-only previews meaningful when the last tissue-bearing block is deselected.
+            if (!_draft.Options.IncludeSoil && !TissueAvailable)
+            {
+                _draft.ExcludedLabSoilIds.Remove(id);
+                _toasts.ShowToast(new ToastOptions { ProviderName = "SoilReportMessages", Title = "Keep a tissue block selected",
+                    Text = "Include Soil first if you want to exclude all blocks with tissue results.", RenderStyle = ToastRenderStyle.Warning });
+            }
+        }
+    }
+    private void SetRate(string product, double rate)
+    {
+        var change = _draft!.Overrides.FirstOrDefault(item => item.LabSoilId == _blockId && item.Product == product);
+        if (change is null) { change = new() { LabSoilId = _blockId, Product = product }; _draft.Overrides.Add(change); }
+        change.Rate = rate;
+    }
+    private void RemoveRecommendation(string product)
+    {
+        var existing = _workspace!.Document!.Blocks.Single(block => block.LabSoilId == _blockId).Recommendations.Any(item => item.Product == product);
+        var change = _draft!.Overrides.FirstOrDefault(item => item.LabSoilId == _blockId && item.Product == product);
+        // An unsaved addition can disappear. Saved/calculated recommendations need a zero-rate override
+        // so the original calculation, removal reason and ability to restore it survive in revision history.
+        if (!existing)
+        {
+            if (change is not null) _draft.Overrides.Remove(change);
+            return;
+        }
+        SetRate(product, 0);
+        // A previous rate-change explanation must not silently become the reason for removing the product.
+        _draft.Overrides.Single(item => item.LabSoilId == _blockId && item.Product == product).Reason = "";
+    }
+    private async Task Save() => await Run(async () => { _workspace = await _api.Save(SurveyId, _draft!); _editing = false; _previewConfirmed = false; Success("Review saved — preview the report before peer QA"); });
+    private void StartWorkflow(string action) { _error = ""; _previewConfirmed = false; _workflow = new() { Action = action, ExpectedRevisionId = _workspace!.Document!.Id, ExpectedVersion = _workspace.Settings.Version, QaHours = .25 }; _workflowVisible = true; }
+    private async Task Transition() => await Run(async () => { _workflow.PreviewConfirmed = _previewConfirmed; _workspace = await _api.Transition(SurveyId, _workflow); _workflowVisible = false; Success("Report workflow updated"); });
+    private async Task History() => await Run(async () => { _history = await _api.History(SurveyId); _revisions = await _api.Revisions(SurveyId); _historyVisible = true; });
+    private async Task ViewRevision(Guid id) => await Run(async () => { _historical = await _api.Revision(SurveyId, id); _revisionVisible = true; });
+    private async Task Print() => await _javascript.InvokeVoidAsync("metaGrowReportPrinting.print", $"{_workspace!.Document!.SurveyDate:yyyyMMdd}_{_workspace.Document.PropertyName}_{_workspace.Document.FileMaterialLabel}_Rev{_workspace.Document.Revision}.pdf", 100);
+    private async Task Run(Func<Task> operation)
+    {
+        _busy = true; _error = "";
+        try { await operation(); }
+        catch (Exception exception) { _error = exception.Message; _toasts.ShowToast(new ToastOptions { ProviderName = "SoilReportMessages", Title = "Report request failed", Text = _error, RenderStyle = ToastRenderStyle.Danger }); }
+        finally { _busy = false; }
+    }
+    private void Success(string title) => _toasts.ShowToast(new ToastOptions { ProviderName = "SoilReportMessages", Title = title, RenderStyle = ToastRenderStyle.Success });
+    private static T Clone<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value))!;
+}

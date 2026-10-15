@@ -114,24 +114,8 @@
                         TextWrapEnabled="false" HighlightRowOnHover="true" ColumnResizeMode="GridColumnResizeMode.NextColumn"
                         CssClass="multicrop-grid">
                     <Columns>
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyDate)" Caption="Date" Width="110px"
-                                          DisplayFormat="dd/MM/yyyy" />
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.PropertyName)" Caption="Property" MinWidth="180" />
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ApplicationName)" Caption="Survey type" MinWidth="140" />
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.CropTypeName)" Caption="Crop" MinWidth="120" />
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.AgronomistName)" Caption="Agronomist" MinWidth="150" />
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.StatusName)" Caption="Status" Width="150px">
-                            <CellDisplayTemplate Context="cell">
-                                @{ var statusName = (cell.DataItem as MultiCropSurveySummaryDto)?.StatusName; }
-                                <span class="status-badge @MultiCropSurveyFilter.StatusBadgeClass(statusName)">@statusName</span>
-                            </CellDisplayTemplate>
-                        </DxGridDataColumn>
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.PhotoCount)" Caption="Photos" Width="80px" />
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.LastModified)" Caption="Modified" Width="110px" DisplayFormat="dd/MM/yyyy" />
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyHours)" Caption="Survey hours" Width="110px" DisplayFormat="N2" Visible="false" />
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ReportHours)" Caption="Report hours" Width="110px" DisplayFormat="N2" Visible="false" />
-                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ModifiedBy)" Caption="Modified by" MinWidth="150" Visible="false" />
-                        <DxGridDataColumn Caption="Actions" Width="150px" AllowSort="false">
+                        @* Keep row actions visible while the survey details scroll horizontally. *@
+                        <DxGridDataColumn Caption="Actions" Width="150px" AllowSort="false" FixedPosition="GridColumnFixedPosition.Left">
                             <CellDisplayTemplate Context="cell">
                                 @{ var survey = (MultiCropSurveySummaryDto)cell.DataItem; }
                                 <div class="mg-grid-actions" role="group" aria-label="Survey actions">
@@ -154,6 +138,23 @@
                                 </div>
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyDate)" Caption="Date" Width="110px"
+                                          DisplayFormat="dd/MM/yyyy" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.PropertyName)" Caption="Property" MinWidth="180" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ApplicationName)" Caption="Survey type" MinWidth="140" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.CropTypeName)" Caption="Crop" MinWidth="120" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.AgronomistName)" Caption="Agronomist" MinWidth="150" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.StatusName)" Caption="Status" Width="150px">
+                            <CellDisplayTemplate Context="cell">
+                                @{ var statusName = (cell.DataItem as MultiCropSurveySummaryDto)?.StatusName; }
+                                <span class="status-badge @MultiCropSurveyFilter.StatusBadgeClass(statusName)">@statusName</span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.PhotoCount)" Caption="Photos" Width="80px" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.LastModified)" Caption="Modified" Width="110px" DisplayFormat="dd/MM/yyyy" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.SurveyHours)" Caption="Survey hours" Width="110px" DisplayFormat="N2" Visible="false" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ReportHours)" Caption="Report hours" Width="110px" DisplayFormat="N2" Visible="false" />
+                        <DxGridDataColumn FieldName="@nameof(MultiCropSurveySummaryDto.ModifiedBy)" Caption="Modified by" MinWidth="150" Visible="false" />
                     </Columns>
                 </DxGrid>
             </div>

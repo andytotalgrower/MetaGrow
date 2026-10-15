@@ -48,7 +48,17 @@
                                       IconCssClass="icon icon-back" />
                         </NavLink>
                     }
-                    <div class="switcher-panel"><ThemeToggle /></div>
+                    <div class="switcher-panel">
+                        @* Account pages render statically; keep the theme switch usable there too. *@
+                        @if (RequiresInteractiveNavigationIsland)
+                        {
+                            <ThemeToggle @rendermode="InteractiveServer" />
+                        }
+                        else
+                        {
+                            <ThemeToggle />
+                        }
+                    </div>
                     <AuthorizeView>
                         <Authorized Context="auth">
                             <NavLink href="@AddDrawerStateToUrl("/Account/Manage")"

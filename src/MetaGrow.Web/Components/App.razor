@@ -1,23 +1,18 @@
 ﻿<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="@_colorScheme">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
-    <script>
-        window.mantineScheme = {
-            get: function () { var m = document.cookie.match(/(?:^|; )mantine-color-scheme=([^;]*)/); return m ? m[1] : 'light'; },
-            set: function (v) { document.cookie = 'mantine-color-scheme=' + v + '; path=/; max-age=31536000; SameSite=Lax'; },
-            applyBody: function (dark) { document.body.classList.toggle('mantine-dark', dark); }
-        };
-    </script>
-    @DxResourceManager.RegisterTheme(ActiveTheme)
+    <script src="@Assets["scripts/theme-preferences.js"]"></script>
+    @DxResourceManager.RegisterTheme(_activeTheme)
     @DxResourceManager.RegisterScripts()
     <script src="@Assets["_content/Metagen.AccountSettings.Razor/account-settings-authenticator-code.js"]"></script>
     <link rel="stylesheet" href="@Assets["css/site.css"]" />
     <link rel="stylesheet" href="@Assets["MetaGrow.Web.styles.css"]" />
     <link rel="stylesheet" href="@Assets["_content/Metagen.AccountSettings.Razor/metagen-account-settings.css"]" />
+    <link rel="stylesheet" href="@Assets["css/application-theme.css"]" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
@@ -28,9 +23,9 @@
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
-<body class="@BodyClass">
+<body class="@_bodyClass">
     <script>
-        if (window.mantineScheme.get() === 'dark') document.body.classList.add('mantine-dark');
+        window.mantineScheme.restore();
     </script>
     <Routes @rendermode="PageRenderMode" />
     <ReconnectModal />
@@ -40,6 +35,10 @@
     <script src="@Assets["scripts/new-tab-navigation.js"]"></script>
     <script src="@Assets["scripts/file-download.js"]"></script>
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script>
+        // Enhanced navigation can replace server-rendered body attributes without reloading scripts.
+        Blazor.addEventListener('enhancedload', function () { window.mantineScheme.restore(); });
+    </script>
     <script src="@Assets["Components/Account/Shared/PasskeySubmit.razor.js"]" type="module"></script>
     <script src="@Assets["scripts/passkey-management.js"]" type="module"></script>
     <script src="@Assets["_content/Metagen.AccountSettings.Razor/account-settings.js"]" type="module"></script>
@@ -48,7 +47,7 @@
 </html>
 
 @code {
-    public static readonly ITheme MantineLight = Themes.Fluent.Clone(properties => {
+    public static readonly ITheme _mantineLight = Themes.Fluent.Clone(properties => {
         properties.Name = "MetaGrow Light";
         properties.Mode = ThemeMode.Light;
         properties.AddFilePaths(
@@ -58,7 +57,7 @@
             "css/metagen-branding.css");
     });
 
-    public static readonly ITheme MantineDark = Themes.Fluent.Clone(properties => {
+    public static readonly ITheme _mantineDark = Themes.Fluent.Clone(properties => {
         properties.Name = "MetaGrow Dark";
         properties.Mode = ThemeMode.Dark;
         properties.AddFilePaths(
@@ -68,8 +67,9 @@
             "css/metagen-branding.css");
     });
 
-    private ITheme ActiveTheme = MantineLight;
-    private string BodyClass = string.Empty;
+    private ITheme _activeTheme = _mantineLight;
+    private string _bodyClass = string.Empty;
+    private string _colorScheme = "light";
 
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
@@ -80,7 +80,8 @@
     protected override void OnInitialized()
     {
         var isDark = HttpContext.Request.Cookies["mantine-color-scheme"] == "dark";
-        ActiveTheme = isDark ? MantineDark : MantineLight;
-        BodyClass = isDark ? "mantine-dark" : string.Empty;
+        _activeTheme = isDark ? _mantineDark : _mantineLight;
+        _bodyClass = isDark ? "mantine-dark" : string.Empty;
+        _colorScheme = isDark ? "dark" : "light";
     }
 }

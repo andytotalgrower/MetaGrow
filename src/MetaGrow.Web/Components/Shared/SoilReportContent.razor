@@ -1,0 +1,474 @@
+@using System.Globalization
+@using MetaGrow.Shared.Models
+@using MetaGrow.Web.Services
+@using MetaGrow.Web.Models
+@implements IAsyncDisposable
+@inject IJSRuntime _js
+
+@* Tables use explicit block/row groups so both screen and print retain readable portrait columns. *@
+@* Page titles use explicit title case so screen, shared and printed reports all present the same headings. *@
+<article class="soil-report survey-print-report">
+    @* A dedicated cover gives clients a clear introduction; variable actions and warnings flow on the next page. *@
+    <section class="soil-sheet cover-sheet" aria-label="Report cover">
+        <SoilReportCover Document="Document" Brand="Brand" />
+    </section>
+    <section class="soil-sheet">
+        <SoilReportSheetHeader Document="Document" Brand="Brand" Title="Report Summary" />
+        <div class="report-facts"><div><small>Prepared by</small><strong>@Document.Agronomist</strong><span>@Document.AgronomistEmail</span><span>@Document.AgronomistPhone</span></div>@if (Document.Options.IncludeSoil) { <div><small>Calculation template</small><strong>@Document.TemplateName</strong><span>@string.Join(", ", Included.Select(block => block.Crop).Distinct())</span></div> }
+            @if (Document.ShowsTissue) { <div><small>Tissue targets</small><strong>@string.Join(", ", TissueReportLayout.IncludedSamples(Document).Select(sample => sample.TemplateName).Distinct())</strong></div> }</div>
+        @if (Document.Status != "Approved") { <p class="review-notice">@Document.Status — this report has not completed QA.</p> }
+        @if (ReviewWarnings().Any())
+        {
+            <aside class="review-notice"><strong>Review notes</strong><ul>
+                @foreach (var warning in ReviewWarnings())
+                {
+                    <li>@warning.Message @if (warning.Blocks.Length > 0) { <small class="warning-blocks">Applies to: @warning.Blocks</small> }</li>
+                }
+            </ul></aside>
+        }
+        @* Count included blocks once even when several samples were collected from the same block. *@
+        @{ var reportBlocks = ReportBlocks; }
+        <section class="block-summary" aria-label="Blocks in this report">
+            <div class="block-summary-heading"><h3>Blocks</h3><span><strong>@reportBlocks.Count</strong> @(reportBlocks.Count == 1 ? "block included" : "blocks included")</span></div>
+            <ul class="block-summary-list" role="list">@foreach (var block in reportBlocks) { <li>@block.Name</li> }</ul>
+        </section>
+        <h3>Key Actions</h3>
+        @if (Document.Actions.Count == 0) { <p>No additional actions have been recorded.</p> }
+        @foreach (var action in Document.Actions)
+        {
+            <div class="action"><h4>@action.Title</h4><p class="preserve-lines">@action.Text</p></div>
+        }
+        @if (Document.Options.IncludeSoil) { <p class="muted">Recommendations are expressed in kg/ha. Historical averages are unweighted across all available blocks for each survey in the preceding three years.</p> }
+        @if (Document.ShowsTissue) { <p class="muted">Tissue readings are compared with the selected tissue targets. Only tissue samples linked to the survey’s soil blocks are included.</p> }
+    </section>
+    @if (Document.Options.ShowStatusOverview)
+    {
+        var overviewPages = SoilStatusOverviewLayout.Pages(Document);
+        @if (overviewPages.Count == 0)
+        {
+            <section class="soil-sheet">
+                <SoilReportSheetHeader Document="Document" Brand="Brand" Title="Status Overview" />
+                <p>No measures have configured targets for the included blocks.</p>
+            </section>
+        }
+        @foreach (var page in overviewPages)
+        {
+            <section class="soil-sheet overview-sheet">
+                <SoilReportSheetHeader Document="Document" Brand="Brand" Title="Status Overview" />
+                @StatusKey
+                @foreach (var matrix in page) { @StatusMatrix(matrix) }
+            </section>
+        }
+    }
+    @if (Document.Options.ShowBlockDetails)
+    {
+        @foreach (var page in SoilReportTableLayout.Pages(Document))
+        {
+            var blocks = page.Blocks;
+            <section class="soil-sheet">
+                <SoilReportSheetHeader Document="Document" Brand="Brand" Title="Block Results" />
+                @StatusKey
+                <p class="muted">The circle highlights the target. Blank cells have no result or configured range. Where the range varies, T and min–max appear beside each block’s result.</p>
+                <div class="results-scroll" role="region" aria-label="Block results data" tabindex="0">
+                    <table class="results"><thead><tr><th>Measure / unit</th><th class="reference-heading">Range</th>@foreach (var block in blocks) { <th>@block.Name<small>@block.Crop@if (Document.Options.IncludeSoil) { <br />@block.SampleReference }</small></th> }</tr></thead><tbody>
+                        @foreach (var group in page.Groups)
+                        {
+                            <tr class="section-row"><th colspan="@(blocks.Length + 2)" style="@($"border-left:4px solid {group.Colour}")">@group.Title</th></tr>
+                            @if (group.IsTissue)
+                            {
+                                @* Keep tissue sources beneath the same soil block columns. *@
+                                <tr class="tissue-sources"><th scope="row">Tissue sample</th><td></td>@for (var index = 0; index < blocks.Length; index++)
+                                    {
+                                        var sample = group.Samples![index];
+                                        <td>@if (sample is not null) { <span title="@($"{sample.SamplePart} · {sample.TemplateName}")">@sample.SampleReference</span> } else { <small>@(Document.Tissue.ExpectedSoilLabIds.Contains(blocks[index].LabSoilId) ? "Awaiting result" : "No tissue result")</small> }</td>
+                                    }</tr>
+                            }
+                            @foreach (var measure in group.Measures)
+                            {
+                                var references = blocks.Select((block, index) => group.Value(block, index, measure.Key)).ToList();
+                                var reference = references.FirstOrDefault(value => value?.Target is not null);
+                                // Missing tissue samples have no range to compare. Present ranges must agree numerically;
+                                // template display names never determine whether two ranges are interchangeable.
+                                var comparable = group.IsTissue ? references.Where(value => value is not null) : references;
+                                var sharedReference = reference is not null && comparable.All(value => value?.Target == reference.Target
+                                    && value?.Minimum == reference.Minimum && value?.Maximum == reference.Maximum);
+                                <tr class="@(group.IsTissue ? "tissue-reading" : null)"><th>@measure.Label</th><td class="reference-cell">
+                                    @if (sharedReference) { @TissueRange(reference, measure.NumberFormat) }
+                                    else if (reference is not null) { <span class="muted">Varies by block</span> }
+                                </td>@for (var index = 0; index < blocks.Length; index++)
+                                    {
+                                        var value = references[index];
+                                        <td class="@StatusClass(value)" title="@(group.IsTissue ? TissueDescription(group.Samples![index], measure, value) : ValueDescription(blocks[index], measure, value))">@if (value?.Value is not null) { <span class="result-reading"><strong>@Symbol(value) @Format(value.Value, measure.NumberFormat)</strong>@if (!sharedReference && value.Target is not null) { <small class="result-target" aria-label="@($"Target {Format(value.Target, measure.NumberFormat)}; range {Format(value.Minimum, measure.NumberFormat)} to {Format(value.Maximum, measure.NumberFormat)}")">T @CompactFormat(value.Target, measure.NumberFormat) (@CompactFormat(value.Minimum, measure.NumberFormat)–@CompactFormat(value.Maximum, measure.NumberFormat))</small> }</span> }</td>
+                                    }</tr>
+                            }
+                        }
+                    </tbody></table>
+                </div>
+                @if (page.Groups.Any(group => group.IsTissue)) { <p class="muted tissue-note">Tissue readings use the selected tissue targets. Rows with only zero or missing tissue values are omitted.</p> }
+            </section>
+        }
+    }
+    @* Agronomists review all theoretical requirements before the separate product recommendations. *@
+    @if (Document.Options.IncludeSoil && Document.Options.ShowRequiredAmounts)
+    {
+        @foreach (var blocks in Included.Chunk(_amountBlocksPerPage))
+        {
+            @foreach (var requirements in blocks.SelectMany(block => block.Requirements).DistinctBy(item => item.Key).Chunk(24))
+            {
+                <section class="soil-sheet">
+                    <SoilReportSheetHeader Document="Document" Brand="Brand" Title="Theoretical Elemental Requirements" />
+                    <p>Kg/ha to soil target. These amounts may not be achievable in the medium term or in some cases ever. Consult your agronomist; multiple applications will usually be required.</p>
+                    <div class="results-scroll" role="region" aria-label="Theoretical elemental requirements data" tabindex="0">
+                    <table class="block-amounts requirements-table"><thead><tr><th>Element / measure</th>@foreach (var block in blocks) { <th>@block.Name</th> }</tr></thead><tbody>
+                        @foreach (var requirement in requirements) { <tr><th>@requirement.Name</th>@foreach (var block in blocks) { <td>@Format(block.Requirements.FirstOrDefault(item => item.Key == requirement.Key)?.Amount, "#,##0.##")</td> }</tr> }
+                    </tbody></table>
+                    </div>
+                </section>
+            }
+        }
+    }
+    @foreach (var blocks in (Document.Options.IncludeSoil ? Included : []).Chunk(_amountBlocksPerPage))
+    {
+        var products = blocks.SelectMany(block => block.Recommendations).Where(item => item.Rate > 0).OrderBy(item => item.Order).Select(item => item.Product).Distinct().ToList();
+        <section class="soil-sheet">
+            <SoilReportSheetHeader Document="Document" Brand="Brand" Title="Soil Balance Recommendations" />
+            <p>Application rates in kg/ha. An asterisk indicates an agronomist adjustment.</p>
+            <div class="results-scroll" role="region" aria-label="Soil balancing recommendations data" tabindex="0">
+            <table class="block-amounts balancing-table"><thead><tr><th>Product</th>@foreach (var block in blocks) { <th>@block.Name</th> }</tr></thead><tbody>
+                @foreach (var product in products)
+                {
+                    <tr><th>@product</th>@foreach (var block in blocks) { var item = block.Recommendations.FirstOrDefault(item => item.Product == product); <td>@Format(item?.Rate ?? 0, "#,##0.##")@(item?.Overridden == true ? " *" : "")</td> }</tr>
+                }
+                @if (products.Count == 0) { <tr><td colspan="@(blocks.Length + 1)">No balancing products recommended.</td></tr> }
+                <tr class="section-row"><th colspan="@(blocks.Length + 1)">Elemental contribution from lime and dolomite (kg/ha)</th></tr>
+                @foreach (var element in new[] { "Calcium", "Magnesium" })
+                { <tr><th>@element added</th>@foreach (var block in blocks) { <td>@Contribution(block, element).ToString("#,##0.##", CultureInfo.InvariantCulture)</td> }</tr> }
+            </tbody></table>
+            </div>
+            @foreach (var block in blocks)
+            {
+                @foreach (var item in block.Recommendations.Where(item => item.Overridden))
+                { <p class="adjustment"><strong>@block.Name — @item.Product:</strong> @Format(item.CalculatedRate, "#,##0.##") → @Format(item.Rate, "#,##0.##") kg/ha. @item.Reason</p> }
+            }
+        </section>
+    }
+    @* Farm history needs two sampling dates to compare; multiple blocks or surveys on one day are not history. *@
+    @if (Document.Options.IncludeSoil && Document.Options.ShowHistory && Document.History.Select(round => round.Date.Date).Distinct().Count() > 1)
+    {
+        @* Reserve a compact trend column; each continuation repeats the full-period trend for comparison. *@
+        var history = Document.History.OrderBy(round => round.Date).ThenBy(round => round.SurveyId).ToList();
+        @foreach (var rounds in history.Chunk(_historyRoundsPerPage))
+        {
+            @foreach (var measures in Document.Measures.Chunk(24))
+            {
+                <section class="soil-sheet">
+                    <SoilReportSheetHeader Document="Document" Brand="Brand" Title="Historical Farm Averages" />
+                    <p>Each column shows average soil results for one survey of this property, including the current survey, over a maximum of three years ending on the report’s survey date. Each sample contributes equally; block area is not used. Sampled blocks and available measurements may differ between surveys.</p>
+                    <div class="results-scroll" role="region" aria-label="Historical farm averages data" tabindex="0">
+                    <table class="history-table" style="@($"--history-round-count: {rounds.Length}")"><thead><tr><th>Measure</th>@foreach (var round in rounds) { <th class="history-date-heading" title="@($"{round.Date:dd MMM yyyy} · {round.BlockCount} samples · survey #{round.SurveyId}")"><span>@round.Date.ToString("dd MMM yy")<small>@round.BlockCount samples · #@round.SurveyId</small></span></th> }<th class="history-trend-heading">Trend<small>Full Period</small></th></tr></thead><tbody>
+                        @foreach (var measure in measures)
+                        {
+                            var trend = SoilHistoryTrend.Points(history, measure.Key);
+                            <tr><th>@measure.Label</th>@foreach (var round in rounds) { <td>@Format(round.Averages.TryGetValue(measure.Key, out var number) ? number : null, measure.NumberFormat)</td> }
+                                <td class="history-trend-cell">
+                                    @if (trend.Count > 0)
+                                    {
+                                        <div class="history-trend" role="img" aria-label="@($"{measure.Label} trend, {history.First().Date:dd MMM yyyy} to {history.Last().Date:dd MMM yyyy}, oldest to newest sampling round")">
+                                            <DxSparkline Data="trend" ArgumentFieldName="Round" ValueFieldName="Value" Type="SparklineType.Line"
+                                                BreakOnEmptyPoints="true" ShowFirstLast="true" ShowMinMax="false" LineWidth="2" PointSize="3"
+                                                LineColor="var(--mg-success-text)" FirstLastColor="var(--mg-success-text)" PointColor="var(--mg-surface)"
+                                                Width="100%" Height="100%" />
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody></table>
+                    </div>
+                    <p class="muted history-trend-note">Trends cover the full period, oldest to newest, with equally spaced sampling rounds. Each measure uses its own scale; gaps indicate missing results. At least two results are needed. A rising line does not necessarily mean an improvement.</p>
+                </section>
+            }
+        }
+    }
+    @if (Document.Options.IncludeSoil && Document.Options.ShowSugarInputs)
+    {
+        @foreach (var block in Included.Where(block => block.SugarInputs.Count > 0))
+        {
+            <section class="soil-sheet">
+                <SoilReportSheetHeader Document="Document" Brand="Brand" Title="Sugarcane Allowable Inputs" />
+                <h3>@block.Name</h3>
+                <table><thead><tr><th>Nutrient</th><th>Stage</th><th>District yield</th><th>Input kg/ha</th></tr></thead><tbody>
+                    @foreach (var item in block.SugarInputs) { <tr><th>@item.Nutrient</th><td>@item.Stage</td><td>@Format(item.DistrictYield > 0 ? item.DistrictYield : null, "#,##0")</td><td>@Format(item.Amount, "#,##0.##")</td></tr> }
+                </tbody></table>
+            </section>
+        }
+    }
+    @if (Document.Options.ShowIndividualBlockDetails)
+    {
+        var averages = SoilBlockDetailLayout.SurveyAverages(Document);
+        var included = Included;
+        @foreach (var block in included)
+        {
+            var pages = SoilBlockDetailLayout.Pages(Document, block);
+            @for (var pageIndex = 0; pageIndex < pages.Count; pageIndex++)
+            {
+                var page = pages[pageIndex];
+                var anchor = DetailAnchor(block, pageIndex);
+                <section class="soil-sheet block-detail-sheet" id="@anchor" tabindex="-1" @ref="_detailAnchors[anchor]" aria-label="@($"{block.Name} block detail, part {pageIndex + 1} of {pages.Count}")">
+                    <SoilReportSheetHeader Document="Document" Brand="Brand" Title="Block Detail" />
+                    <div class="detail-identity">
+                        <div><span class="detail-eyebrow">@block.Crop · Block @(included.IndexOf(block) + 1) of @included.Count</span><h3>@block.Name</h3><small>Part @(pageIndex + 1) of @pages.Count</small></div>
+                        @if (Document.Options.IncludeSoil) { <div class="detail-sample"><span>Sample @block.SampleReference</span><span>@((block.SampleDate == default ? Document.SurveyDate : block.SampleDate).ToString("dd MMM yyyy")) · @block.SampleType</span><span>@block.Laboratory</span></div> }
+                    </div>
+                    @if (page.Summaries.Count > 0)
+                    {
+                        <div class="detail-summary" aria-label="Measurements without a configured range">
+                            @foreach (var measure in page.Summaries)
+                            {
+                                var value = GetValue(block, measure.Key);
+                                <div class="detail-tile"><span class="detail-tile-value">@Format(value?.Value, measure.NumberFormat)</span><span>@measure.Label</span></div>
+                            }
+                        </div>
+                    }
+                    @if (Document.Options.IncludeSoil && (page.Recommendations.Count > 0 || pageIndex == 0 && block.Recommendations.All(item => item.Rate <= 0)))
+                    {
+                        <aside class="detail-recommendations"><h4>Recommended Applications <small>kg/ha</small></h4>
+                            <div>@foreach (var recommendation in page.Recommendations) { <span>@recommendation.Product <strong>@Format(recommendation.Rate, "#,##0.##")@(recommendation.Overridden ? " *" : "")</strong></span> }</div>
+                            @if (block.Recommendations.All(item => item.Rate <= 0)) { <p>No balancing products recommended.</p> }
+                            @if (page.Recommendations.Any(item => item.Overridden)) { <small>* Agronomist adjustment; explanation below.</small> }
+                        </aside>
+                    }
+                    @if (page.Measures.Count > 0)
+                    {
+                        <div class="detail-key">@StatusKey<span class="average-key">▼ Survey average (above bar)</span><span class="overflow-key">@OffScaleArrow("left") @OffScaleArrow("right") Beyond scale</span></div>
+                        <table class="detail-results"><thead><tr><th>Measure / unit</th><th>Result</th><th>Range</th><th>Against target range</th></tr></thead><tbody>
+                            @foreach (var section in page.Measures.GroupBy(measure => measure.Section))
+                            {
+                                <tr class="section-row"><th colspan="4" style="@($"border-left:4px solid {section.First().SectionColour}")">@section.Key</th></tr>
+                                @foreach (var measure in section)
+                                {
+                                    var value = GetValue(block, measure.Key);
+                                    var average = averages.TryGetValue(measure.Key, out var number) ? (double?)number : null;
+                                    var marker = SoilBlockDetailLayout.Marker(value?.Value, value);
+                                    var averageMarker = SoilBlockDetailLayout.Marker(average, value);
+                                    <tr><th scope="row">@measure.Label</th><td class="detail-reading @StatusClass(value)" title="@ValueDescription(block, measure, value)">@if (value?.Value is not null) { @($"{Symbol(value)} {Format(value.Value, measure.NumberFormat)}") }</td>
+                                        <td class="reference-cell"><span class="reference-values">
+                                            @if (value?.Minimum is not null) { <span>@CompactFormat(value.Minimum, measure.NumberFormat)</span> }
+                                            @if (value?.Target is not null) { @if (value.Minimum is not null) { <span class="range-arrow" aria-hidden="true">→</span> }<strong class="reference-target">@CompactFormat(value.Target, measure.NumberFormat)</strong> }
+                                            @if (value?.Maximum is not null) { @if (value.Minimum is not null || value.Target is not null) { <span class="range-arrow" aria-hidden="true">→</span> }<span>@CompactFormat(value.Maximum, measure.NumberFormat)</span> }
+                                        </span></td>
+                                        <td class="detail-comparison">
+                                            @if (marker is not null)
+                                            {
+                                                <div class="detail-comparison-content">
+                                                <div class="detail-track" role="img" aria-label="@($"{ValueDescription(block, measure, value)}; survey average {Format(average, measure.NumberFormat)}{(marker.Overflow.Length > 0 ? "; result extends beyond the displayed scale" : "")}")">
+                                                    <span class="detail-band"></span>
+                                                    @if (averageMarker is not null) { <span class="detail-average @averageMarker.Overflow" style="@MarkerStyle(averageMarker)" title="@($"Survey average {Format(average, measure.NumberFormat)}{OverflowDescription(averageMarker)}")">@if (averageMarker.Overflow.Length > 0) { @OffScaleArrow(averageMarker.Overflow) } else { <text>▼</text> }</span> }
+                                                    <span class="detail-marker @StatusClass(value) @marker.Overflow" style="@MarkerStyle(marker)" title="@($"{block.Name} result {Format(value?.Value, measure.NumberFormat)}{OverflowDescription(marker)}")">@if (marker.Overflow.Length > 0) { @OffScaleArrow(marker.Overflow) }</span>
+                                                </div>
+                                                <small class="detail-average-value">Avg @Format(average, measure.NumberFormat)</small>
+                                                </div>
+                                            }
+                                        </td></tr>
+                                }
+                            }
+                        </tbody></table>
+                        <p class="detail-scale-note">The shaded band is this block’s acceptable range. The circle marks its target. The marker on the bar shows this block’s result; the marker above it shows the survey average. An arrow means that marker is beyond the displayed scale. Survey averages give equal weight to all available samples in the current survey.</p>
+                    }
+                    @foreach (var tissueRows in page.Tissue.GroupBy(row => row.Sample.LabTissueId))
+                    {
+                        var tissue = tissueRows.First().Sample;
+                        <div class="detail-tissue">
+                            <h4>Tissue Results</h4>
+                            <p class="muted">Sample @tissue.SampleReference · @tissue.SamplePart · Template: @tissue.TemplateName</p>
+                            @* Reuse the soil table's four fixed column widths and the same range scale. *@
+                            <table class="detail-results detail-tissue-results"><thead><tr><th>Measure / unit</th><th>Result</th><th>Range</th><th>Against target range</th></tr></thead><tbody>
+                                @foreach (var row in tissueRows)
+                                {
+                                    var value = tissue.Values.GetValueOrDefault(row.Measure.Key);
+                                    var marker = SoilBlockDetailLayout.Marker(value?.Value, value);
+                                    <tr><th scope="row">@row.Measure.Label</th><td class="detail-reading @StatusClass(value)" title="@TissueDescription(tissue, row.Measure, value)">@Symbol(value) @Format(value?.Value, row.Measure.NumberFormat)</td>
+                                        <td class="reference-cell">@TissueRange(value, row.Measure.NumberFormat)</td>
+                                        <td class="detail-comparison">
+                                            @if (marker is not null)
+                                            {
+                                                <div class="detail-track" role="img" aria-label="@($"{TissueDescription(tissue, row.Measure, value)}{OverflowDescription(marker)}")">
+                                                    <span class="detail-band"></span>
+                                                    <span class="detail-marker @StatusClass(value) @marker.Overflow" style="@MarkerStyle(marker)" title="@($"Tissue result {Format(value?.Value, row.Measure.NumberFormat)}{OverflowDescription(marker)}")">@if (marker.Overflow.Length > 0) { @OffScaleArrow(marker.Overflow) }</span>
+                                                </div>
+                                            }
+                                        </td></tr>
+                                }
+                            </tbody></table>
+                            <p class="detail-scale-note">The shaded band is the tissue target range; the marker shows this sample’s result. An arrow indicates a result beyond the displayed scale.</p>
+                        </div>
+                    }
+                    @if (page.Notes.Count > 0)
+                    {
+                        <div class="detail-notes">@foreach (var note in page.Notes) { <div><h4>@note.Title</h4><p class="preserve-lines">@note.Text</p></div> }</div>
+                    }
+                </section>
+            }
+        }
+    }
+    <section class="soil-sheet">
+        <SoilReportSheetHeader Document="Document" Brand="Brand" Title="@(Document.Options.IncludeSoil ? "Notes And Application Guidance" : "Notes")" />
+        @foreach (var note in Document.Notes.Where(note => (Document.Options.IncludeSoil || note.RuleId == "disclaimer") && note.LabSoilIds.Any(id => Included.Any(block => block.LabSoilId == id))))
+        {
+            <div class="report-note"><h4>@note.Title</h4><p class="preserve-lines">@note.Text</p>@if (note.LabSoilIds.Count < Document.Blocks.Count) { <small>Applies to: @string.Join(", ", Included.Where(block => note.LabSoilIds.Contains(block.LabSoilId)).Select(block => block.Name))</small> }</div>
+        }
+        @if (Document.Blocks.Any(block => block.Excluded)) { <p>Excluded from this report: @string.Join(", ", Document.Blocks.Where(block => block.Excluded).Select(block => block.Name)). @if (Document.Options.IncludeSoil) { <text>Historical averages retain all sampled blocks.</text> }</p> }
+        @if (Document.Options.IncludeSoil && Document.NotSampled.Count > 0)
+        {
+            <div class="report-note"><h4>Blocks Not Sampled</h4>
+                @foreach (var sample in Document.NotSampled) { <p><strong>@sample.BlockName (barcode @sample.Barcode):</strong> @sample.Reason</p> }
+                <small>These survey items were not collected and are excluded from the expected laboratory result set.</small>
+            </div>
+        }
+    </section>
+    @if (IncludePrintFooter)
+    {
+        @* String component parameters need expressions to render the report's values, including the printed page footer. *@
+        <SurveyReportFooter Brand="Brand" PropertyName="@Document.PropertyName" SurveyDate="Document.SurveyDate" AgronomistName="@Document.Agronomist" AgronomistPhone="@Document.AgronomistPhone" Reference="@($"{Document.MaterialLabel} {Document.SurveyId} · rev {Document.Revision}")" Portrait="true" />
+    }
+</article>
+
+@code {
+    // Amount-only tables fit six blocks alongside the label; detailed results retain their own grouping.
+    private const int _amountBlocksPerPage = 6;
+    // Ten survey columns plus a 24 mm trend fit the same 186 mm portrait content width.
+    private const int _historyRoundsPerPage = 10;
+    // Instance-specific anchors keep saved revision previews separate and preserve shared-link URL tokens.
+    private readonly string _anchorPrefix = "soil-block-" + Guid.NewGuid().ToString("N");
+    private readonly Dictionary<string, ElementReference> _detailAnchors = [];
+    private IJSObjectReference? _navigationModule;
+    [Parameter, EditorRequired] public SoilReportDocument Document { get; set; } = default!;
+    [Parameter] public string? BrandKey { get; set; }
+    // Historical previews must not replace the current report's global print-page footer rules.
+    [Parameter] public bool IncludePrintFooter { get; set; } = true;
+    private ReportBrandOption Brand => ReportBranding.Get(BrandKey);
+    private List<SoilReportBlock> Included => Document.ReportedBlocks;
+    // Preserve distinct saved block links, with names also separating older snapshots that have no block ID.
+    private List<SoilReportBlock> ReportBlocks => Included.DistinctBy(block => (block.BlockId, block.Name.Trim().ToUpperInvariant()))
+        .OrderBy(block => block.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    // Vector shafts and open arrowheads stay legible on paper without depending on a font's triangle glyph.
+    private static RenderFragment OffScaleArrow(string direction) => @<svg class="off-scale-arrow @direction" viewBox="0 0 18 14" aria-hidden="true" focusable="false">
+        <path class="arrow-halo" d="M3 7H15M10 2L15 7L10 12" />
+        <path d="M3 7H15M10 2L15 7L10 12" />
+    </svg>;
+    private string DetailAnchor(SoilReportBlock block, int page = 0) => $"{_anchorPrefix}-{block.LabSoilId}-{page}";
+    private static string MarkerStyle(MetaGrow.Web.Models.SoilRangeMarker marker) => FormattableString.Invariant($"left:{marker.Position:0.###}%");
+    private static string OverflowDescription(MetaGrow.Web.Models.SoilRangeMarker marker) => marker.Overflow switch
+    {
+        "left" => "; below the displayed scale", "right" => "; above the displayed scale", _ => ""
+    };
+    // One matrix renderer keeps soil and tissue headings, colours, counts and keyboard navigation consistent.
+    private RenderFragment StatusMatrix(SoilStatusMatrix matrix) => @<div class="overview-panel @(matrix.IsTissue ? "tissue-overview" : "soil-overview")">
+        @if (Document.ShowsTissue) { <h3>@(matrix.IsTissue ? "Tissue Nutrients" : "Soil Nutrients")</h3> }
+        <p class="overview-context">@(matrix.IsTissue ? "Samples / blocks" : "Blocks") @(matrix.RowStart + 1)–@(matrix.RowStart + matrix.Rows.Count) of @matrix.TotalRows <span>·</span> Measures @(matrix.MeasureStart + 1)–@(matrix.MeasureStart + matrix.Measures.Count) of @matrix.TotalMeasures with targets</p>
+        <div class="results-scroll" role="region" aria-label="@(matrix.IsTissue ? "Tissue status overview data" : "Status overview data")" tabindex="0">
+            <table class="status-matrix" style="@FormattableString.Invariant($"--matrix-measure-units: {matrix.Measures.Sum(measure => matrix.Widths[measure.Key])}")">
+                <colgroup><col class="matrix-block-column" />@foreach (var measure in matrix.Measures) { <col class="matrix-value-column" style="@FormattableString.Invariant($"--matrix-column-units: {matrix.Widths[measure.Key]}")" /> }</colgroup>
+                <thead>
+                    <tr class="matrix-sections"><th scope="col" rowspan="2">Block</th>@foreach (var section in matrix.Measures.GroupBy(measure => measure.Section)) { <th scope="colgroup" colspan="@section.Count()" title="@section.Key">@section.Key</th> }</tr>
+                    <tr>@foreach (var measure in matrix.Measures) { <th scope="col" class="matrix-measure-heading" title="@measure.Label"><span>@(string.IsNullOrWhiteSpace(measure.ShortName) ? measure.Label : measure.ShortName)</span></th> }</tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in matrix.Rows)
+                    {
+                        <tr><th scope="row">@if (Document.Options.ShowIndividualBlockDetails) { <a class="block-detail-link" href="@($"#{DetailAnchor(row.Block)}")" @onclick:preventDefault @onclick="@(() => RevealBlock(row.Block))" title="@($"View {row.Block.Name} block details")">@row.Block.Name</a> } else { @row.Block.Name }
+                        </th>@foreach (var measure in matrix.Measures)
+                            {
+                                var value = row.Value(measure.Key);
+                                <td class="@StatusClass(value)" title="@(matrix.IsTissue ? TissueDescription(row.Tissue, measure, value) : ValueDescription(row.Block, measure, value))">
+                                    @if (value?.Value is not null) { <span class="matrix-value"><span class="matrix-symbol" aria-hidden="true">@Symbol(value)</span><span>@Format(value.Value, measure.NumberFormat)</span></span> }
+                                </td>
+                            }</tr>
+                    }
+                </tbody>
+                <tfoot><tr><th scope="row">Out of range <small>/ assessed on this page</small></th>@foreach (var measure in matrix.Measures)
+                    {
+                        var assessed = matrix.Rows.Select(row => row.Value(measure.Key)).Where(value => value?.Position is "low" or "range" or "high").ToList();
+                        <td>@if (assessed.Count > 0) { <strong>@assessed.Count(value => value!.Position is "low" or "high")</strong><span class="assessed-count"> / @assessed.Count</span> }</td>
+                    }</tr></tfoot>
+            </table>
+        </div>
+        <p class="muted overview-note">Only measures with configured targets are shown. Each result uses its own @(matrix.IsTissue ? "tissue" : "soil") range. Blank cells have no result; neutral values cannot be assessed against a complete range.@if (matrix.IsTissue) { <text> Measures with only zero or missing tissue values are omitted.</text> }</p>
+    </div>;
+    private async Task RevealBlock(SoilReportBlock block)
+    {
+        if (!_detailAnchors.TryGetValue(DetailAnchor(block), out var element)) return;
+        try
+        {
+            // Reuse the existing focus-and-reveal behaviour without replacing the hash of a public share URL.
+            _navigationModule ??= await _js.InvokeAsync<IJSObjectReference>("import", "./scripts/sample-import-guide.js");
+            await _navigationModule.InvokeVoidAsync("reveal", element);
+        }
+        catch (JSDisconnectedException) { }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (_navigationModule is null) return;
+        try { await _navigationModule.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
+    private IEnumerable<(string Message, string Blocks)> ReviewWarnings()
+    {
+        // Group identical per-block warnings only for presentation. Frozen warnings and numeric traces remain intact.
+        // Match complete known names rather than splitting on ':' because a block name can itself contain punctuation.
+        var names = Document.Blocks.Select(block => block.Name).Distinct().OrderByDescending(name => name.Length).ToList();
+        // Existing warning strings have a stable tissue prefix. Suppress advice for an unselected
+        // material without removing the original evidence from the revision or audit view.
+        var warnings = Document.Warnings.Where(message => message.StartsWith("Tissue results are pending for ", StringComparison.Ordinal)
+            ? Document.Options.IncludeTissue : Document.Options.IncludeSoil).Distinct().Select(message =>
+        {
+            var name = names.FirstOrDefault(name => message.StartsWith(name + ": ", StringComparison.Ordinal));
+            return (Message: name is null ? message : message[(name.Length + 2)..], Block: name);
+        });
+        foreach (var group in warnings.GroupBy(warning => (warning.Message, IsBlockWarning: warning.Block is not null)))
+        {
+            var blocks = group.Where(warning => warning.Block is not null).Select(warning => warning.Block!).Distinct().Order().ToList();
+            yield return (group.Key.Message, blocks.Count == 0 ? "" : blocks.Count == names.Count
+                ? $"all {Document.Blocks.Count} blocks" : string.Join(", ", blocks));
+        }
+    }
+    private static SoilReportValue? GetValue(SoilReportBlock block, string key) => block.Values.TryGetValue(key, out var value) ? value : null;
+    // Colours express range position consistently; inverse template flags still govern calculations, not these colours.
+    // Share the compact range treatment between tissue overview and individual block pages.
+    private RenderFragment TissueRange(SoilReportValue? value, string format) => @<span class="reference-values">
+        @if (value?.Target is not null)
+        {
+            @if (value.Minimum.HasValue) { <span>@CompactFormat(value.Minimum, format)</span><span class="range-arrow" aria-hidden="true">→</span> }
+            <strong class="reference-target">@CompactFormat(value.Target, format)</strong>
+            @if (value.Maximum.HasValue) { <span class="range-arrow" aria-hidden="true">→</span><span>@CompactFormat(value.Maximum, format)</span> }
+        }
+    </span>;
+    private static string TissueDescription(TissueReportSample? sample, SoilReportMeasure measure, SoilReportValue? value) =>
+        value?.Value is null ? "No reported tissue value" : $"{sample?.BlockName}: {measure.Label} {Format(value.Value, measure.NumberFormat)}; {value.Position}; range {Format(value.Minimum, measure.NumberFormat)} to {Format(value.Maximum, measure.NumberFormat)}; target {Format(value.Target, measure.NumberFormat)}; {sample?.SamplePart} sample {sample?.SampleReference}";
+    private static string StatusClass(SoilReportValue? value) => "status-" + (value?.Value is null ? "missing" : value.Position);
+    private RenderFragment StatusKey => @<div class="key"><span class="status-low">▼ Below range</span><span class="status-range">✓ Within range</span><span class="status-high">▲ Above range</span><span class="status-unrated">Unrated</span></div>;
+    private static string ValueDescription(SoilReportBlock block, SoilReportMeasure measure, SoilReportValue? value)
+    {
+        var prefix = $"{block.Name} · {measure.Label}: ";
+        if (value?.Value is null) return prefix + "No result";
+        var status = value.Position switch { "low" => "Below range", "high" => "Above range", "range" => "Within range", _ => "No complete range configured" };
+        return prefix + Format(value.Value, measure.NumberFormat) + "; " + status
+            + (value.Minimum.HasValue && value.Maximum.HasValue ? $"; range {Format(value.Minimum, measure.NumberFormat)} to {Format(value.Maximum, measure.NumberFormat)}" : "")
+            + (value.Target.HasValue ? $"; target {Format(value.Target, measure.NumberFormat)}" : "");
+    }
+    // An unavailable value stays empty; a measured zero still renders as zero.
+    private static string Format(double? value, string format) => value?.ToString(format, CultureInfo.InvariantCulture) ?? "";
+    // Remove insignificant decimal zeros from references without changing the definition's rounding precision.
+    private static string CompactFormat(double? value, string format)
+    {
+        var text = Format(value, format);
+        return text.Contains('.') && !text.Contains('E') && !text.Contains('e') ? text.TrimEnd('0').TrimEnd('.') : text;
+    }
+    private static string Symbol(SoilReportValue? value) => value?.Position switch { "low" => "▼", "high" => "▲", "range" => "✓", _ => "" };
+    private static double Contribution(SoilReportBlock block, string element)
+    {
+        var lime = block.Recommendations.FirstOrDefault(item => item.Product.Equals("Lime", StringComparison.OrdinalIgnoreCase))?.Rate ?? 0;
+        var dolomite = block.Recommendations.FirstOrDefault(item => item.Product.Equals("Dolomite", StringComparison.OrdinalIgnoreCase))?.Rate ?? 0;
+        return element == "Calcium" ? lime * .38 + dolomite * .2 : dolomite * .1;
+    }
+}

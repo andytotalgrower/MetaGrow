@@ -1,0 +1,452 @@
+<?xml version="1.0" standalone="yes"?>
+<ReportDefinition>
+  <xs:schema id="ReportDefinition" xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xs:element name="ReportDefinition" msdata:IsDataSet="true" msdata:Locale="en-US">
+      <xs:complexType>
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+          <xs:element name="ReportSection">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="SectionId" type="xs:int" minOccurs="0" />
+                <xs:element name="SectionName" type="xs:string" minOccurs="0" />
+                <xs:element name="Colour" type="xs:string" minOccurs="0" />
+                <xs:element name="DisplayOrder" type="xs:int" minOccurs="0" />
+              </xs:sequence>
+            </xs:complexType>
+          </xs:element>
+          <xs:element name="ReportItem">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="ItemId" type="xs:int" minOccurs="0" />
+                <xs:element name="SectionId" type="xs:int" minOccurs="0" />
+                <xs:element name="ObjectName" type="xs:string" minOccurs="0" />
+                <xs:element name="DisplayText" type="xs:string" minOccurs="0" />
+                <xs:element name="DisplayOrder" type="xs:int" minOccurs="0" />
+                <xs:element name="NumberFormat" type="xs:string" minOccurs="0" />
+                <xs:element name="BgColour" type="xs:string" minOccurs="0" default="" />
+                <xs:element name="ShowIfZero" type="xs:boolean" minOccurs="0" default="true" />
+              </xs:sequence>
+            </xs:complexType>
+          </xs:element>
+        </xs:choice>
+      </xs:complexType>
+    </xs:element>
+  </xs:schema>
+  
+  <ReportSection>
+    <SectionId>1</SectionId>
+    <SectionName>General</SectionName>
+    <Colour>#0077c1</Colour>
+    <DisplayOrder>10</DisplayOrder>
+  </ReportSection>
+  <ReportSection>
+    <SectionId>2</SectionId>
+    <SectionName>Phosphorous</SectionName>
+    <Colour>#7ebadf</Colour>
+    <DisplayOrder>20</DisplayOrder>
+  </ReportSection>
+  <ReportSection>
+    <SectionId>3</SectionId>
+    <SectionName>Cation Balance</SectionName>
+    <Colour>#8cc63d</Colour>
+    <DisplayOrder>30</DisplayOrder>
+  </ReportSection>
+  <ReportSection>
+    <SectionId>4</SectionId>
+    <SectionName>Other Nutrients</SectionName>
+    <Colour>#464179</Colour>
+    <DisplayOrder>40</DisplayOrder>
+  </ReportSection>
+  
+  <ReportItem>
+    <ItemId>10</ItemId>
+    <SectionId>1</SectionId>
+    <ObjectName>PhCaCl2</ObjectName>
+    <DisplayText>pH [1:5 CaCl2]</DisplayText>
+    <DisplayOrder>10</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>20</ItemId>
+    <SectionId>1</SectionId>
+    <ObjectName>PhH2o</ObjectName>
+    <DisplayText>pH [1:5 H2O]</DisplayText>
+    <DisplayOrder>20</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>25</ItemId>
+    <SectionId>1</SectionId>
+    <ObjectName>OrganicMatterPc</ObjectName>
+    <DisplayText>Organic matter %</DisplayText>
+    <DisplayOrder>25</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>25</ItemId>
+    <SectionId>1</SectionId>
+    <ObjectName>OrganicCarbon</ObjectName>
+    <DisplayText>Organic carbon %</DisplayText>
+    <DisplayOrder>25</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>30</ItemId>
+    <SectionId>1</SectionId>
+    <ObjectName>CecMeq</ObjectName>
+    <DisplayText>CEC</DisplayText>
+    <DisplayOrder>30</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>35</ItemId>
+    <SectionId>1</SectionId>
+    <ObjectName>Tec</ObjectName>
+    <DisplayText>TEC</DisplayText>
+    <DisplayOrder>35</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>40</ItemId>
+    <SectionId>1</SectionId>
+    <ObjectName>EcDsm</ObjectName>
+    <DisplayText>EC [1:5 H2O]</DisplayText>
+    <DisplayOrder>40</DisplayOrder>
+    <NumberFormat>#,##0.00</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>50</ItemId>
+    <SectionId>1</SectionId>
+    <ObjectName>ChloridePpm</ObjectName>
+    <DisplayText>Chloride ppm</DisplayText>
+    <DisplayOrder>50</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>60</ItemId>
+    <SectionId>1</SectionId>
+    <ObjectName>SulphurPpm</ObjectName>
+    <DisplayText>Sulphur ppm</DisplayText>
+    <DisplayOrder>60</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>70</ItemId>
+    <SectionId>1</SectionId>
+    <ObjectName>TotalSulphurPpm</ObjectName>
+    <DisplayText>Total Sulphur ppm</DisplayText>
+    <DisplayOrder>70</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+
+  <ReportItem>
+    <ItemId>80</ItemId>
+    <SectionId>2</SectionId>
+    <ObjectName>PhosphorousColwellPpm</ObjectName>
+    <DisplayText>Colwell ppm</DisplayText>
+    <DisplayOrder>10</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>85</ItemId>
+    <SectionId>2</SectionId>
+    <ObjectName>PhosphorousTotalPpm</ObjectName>
+    <DisplayText>Total P ppm</DisplayText>
+    <DisplayOrder>15</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+    <BgColour>TotalBgColor</BgColour>
+    <ShowIfZero>false</ShowIfZero>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>100</ItemId>
+    <SectionId>2</SectionId>
+    <ObjectName>PhosphorousBsesPpm</ObjectName>
+    <DisplayText>BSES ppm</DisplayText>
+    <DisplayOrder>30</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>102</ItemId>
+    <SectionId>2</SectionId>
+    <ObjectName>PhosphorousBufferingIndex</ObjectName>
+    <DisplayText>PBI</DisplayText>
+    <DisplayOrder>40</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+
+  <ReportItem>
+    <ItemId>110</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>CalciumPpm</ObjectName>
+    <DisplayText>Calcium ppm</DisplayText>
+    <DisplayOrder>10</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>115</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>TotalCalciumPpm</ObjectName>
+    <DisplayText>Total Calcium ppm</DisplayText>
+    <DisplayOrder>15</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+    <BgColour>TotalBgColor</BgColour>
+    <ShowIfZero>false</ShowIfZero>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>120</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>MagnesiumPpm</ObjectName>
+    <DisplayText>Magnesium ppm</DisplayText>
+    <DisplayOrder>20</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>125</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>TotalMagnesiumPpm</ObjectName>
+    <DisplayText>Total Magnesium ppm</DisplayText>
+    <DisplayOrder>25</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+    <BgColour>TotalBgColor</BgColour>
+    <ShowIfZero>false</ShowIfZero>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>130</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>PotassiumPpm</ObjectName>
+    <DisplayText>Potassium ppm</DisplayText>
+    <DisplayOrder>30</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>135</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>TotalPotassiumPpm</ObjectName>
+    <DisplayText>Total Potassium ppm</DisplayText>
+    <DisplayOrder>35</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+    <BgColour>TotalBgColor</BgColour>
+    <ShowIfZero>false</ShowIfZero>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>140</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>SodiumPpm</ObjectName>
+    <DisplayText>Sodium ppm</DisplayText>
+    <DisplayOrder>40</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>145</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>TotalSodiumPpm</ObjectName>
+    <DisplayText>Total Sodium ppm</DisplayText>
+    <DisplayOrder>45</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>150</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>Nh4nPpm</ObjectName>
+    <DisplayText>NH4-N ppm</DisplayText>
+    <DisplayOrder>50</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>160</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>AluminiumPpm</ObjectName>
+    <DisplayText>Aluminium ppm</DisplayText>
+    <DisplayOrder>60</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>165</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>TotalAluminiumPpm</ObjectName>
+    <DisplayText>Total Aluminium ppm</DisplayText>
+    <DisplayOrder>65</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+    <BgColour>TotalBgColor</BgColour>
+    <ShowIfZero>false</ShowIfZero>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>170</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>ExchangeCalciumPc</ObjectName>
+    <DisplayText>Exchange Ca %</DisplayText>
+    <DisplayOrder>70</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>180</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>ExchangeMagnesiumPc</ObjectName>
+    <DisplayText>Exchange Mg %</DisplayText>
+    <DisplayOrder>80</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>190</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>ExchangePotassiumPc</ObjectName>
+    <DisplayText>Exchange K %</DisplayText>
+    <DisplayOrder>90</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>200</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>ExchangeSodiumPc</ObjectName>
+    <DisplayText>Exchange Na %</DisplayText>
+    <DisplayOrder>100</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>210</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>ExchangeHPlusPc</ObjectName>
+    <DisplayText>Exchange H+ %</DisplayText>
+    <DisplayOrder>110</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>220</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>ExchangeAluminiumPc</ObjectName>
+    <DisplayText>Exchange Al %</DisplayText>
+    <DisplayOrder>120</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>225</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>CalciumMagnesiumRatio</ObjectName>
+    <DisplayText>Ca:Mg Ratio</DisplayText>
+    <DisplayOrder>130</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>227</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>PotassiumMagnesiumRatio</ObjectName>
+    <DisplayText>K:Mg Ratio</DisplayText>
+    <DisplayOrder>140</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>228</ItemId>
+    <SectionId>3</SectionId>
+    <ObjectName>NitricPotassiumMeq</ObjectName>
+    <DisplayText>Nitric Potassium Meq</DisplayText>
+    <DisplayOrder>140</DisplayOrder>
+    <NumberFormat>#,##0.00</NumberFormat>
+  </ReportItem>
+
+  <ReportItem>
+    <ItemId>230</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>BoronPpm</ObjectName>
+    <DisplayText>Boron ppm</DisplayText>
+    <DisplayOrder>10</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>240</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>IronPpm</ObjectName>
+    <DisplayText>Iron DTPA ppm</DisplayText>
+    <DisplayOrder>20</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>245</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>TotalIronPpm</ObjectName>
+    <DisplayText>Total Iron ppm</DisplayText>
+    <DisplayOrder>25</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+    <BgColour>TotalBgColor</BgColour>
+    <ShowIfZero>false</ShowIfZero>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>250</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>ManganesePpm</ObjectName>
+    <DisplayText>Manganese ppm</DisplayText>
+    <DisplayOrder>30</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>255</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>TotalManganesePpm</ObjectName>
+    <DisplayText>Total Manganese ppm</DisplayText>
+    <DisplayOrder>35</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>260</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>CopperPpm</ObjectName>
+    <DisplayText>Copper DTPA ppm</DisplayText>
+    <DisplayOrder>40</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>265</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>TotalCopperPpm</ObjectName>
+    <DisplayText>Total Copper ppm</DisplayText>
+    <DisplayOrder>45</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>270</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>ZincPpm</ObjectName>
+    <DisplayText>Zinc DTPA ppm</DisplayText>
+    <DisplayOrder>50</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>275</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>TotalZincPpm</ObjectName>
+    <DisplayText>Total Zinc ppm</DisplayText>
+    <DisplayOrder>55</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>272</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>ZincHClMgKg</ObjectName>
+    <DisplayText>Zinc HCl Mg/Kg</DisplayText>
+    <DisplayOrder>52</DisplayOrder>
+    <NumberFormat>#,##0.00</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>280</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>No3nPpm</ObjectName>
+    <DisplayText>Nitrate N ppm</DisplayText>
+    <DisplayOrder>60</DisplayOrder>
+    <NumberFormat>#,##0.0</NumberFormat>
+  </ReportItem>
+  <ReportItem>
+    <ItemId>290</ItemId>
+    <SectionId>4</SectionId>
+    <ObjectName>SiliconBsesPpm</ObjectName>
+    <DisplayText>Silicon BSES ppm</DisplayText>
+    <DisplayOrder>70</DisplayOrder>
+    <NumberFormat>#,##0</NumberFormat>
+  </ReportItem>
+	<ReportItem>
+		<ItemId>300</ItemId>
+		<SectionId>4</SectionId>
+		<ObjectName>SiliconCaClPpm</ObjectName>
+		<DisplayText>Silicon CaCl ppm</DisplayText>
+		<DisplayOrder>70</DisplayOrder>
+		<NumberFormat>#,##0</NumberFormat>
+	</ReportItem>
+</ReportDefinition>

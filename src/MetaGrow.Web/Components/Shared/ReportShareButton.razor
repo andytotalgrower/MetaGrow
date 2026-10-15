@@ -11,7 +11,8 @@
     <BodyContentTemplate>
         <div class="share-dialog">
             <div class="alert alert-warning" role="note">
-                Anyone with a link can view the complete report and full-size photos without signing in.
+                @if (ReportArea == MetaGrowReportAreas.Soil) { <span>Anyone with a link can view this approved report revision without signing in. Later report changes do not change this link.</span> }
+                else { <span>Anyone with a link can view the complete report and full-size photos without signing in.</span> }
                 Links are permanent until a MetaGrow user revokes them.
             </div>
 
@@ -30,7 +31,7 @@
 
             @if (_loading)
             {
-                <p>Loading shared links...</p>
+                <p><DxWaitIndicator Visible="true" /> Loading shared links...</p>
             }
             else if (_shares.Count == 0)
             {
@@ -107,6 +108,7 @@
 
 @code {
     [Parameter] public int SurveyId { get; set; }
+    [Parameter] public Guid? SoilRevisionId { get; set; }
     [Parameter] public string? PropertyName { get; set; }
     [Parameter] public string ReportArea { get; set; } = MetaGrowReportAreas.MultiCrop;
 
@@ -152,7 +154,7 @@
         _working = true;
         try
         {
-            var (share, error) = await Shares.CreateAsync(SurveyId, ReportArea, _newName);
+            var (share, error) = await Shares.CreateAsync(SurveyId, ReportArea, _newName, SoilRevisionId);
             if (share is null)
             {
                 SetMessage(error ?? "The shared link could not be created.", true);

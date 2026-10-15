@@ -63,6 +63,10 @@
             </div>
         </header>
 
+        @if (_canEditOperations)
+        {
+            <SoilTemplatePicker @key="SurveyId" SurveyId="SurveyId" />
+        }
         <section class="workflow-section" aria-labelledby="workflow-heading">
             <div class="section-heading">
                 <span class="editor-kicker">Independent status tracks</span>

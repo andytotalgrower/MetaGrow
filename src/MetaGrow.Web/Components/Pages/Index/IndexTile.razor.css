@@ -1,3 +1,4 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
 .tile {
     border: 1px solid var(--dxds-color-border-neutral-default-rest);
     border-radius: 0.75rem;
@@ -13,7 +14,7 @@
 ::deep .tile-icon {
     border: 1px solid var(--dxds-color-border-neutral-default-rest);
     border-radius: 0.375rem;
-    color: var(--mg-blue, #007cba);
+    color: var(--mg-link);
     height: 2.75rem;
     padding: 0.75rem;
     width: 2.75rem;

@@ -1,3 +1,4 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
 .confirm-body {
     display: flex;
     align-items: flex-start;
@@ -16,7 +17,7 @@
 }
 
 .confirm-icon-info {
-    color: var(--mg-blue, #007cba);
+    color: var(--mg-link);
 }
 
 .confirm-message {

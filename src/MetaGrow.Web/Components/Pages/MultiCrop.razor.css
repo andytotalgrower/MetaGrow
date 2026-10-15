@@ -1,3 +1,4 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
 .multicrop-page {
     display: flex;
     flex-direction: column;
@@ -75,9 +76,9 @@
 .empty-state span { color: var(--dxds-color-content-neutral-subdued-rest); text-align: center; }
 
 .status-badge {
-    background: var(--mg-blue-0, #e5f4fb);
+    background: var(--mg-info-surface);
     border-radius: 999px;
-    color: var(--mg-blue-8, #015682);
+    color: var(--mg-link);
     display: inline-block;
     font-size: 0.75rem;
     font-weight: 600;

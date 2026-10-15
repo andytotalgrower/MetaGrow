@@ -1,3 +1,4 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
 .online-report {
     display: flex;
     flex-direction: column;
@@ -84,7 +85,7 @@
 
 .report-eyebrow,
 .section-kicker {
-    color: var(--mg-blue, #007cba);
+    color: var(--mg-link);
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -108,14 +109,14 @@
 
 .comment-grid ul { margin: 0; padding-left: 1.2rem; }
 .comment-grid li { padding-left: .15rem; margin-bottom: .3rem; white-space: pre-line; }
-.no-findings { align-items: center; display: flex; gap: 1rem; border: 1px solid #72a18a; border-radius: .65rem; background: #f1f8f4; color: #234934; padding: 1.1rem 1.3rem; margin: 1rem 0; }
+.no-findings { align-items: center; display: flex; gap: 1rem; border: 1px solid var(--mg-success-border); border-radius: .65rem; background: var(--mg-success-surface); color: var(--mg-success-text); padding: 1.1rem 1.3rem; margin: 1rem 0; }
 .no-findings svg { width: 2rem; height: 2rem; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .no-findings svg .smile-eye { fill: currentColor; }
 .no-findings p { font-size: 1rem; margin: 0; font-weight: 600; }
-.summary-table .summary-groups th { text-align: center; border: 1px solid #ccd2d7; color: #173544; font-weight: 700; }
-.summary-table .summary-groups th:nth-child(even) { background: #dcebf4; }
-.summary-table .summary-groups th:nth-child(odd) { background: #f7ead4; }
-.summary-table .summary-groups th:first-child { background: #fff; }
+.summary-table .summary-groups th { text-align: center; border: 1px solid var(--mg-border); color: var(--mg-text); font-weight: 700; }
+.summary-table .summary-groups th:nth-child(even) { background: var(--mg-info-surface); }
+.summary-table .summary-groups th:nth-child(odd) { background: var(--mg-warning-surface); }
+.summary-table .summary-groups th:first-child { background: var(--mg-surface); }
 
 .print-photo-option {
     align-items: center;
@@ -194,7 +195,7 @@
 
 .summary-table th,
 .summary-table td {
-    border-bottom: 1px solid #ccd2d7;
+    border-bottom: 1px solid var(--mg-border);
     padding: 0.55rem 0.7rem;
     text-align: right;
     white-space: nowrap;
@@ -240,11 +241,11 @@
 
 .compliance-note {
     align-items: flex-start;
-    background: #f5f8fa;
-    border: 1px solid #a6b5bd;
+    background: var(--mg-surface-muted);
+    border: 1px solid var(--mg-border);
     border-radius: .4rem;
     break-inside: avoid;
-    color: #22323a;
+    color: var(--mg-text);
     display: flex;
     font-size: 0.8rem;
     gap: .65rem;
@@ -380,7 +381,7 @@
 .action-checklist-table .checklist-date { width: 7.5rem; }
 .action-checklist-table .checklist-action { width: 32%; }
 .action-checklist-table .checklist-target { font-size: 1.15rem; font-weight: 700; text-align: center; }
-.action-checklist-table .checklist-not-applicable { background: #d1d5db; }
+.action-checklist-table .checklist-not-applicable { background: var(--mg-surface-muted); }
 .action-checklist-table td strong,
 .action-checklist-table td span { display: block; }
 .checklist-note { color: var(--dxds-color-content-neutral-subdued-rest); font-size: 0.78rem; margin: 0.65rem 0 0; }

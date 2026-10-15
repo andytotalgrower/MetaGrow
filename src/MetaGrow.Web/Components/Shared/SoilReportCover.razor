@@ -1,0 +1,76 @@
+@using System.Globalization
+@using MetaGrow.Shared.Models
+@using MetaGrow.Web.Services
+
+@* Use only saved report metadata; the cover must describe the same revision as the client receives. *@
+<div class="soil-cover">
+    <div class="cover-brand">
+        <img src="@Brand.LogoPath" alt="@Brand.AltText" />
+        <span>Soil &amp; Crop Nutrition</span>
+    </div>
+
+    <div class="cover-introduction">
+        <div class="cover-eyebrow"><span>@Document.MaterialLabel Analysis</span><span>@Document.SurveyDate.ToString("MMMM yyyy", CultureInfo.InvariantCulture)</span></div>
+        <h2>@if (!Document.Options.IncludeSoil) { <span>Tissue</span> <span>Report</span> } else if (_reportedTissue > 0) { <span>Soil And Tissue</span> <span>Report</span> } else { <span>Soil Nutrient</span> <span>Balance Report</span> }</h2>
+        <div class="cover-rule" aria-hidden="true"></div>
+        <div class="cover-client">
+            <span class="cover-label">Prepared For</span>
+            <h3>@Document.PropertyName</h3>
+        </div>
+        <p class="cover-description">@(!Document.Options.IncludeSoil ? "Plant tissue results and target ranges, together with the next steps for your farm." : _reportedTissue > 0 ? "Soil nutrient balance and plant tissue results, together with the next steps for your farm." : "A clear view of your soil, its nutrient balance and the next steps for your farm.")</p>
+    </div>
+
+    @* Abstract contour lines add character on screen; they are decoration, not a map or soil data. *@
+    <svg class="cover-contours" viewBox="0 0 400 300" fill="none" aria-hidden="true" focusable="false">
+        <path d="M-40 230C50 110 140 300 225 150S350 20 440 85" />
+        <path d="M-40 206C50 86 140 276 225 126S350-4 440 61" />
+        <path d="M-40 182C50 62 140 252 225 102S350-28 440 37" />
+        <path d="M-40 158C50 38 140 228 225 78S350-52 440 13" />
+        <path d="M-40 254C50 134 140 324 225 174S350 44 440 109" />
+        <path d="M-40 278C50 158 140 348 225 198S350 68 440 133" />
+    </svg>
+
+    <div class="cover-details">
+        <div class="cover-adviser">
+            <span class="cover-label">Your Agronomist</span>
+            <strong>@Document.Agronomist</strong>
+            @* Keep contact details in reading order: email, then mobile on its own line. *@
+            @if (!string.IsNullOrWhiteSpace(Document.AgronomistEmail)) { <span>@Document.AgronomistEmail</span> }
+            @if (!string.IsNullOrWhiteSpace(Document.AgronomistPhone)) { <span>@Document.AgronomistPhone</span> }
+        </div>
+        <div class="cover-sampling">
+            <span class="cover-label">Survey Date</span>
+            <strong>@Document.SurveyDate.ToString("dd MMMM yyyy", CultureInfo.InvariantCulture)</strong>
+            @if (Document.Options.IncludeSoil) { <span>@_reportedSamples @(_reportedSamples == 1 ? "soil sample reported" : "soil samples reported")</span> }
+            @if (_reportedTissue > 0) { <span>@_reportedTissue @(_reportedTissue == 1 ? "tissue sample reported" : "tissue samples reported")</span> }
+        </div>
+        @if (_crops.Length > 0)
+        {
+            <div class="cover-crops"><span class="cover-label">@(_crops.Length == 1 ? "Crop" : "Crops")</span><span>@string.Join(" · ", _crops)</span></div>
+        }
+    </div>
+
+    <div class="cover-reference"><span>Survey @Document.SurveyId <span aria-hidden="true">/</span> Revision @Document.Revision</span><span>@Brand.Label</span></div>
+    @if (Document.Status != "Approved")
+    {
+        @* An attractive cover must never make an unapproved preview look ready for client release. *@
+        <p class="cover-review">@Document.Status — this report has not completed QA.</p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SoilReportDocument Document { get; set; } = default!;
+    [Parameter, EditorRequired] public ReportBrandOption Brand { get; set; } = default!;
+    private int _reportedSamples, _reportedTissue;
+    private string[] _crops = [];
+
+    protected override void OnParametersSet()
+    {
+        // Excluded blocks are not presented as part of the report's coverage; no area or depth is inferred.
+        var included = Document.ReportedBlocks;
+        _reportedSamples = included.Count;
+        _reportedTissue = TissueReportLayout.IncludedSamples(Document).Count;
+        _crops = included.Select(block => (block.Crop ?? "").Trim()).Where(crop => crop.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(crop => crop, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+}

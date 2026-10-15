@@ -1,4 +1,5 @@
-.report-scale-key { border: 1px solid #a6b5bd; border-radius: .4rem; background: #f5f8fa; color: #22323a; padding: .55rem .75rem; margin: .7rem 0; font-size: .75rem; break-inside: avoid; }
+/* Shared semantic colours follow the saved light/dark scheme. */
+.report-scale-key { border: 1px solid var(--mg-border); border-radius: .4rem; background: var(--mg-surface-muted); color: var(--mg-text); padding: .55rem .75rem; margin: .7rem 0; font-size: .75rem; break-inside: avoid; }
 .report-scale-key > strong { display: block; font-size: .72rem; margin-bottom: .35rem; }
 dl { display: flex; flex-wrap: wrap; gap: .45rem 1.5rem; margin: 0; }
 dl > div { display: flex; align-items: baseline; gap: .45rem; }

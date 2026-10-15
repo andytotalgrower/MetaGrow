@@ -14,6 +14,8 @@
     [Parameter] public string? AgronomistPhone { get; set; }
     [Parameter] public string? Reference { get; set; }
     [Parameter] public DateTime SurveyDate { get; set; }
+    // Soil reports use portrait pages; existing survey reports retain their landscape layout.
+    [Parameter] public bool Portrait { get; set; }
 
     private string SurveyDateText => $"Survey date: {SurveyDate:dd MMM yyyy}";
 
@@ -24,9 +26,9 @@
     // Native page counters include pages created by long tables and optional photos.
     // This style exists only while the report is rendered. Use the document page:
     // switching to a named page inside the app shell creates blank boundary pages.
-    private string PrintStyle => "<style>@page { size: A4 landscape; margin: 11mm 12mm 19mm; " +
+    private string PrintStyle => "<style>@page { size: A4 " + (Portrait ? "portrait" : "landscape") + "; margin: 11mm 12mm 19mm; " +
         "@bottom-left { content: \"" + CssText($"{PropertyName}  |  {SurveyDateText}  |  {PreparedBy}  |  {Reference}") +
-        "\\A " + CssText(Disclaimer) + "\"; width: 238mm; white-space: pre-wrap; font: 6.5pt/1.45 Arial, sans-serif; " +
+        "\\A " + CssText(Disclaimer) + "\"; width: " + (Portrait ? "151mm" : "238mm") + "; white-space: pre-wrap; font: 6.5pt/1.45 Arial, sans-serif; " +
         "color: #222; text-align: left; vertical-align: top; padding-top: 2mm; border-top: .25mm solid #777; } " +
         "@bottom-right { content: \"Page \" counter(page) \" of \" counter(pages); width: 35mm; " +
         "font: bold 8pt/1.45 Arial, sans-serif; color: #111; text-align: right; vertical-align: top; padding-top: 2mm; border-top: .25mm solid #777; } }</style>";

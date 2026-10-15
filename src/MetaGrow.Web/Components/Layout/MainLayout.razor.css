@@ -1,3 +1,4 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
 .page { height: 100%; min-height: 0; }
 
 ::deep .navigation-drawer {
@@ -46,10 +47,10 @@
 .switcher-panel { margin-left: auto; }
 
 #blazor-error-ui {
-    background: lightyellow;
+    background: var(--mg-warning-surface);
+    color: var(--mg-warning-text);
     bottom: 0;
     box-sizing: border-box;
-    color: #323e48;
     display: none;
     left: 0;
     padding: 0.6rem 1.25rem;

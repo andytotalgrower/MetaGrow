@@ -1,0 +1,259 @@
+.soil-report { max-width: 920px; margin: auto; color:var(--mg-text); font-size:.9rem; line-height:1.5; }
+.soil-sheet { background:var(--mg-surface); padding:2rem; margin:1.5rem 0; border:1px solid var(--mg-border); border-radius:12px; box-shadow:0 4px 20px #00000008; }
+/* Cover spacing belongs to its component so the same portrait composition reaches shared and printed reports. */
+.soil-sheet.cover-sheet { padding:0; overflow:hidden; }
+.report-facts { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; padding:1rem 0 1.5rem; }
+.report-facts span,.report-facts strong,.report-facts small { display:block; }
+/* The complete block list flows across columns and pages instead of imposing a fixed-size cover panel. */
+.block-summary { border:1px solid var(--mg-border); border-radius:8px; padding:1rem 1.2rem; margin:1rem 0 1.5rem; }
+.block-summary-heading { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; margin-bottom:.6rem; break-after:avoid; }
+.block-summary-heading h3 { margin:0; }
+.block-summary-heading > span { color:var(--mg-muted); font-size:.8rem; }
+.block-summary-heading strong { color:var(--mg-text); font-size:1.1rem; }
+.block-summary-list { columns:3 12rem; column-gap:1.5rem; list-style:none; padding:0; margin:0; }
+.block-summary-list li { padding:.3rem 0; break-inside:avoid; overflow-wrap:anywhere; }
+small,.muted { font-size:.78rem; color:var(--mg-muted); }
+h3 { font-size:1.2rem; margin-top:1.5rem; } h4 { font-size:1rem; margin-bottom:.4rem; }
+.action { border-left:4px solid #639f43; padding:.5rem 1rem; margin:1rem 0; background:var(--mg-surface-muted); }
+.preserve-lines { white-space:pre-wrap; overflow-wrap:anywhere; }
+.review-notice { padding:1rem; border:1px solid var(--mg-warning-border); background:var(--mg-warning-surface); color:var(--mg-warning-text); border-radius:6px; }
+.warning-blocks { display:block; color:inherit; margin:.2rem 0 .7rem; }
+table { width:100%; table-layout:fixed; border-collapse:collapse; margin:1rem 0; font-size:.82rem; }
+th,td { border-bottom:1px solid var(--mg-border); padding:.6rem .45rem; text-align:right; vertical-align:top; overflow-wrap:anywhere; }
+th:first-child { text-align:left; width:32%; } thead th { background:var(--mg-surface-muted); font-weight:700; }
+td small,th small { display:block; font-size:.66rem; font-weight:400; margin-top:.2rem; color:inherit; }
+/* Shared references get a neutral column so colour and emphasis stay on each block's measured result. */
+.results-scroll { max-width:100%; overflow-x:auto; }
+/* Scrollable regions stay keyboard accessible without drawing a border around the whole table. */
+.results-scroll:focus { outline:none; }
+.results { min-width:680px; }
+/* Six numeric block columns fit beside a readable label; narrow screens can scroll horizontally. */
+.block-amounts { min-width:680px; font-variant-numeric:tabular-nums; }
+.block-amounts th:first-child { width:28%; }
+.block-amounts th,.block-amounts td { padding-left:.35rem; padding-right:.35rem; }
+.results th:first-child { width:24%; }
+.results .reference-heading { width:18%; text-align:center; }
+/* Measurement rows need less vertical space than the block headings, especially on paper. */
+.results tbody th,.results tbody td { padding:.25rem .4rem; vertical-align:middle; }
+.results .section-row th { padding:.3rem .4rem; }
+.reference-cell { background:var(--mg-surface-muted); text-align:center; }
+.reference-values { display:inline-flex; align-items:center; gap:.35rem; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.reference-values > span { font-size:.75rem; color:var(--mg-muted); }
+/* The circle grows with the target's digits, preserving large values without clipping them. */
+.reference-target { display:inline-grid; place-items:center; flex-shrink:0; min-width:1.7rem; min-height:1.7rem; aspect-ratio:1; padding:.15rem; border-radius:50%; background:var(--mg-success-surface); color:var(--mg-success-text); font-size:.8rem; font-weight:700; line-height:1; }
+.reference-values .range-arrow { font-size:.65rem; }
+/* Only genuinely varying references remain alongside results; preserve readable columns on narrow screens. */
+.result-reading { display:flex; justify-content:flex-end; align-items:baseline; gap:.35rem; white-space:nowrap; }
+.result-reading strong { flex-shrink:0; }
+/* Unrated measurements are reference information, so reserve bold values for assessable ranges. */
+.results .status-unrated strong { font-weight:400; }
+.result-target { display:inline; margin-top:0; }
+.section-row th { background:var(--mg-surface-muted); color:var(--mg-text); text-align:left; font-size:.75rem; padding:.4rem; }
+/* Both tables use range position, so low is always red and high always amber, including inverse calculation items. */
+/* Stronger red and weight distinguish deficient cells and their legend from green ticks in both themes. */
+.status-low { background:var(--mg-report-low-surface); color:var(--mg-report-low-text); font-weight:600; }
+.status-high { background:var(--mg-warning-surface); color:var(--mg-warning-text); }
+.status-range { background:var(--mg-success-surface); color:var(--mg-success-text); }
+.status-unrated { background:var(--mg-surface-muted); color:var(--mg-muted); }
+.key { display:flex; gap:.5rem; flex-wrap:wrap; font-size:.75rem; }.key span { border-radius:4px; padding:.25rem .5rem; }
+/* A compact block-by-measure matrix shares the same values and colours as detailed results. */
+.overview-context { font-size:.8rem; color:var(--mg-muted); margin:.65rem 0; }
+.overview-context > span { padding:0 .5rem; }
+.status-matrix { --matrix-block-width:9rem; --matrix-value-width:2.1rem; width:calc(var(--matrix-block-width) + var(--matrix-measure-units) * var(--matrix-value-width)); font-size:.7rem; font-variant-numeric:tabular-nums; }
+.matrix-block-column { width:var(--matrix-block-width); }
+/* Width units follow the formatted values, so four-digit magnesium results retain room for their status symbol. */
+.matrix-value-column { width:calc(var(--matrix-column-units) * var(--matrix-value-width)); }
+.status-matrix th,.status-matrix td { padding:.34rem .05rem; text-align:center; vertical-align:middle; border-right:1px solid var(--mg-border); line-height:1.25; }
+.status-matrix th:first-child { width:auto; }
+.status-matrix .matrix-sections th:first-child { width:var(--matrix-block-width); text-align:left; }
+.status-matrix tbody th,.status-matrix tfoot th { text-align:left; padding-left:.5rem; }
+.status-matrix thead th { font-size:.7rem; }
+/* Vertical writing participates in table sizing; turning it over reads bottom-to-top (90 degrees counter-clockwise). */
+.status-matrix .matrix-measure-heading { vertical-align:bottom; padding:.6rem .2rem; }
+.matrix-measure-heading > span,.history-date-heading > span { display:inline-block; writing-mode:vertical-rl; transform:rotate(180deg); white-space:nowrap; text-align:left; line-height:1.1; }
+.status-matrix .matrix-sections th { color:var(--mg-muted); font-size:.65rem; font-weight:600; padding:.35rem .25rem; }
+/* A short continuation can have only one nutrient: keep its group heading from becoming a tall letter stack. */
+.status-matrix .matrix-sections th:not(:first-child) { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.status-matrix .matrix-sections th:first-child { color:var(--mg-text); font-size:.76rem; }
+.matrix-value { display:inline-flex; align-items:center; justify-content:center; gap:.04rem; max-width:100%; }
+/* Exceptionally long results may wrap inside their cell instead of overlapping a neighbouring measure. */
+.matrix-value > span:last-child { min-width:0; overflow-wrap:anywhere; }
+.matrix-symbol { font-size:.45rem; }
+.status-matrix tfoot th,.status-matrix tfoot td { border-top:2px solid var(--mg-border); background:var(--mg-surface-muted); padding-top:.5rem; padding-bottom:.5rem; }
+.assessed-count { color:var(--mg-muted); font-size:.66rem; white-space:nowrap; }
+.overview-note { margin-bottom:0; }
+/* History date columns remain compact even when a continuation page contains fewer surveys. */
+.history-table { --history-label-width:13rem; --history-value-width:3.2rem; --history-trend-width:6rem; width:calc(var(--history-label-width) + var(--history-round-count) * var(--history-value-width) + var(--history-trend-width)); }
+.history-table th:first-child { width:var(--history-label-width); }
+.history-table .history-date-heading { text-align:center; vertical-align:bottom; padding:.6rem .2rem; }
+.history-date-heading small { margin:.25rem 0 0; }
+.history-table tbody th,.history-table tbody td { padding:.25rem .35rem; vertical-align:middle; }
+/* A real DevExpress sparkline shares the row's height and theme colours in staff, shared and printed reports. */
+.history-table .history-trend-heading { width:var(--history-trend-width); text-align:center; vertical-align:bottom; }
+.history-trend-heading small { white-space:nowrap; }
+.history-trend { height:20px; width:100%; }
+.history-trend-note { margin-top:.5rem; }
+.report-note { margin:1.5rem 0; }.adjustment { font-size:.8rem; }
+/* Block detail pages share the report's range colours and references, with one stable portrait column layout. */
+.block-detail-link { color:var(--mg-link); text-underline-offset:3px; }
+.block-detail-sheet { scroll-margin-top:1rem; }
+.block-detail-sheet:focus-visible { outline:2px solid var(--mg-link); outline-offset:3px; }
+.detail-identity { display:flex; justify-content:space-between; align-items:flex-start; gap:1.5rem; margin:1rem 0; }
+.detail-eyebrow { color:var(--mg-muted); font-size:.75rem; }
+.detail-identity h3 { font-size:1.8rem; line-height:1.15; margin:.25rem 0; overflow-wrap:anywhere; }
+.detail-sample { flex-shrink:0; max-width:42%; text-align:right; color:var(--mg-muted); font-size:.75rem; }
+.detail-sample span { display:block; overflow-wrap:anywhere; }
+/* Six compact tiles keep reference measurements together; match the print pagination's six-item rows. */
+.detail-summary { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:.45rem; margin:1rem 0; }
+.detail-tile { border:1px solid var(--mg-border); border-radius:6px; padding:.5rem; background:var(--mg-surface-muted); font-size:.72rem; overflow-wrap:anywhere; }
+.detail-tile span { display:block; }
+.detail-tile-value { font-size:1.35rem; font-weight:400; color:var(--mg-text); min-height:1.5em; line-height:1.3; font-variant-numeric:tabular-nums; }
+.detail-recommendations { border:1px solid var(--mg-border); border-left:4px solid #639f43; padding:.7rem .9rem; margin:1rem 0; border-radius:4px; background:var(--mg-surface-muted); }
+.detail-recommendations h4 { margin:0 0 .4rem; font-size:.85rem; }
+.detail-recommendations h4 small { font-weight:400; margin-left:.25rem; }
+.detail-recommendations > div { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.3rem 1rem; }
+.detail-recommendations > div > span { display:flex; justify-content:space-between; gap:.5rem; overflow-wrap:anywhere; font-size:.85rem; }
+.detail-recommendations strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
+.detail-recommendations p { font-size:.8rem; margin:0; }
+.detail-key { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.5rem; margin-top:1rem; }
+.average-key { font-size:.72rem; color:var(--mg-text); white-space:nowrap; }
+.overflow-key { display:inline-flex; align-items:center; gap:.2rem; font-size:.72rem; color:var(--mg-text); white-space:nowrap; }
+.detail-results { margin:.6rem 0; font-variant-numeric:tabular-nums; }
+.detail-results th:first-child { width:27%; }
+.detail-results thead th:nth-child(2) { width:13%; }
+.detail-results thead th:nth-child(3) { width:28%; text-align:center; }
+.detail-results thead th:nth-child(4) { width:32%; text-align:center; }
+.detail-results th,.detail-results td { vertical-align:middle; padding:.25rem .4rem; }
+.detail-results tbody th { font-weight:500; }
+.detail-results .section-row th { font-weight:700; padding:.35rem .4rem; }
+/* Paint the section accent without a collapsed table border: the border otherwise shifts
+   every soil column by two pixels relative to the tissue table beneath it. */
+.detail-results .section-row th { position:relative; border-left-width:0!important; }
+.detail-results .section-row th::before { content:""; position:absolute; top:0; bottom:0; left:0; border-left:4px solid; border-left-color:inherit; pointer-events:none; }
+.detail-reading { white-space:nowrap; }
+.detail-reading.status-unrated { font-weight:400; }
+.detail-comparison { padding-left:.9rem!important; padding-right:.9rem!important; }
+.detail-comparison-content { display:flex; align-items:center; gap:.5rem; }
+.detail-track { position:relative; flex:1; min-width:0; height:7px; margin:10px 0 5px; background:var(--mg-border); border-radius:3px; }
+.detail-band { position:absolute; left:25%; width:50%; top:0; bottom:0; background:var(--mg-success-surface); border-left:1px solid var(--mg-success-text); border-right:1px solid var(--mg-success-text); }
+.detail-average { position:absolute; transform:translateX(-50%); top:-12px; font-size:10px; line-height:1; color:var(--mg-text); }
+.detail-marker { position:absolute; transform:translateX(-50%); top:-2px; height:11px; width:3px; background:currentColor; }
+.detail-marker.left,.detail-marker.right { background:transparent; width:18px; height:14px; top:-3.5px; }
+/* A paper-coloured halo separates the arrow from the track, including when backgrounds are printed. */
+.off-scale-arrow { display:block; width:18px; height:14px; overflow:visible; }
+.off-scale-arrow.left { transform:scaleX(-1); }
+.off-scale-arrow path { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.off-scale-arrow .arrow-halo { stroke:var(--mg-surface); stroke-width:5; }
+.detail-average .off-scale-arrow { width:13px; height:10px; }
+.detail-average-value { display:block; flex:0 0 auto; max-width:35%; text-align:right; font-size:.6rem; line-height:1.1; color:var(--mg-muted); margin-top:0; }
+.detail-scale-note { font-size:.7rem; color:var(--mg-muted); margin:.5rem 0; }
+.detail-notes { display:grid; gap:.6rem; margin-top:1rem; }
+.detail-notes > div { border-left:2px solid var(--mg-border); padding-left:.7rem; }
+.detail-notes h4 { font-size:.8rem; margin:0 0 .2rem; }
+.detail-notes p { font-size:.75rem; margin:0; }
+@media(max-width:600px) {
+    .detail-identity { gap:.6rem; }
+    .detail-identity h3 { font-size:1.3rem; }
+    .detail-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .detail-results { font-size:.65rem; }
+    .detail-results .reference-values { gap:.1rem; white-space:normal; flex-wrap:wrap; justify-content:center; }
+    .detail-results .reference-values > span { font-size:.6rem; }
+    .detail-results .reference-target { font-size:.65rem; min-width:1.3rem; min-height:1.3rem; }
+    .detail-reading { white-space:normal; }
+    .detail-recommendations > div { grid-template-columns:1fr; }
+}
+@media(max-width:600px) { .soil-sheet { padding:1rem .65rem; } table { font-size:.7rem; } th,td { padding:.4rem .2rem; } .report-facts { grid-template-columns:1fr; } }
+@media print {
+    .block-summary { padding:3mm 4mm; margin:3mm 0 5mm; border-radius:1mm; }
+    .block-summary-list { columns:3; column-gap:5mm; }
+    .block-summary-list li { padding:1mm 0; }
+    .soil-report { max-width:none; margin:0; color:#25343d; font:9pt/1.4 Arial,sans-serif; --mg-surface:#fff; --mg-surface-muted:#f2f5f1; --mg-text:#25343d; --mg-muted:#55636a; --mg-border:#c3ccc0; --mg-danger-surface:#f9dada; --mg-danger-text:#842029; --mg-warning-surface:#fff0c4; --mg-warning-text:#684d05; --mg-success-surface:#e3f0de; --mg-success-text:#245e2d; }
+    /* Preserve the stronger low-range red on paper even when printing from the dark theme. */
+    .soil-report { --mg-report-low-surface:#f2a0ad; --mg-report-low-text:#76172a; }
+    .soil-sheet { padding:0; margin:0; border:0; border-radius:0; box-shadow:none; break-before:page; }
+    .soil-sheet:first-child { break-before:auto; }
+    table { font-size:8pt; } th,td { padding:2mm 1.4mm; } .results th,.results td { padding:1.3mm; }
+    .results tbody th,.results tbody td { padding:.55mm 1mm; }
+    .results .section-row th { padding:.8mm 1mm; }
+    /* Printed tables use the full portrait content width and retain their compact inline reference. */
+    .results-scroll { overflow:visible; }
+    .results { min-width:0; }
+    /* Preserve the existing row count and font size while sharing the portrait width between six blocks. */
+    .block-amounts { min-width:0; }
+    .block-amounts th,.block-amounts td { padding-left:1mm; padding-right:1mm; }
+    /* Dynamic column groups budget up to 154 mm beside the 32 mm block label on portrait paper. */
+    .status-matrix { --matrix-block-width:32mm; --matrix-value-width:7.5mm; font-size:7pt; margin:2mm 0; }
+    .status-matrix th,.status-matrix td { padding:1mm .3mm; }
+    .status-matrix thead th { font-size:7pt; }
+    .status-matrix .matrix-measure-heading { padding:2mm .3mm; }
+    .status-matrix .matrix-sections th { font-size:6.5pt; padding:1mm .6mm; }
+    .status-matrix .matrix-sections th:first-child { font-size:7.5pt; }
+    .matrix-value { gap:.08mm; }
+    .matrix-symbol { font-size:3pt; }
+    .assessed-count { font-size:6.5pt; }
+    .status-matrix tfoot { display:table-row-group; }
+    .status-matrix tfoot th,.status-matrix tfoot td { padding:1.2mm .6mm; }
+    .overview-context { margin:2mm 0; font-size:8pt; }
+    .history-table { --history-label-width:52mm; --history-value-width:11mm; --history-trend-width:24mm; font-size:7.5pt; }
+    .history-table .history-date-heading { padding:2mm .5mm; }
+    .history-table tbody th,.history-table tbody td { padding:.7mm .5mm; }
+    .history-date-heading small { font-size:6.5pt; }
+    /* Keep the canvas height stable so a print transition cannot clip a chart while it resizes. */
+    .history-trend { height:20px; }
+    .history-trend-note { font-size:7pt; margin:2mm 0; }
+    .reference-values > span { font-size:7pt; }
+    .reference-target { min-width:5mm; min-height:5mm; padding:.25mm; font-size:7.5pt; }
+    /* Keep diagrams as printable HTML/CSS; explicit units make the page budgets predictable. */
+    .block-detail-link { color:inherit; text-decoration:none; }
+    .detail-identity { margin:2mm 0 4mm; }
+    .detail-identity h3 { font-size:18pt; }
+    .detail-eyebrow,.detail-sample { font-size:8pt; }
+    .detail-summary { grid-template-columns:repeat(6,minmax(0,1fr)); gap:1.5mm; margin:3mm 0; }
+    .detail-tile { border-radius:1mm; padding:1.5mm; font-size:7.5pt; }
+    .detail-tile-value { font-size:13pt; min-height:5mm; }
+    .detail-recommendations { padding:2mm 3mm; margin:3mm 0; }
+    .detail-recommendations h4 { font-size:9pt; }
+    .detail-recommendations > div { grid-template-columns:repeat(2,minmax(0,1fr)); gap:1mm 4mm; }
+    .detail-recommendations > div > span { font-size:8.5pt; }
+    .detail-key { margin-top:3mm; }
+    .detail-key .key,.average-key,.overflow-key { font-size:7pt; }
+    .detail-key .key span { padding:.5mm 1mm; }
+    .detail-results { font-size:8pt; margin:2mm 0; }
+    .detail-results th,.detail-results td { padding:.65mm 1mm; }
+    .detail-results .reference-target { min-width:4.5mm; min-height:4.5mm; padding:.2mm; }
+    .detail-results .section-row th { padding:.9mm 1mm; }
+    .detail-comparison { padding-left:3mm!important; padding-right:3mm!important; }
+    .detail-track { height:1.5mm; margin:2.2mm 0 1mm; }
+    .detail-average { top:-2.6mm; font-size:7pt; }
+    .detail-marker { top:-.5mm; height:2.5mm; width:.6mm; }
+    .detail-marker.left,.detail-marker.right { width:4.5mm; height:3.5mm; top:-1mm; }
+    .off-scale-arrow { width:4.5mm; height:3.5mm; }
+    .detail-average .off-scale-arrow { width:3.2mm; height:2.5mm; }
+    .detail-average-value { font-size:6pt; }
+    .detail-scale-note { font-size:7pt; margin:2mm 0; }
+    .detail-notes { gap:2mm; margin-top:3mm; }
+    .detail-notes > div { break-inside:avoid; padding-left:2mm; }
+    .detail-notes h4 { font-size:8pt; }
+    .detail-notes p { font-size:8pt; line-height:1.3; }
+    .result-target { font-size:6.5pt; }
+    thead { display:table-header-group; } tr,.report-note { break-inside:avoid; } h3,h4 { break-after:avoid; }
+    .action { break-inside:auto; } .review-notice { background:#fff0c4; color:#684d05; border-color:#c5a34a; }
+    * { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+}
+
+/* Soil and tissue share one table grid, including on portrait pages. */
+.tissue-sources { color:var(--mg-muted); font-size:.7rem; }
+.tissue-sources small { overflow-wrap:anywhere; }
+.tissue-sources td { background:var(--mg-surface-muted); }
+.result-reading:has(.result-target) { flex-wrap:wrap; }
+.overview-panel + .overview-panel { margin-top:1.5rem; padding-top:1rem; border-top:1px solid var(--mg-border); }
+.overview-panel h3 { margin:.8rem 0 .3rem; }
+.detail-tissue { margin-top:1rem; }
+.detail-tissue h4 { margin:0; }
+.detail-tissue p { margin:.25rem 0; }
+@media print {
+    .overview-panel + .overview-panel { margin-top:4mm; padding-top:2mm; }
+    .overview-panel h3 { margin:2mm 0 1mm; font-size:10pt; }
+    .tissue-sources { font-size:7pt; }
+    .detail-tissue h4 { break-after:avoid; }
+}

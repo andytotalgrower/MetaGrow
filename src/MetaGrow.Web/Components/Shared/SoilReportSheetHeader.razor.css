@@ -1,0 +1,7 @@
+.soil-sheet-header { display:flex; justify-content:space-between; gap:1rem; padding-bottom:1rem; margin-bottom:1.2rem; border-bottom:3px solid #639f43; }
+span { color:var(--mg-muted); text-transform:uppercase; letter-spacing:.12em; font-size:.7rem; font-weight:700; }
+h2 { margin:.35rem 0; font-size:1.65rem; line-height:1.2; }
+p, small { margin:0; font-size:.78rem; }
+.identity { text-align:right; min-width:130px; }
+img { display:block; margin-left:auto; margin-bottom:.5rem; max-width:150px; max-height:48px; object-fit:contain; background:white; border-radius:4px; padding:4px; }
+@media print { h2 { font-size:18pt; } span { color:#52616a; } .identity { min-width:36mm; } img { max-width:38mm; max-height:13mm; } p,small { font-size:8pt; } }

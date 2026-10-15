@@ -1,0 +1,26 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
+.setup-page { display: flex; flex-direction: column; gap: 1.25rem; width: 100%; min-width: 0; padding: .5rem 0 2rem; }
+.setup-header, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+h1 { margin: .4rem 0; } h2 { font-size: 1.3rem; margin: .5rem 0; }
+.setup-header p, .section-heading p { margin: .25rem 0; }
+.scope-picker { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1rem; }
+.scope-picker > div { min-width: 0; }
+.setup-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 23rem; gap: 1.5rem; align-items: start; }
+.setup-card, .setup-editor { min-width: 0; padding: 1.25rem; border: 1px solid var(--dxds-color-border-neutral-subdued-rest, #d8dee5); border-radius: .65rem; background: var(--dxds-color-surface-neutral-default-rest, #fff); }
+.setup-editor { position: sticky; top: 1rem; }
+label { display: block; font-weight: 600; margin-bottom: .4rem; }
+input { width: 100%; min-width: 0; box-sizing: border-box; padding: .55rem; border: 1px solid var(--mg-border); border-radius: .3rem; background: var(--dxds-color-surface-neutral-default-rest, #fff); color: inherit; }
+input:focus-visible { outline: 3px solid var(--mg-blue); outline-offset: 2px; }
+.actions, .editor-actions { display: flex; align-items: center; gap: .5rem; }
+.editor-actions { flex-wrap: wrap; margin-top: 1rem; }
+.table-scroll { overflow-x: auto; margin-top: 1rem; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .65rem .45rem; border-bottom: 1px solid var(--dxds-color-border-neutral-subdued-rest, #e0e6ec); vertical-align: middle; }
+td:first-child { overflow-wrap: anywhere; }
+th { font-size: .85rem; } td.actions { min-width: 4.5rem; }
+.selected { background: var(--dxds-color-surface-primary-subdued-rest, #e9f4fa); }
+.muted { color: var(--dxds-color-content-neutral-subdued-rest, #596b7a); font-size: .9rem; }
+.scope-note { border-left: 3px solid var(--mg-blue, #007cba); padding: .75rem; background: var(--dxds-color-surface-primary-subdued-rest, #e9f4fa); font-size: .9rem; }
+.empty-state { padding: 1rem 0; }
+@container page-content (max-width: 65rem) { .setup-workspace { grid-template-columns: 1fr; } .setup-editor { position: static; grid-row: 1; } }
+@container page-content (max-width: 40rem) { .scope-picker { grid-template-columns: 1fr; } }

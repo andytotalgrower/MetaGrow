@@ -1,0 +1,47 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
+/* Match the Samples workspace while allowing the target grid to retain usable editor widths. */
+/* Bound the workspace to the viewport rather than relying on the drawer's content height. */
+.template-page { width: 100%; height: calc(100dvh - 5.5rem); min-height: 28rem; padding: .75rem; color: var(--mg-text); display: flex; flex: 0 0 auto; flex-direction: column; overflow: hidden; position: relative; }
+.page-heading, .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.page-heading { margin-bottom: .5rem; flex-shrink: 0; }
+.eyebrow { color: var(--mg-success-text); font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+h1 { font-size: 1.85rem; margin: .3rem 0; }
+h2 { font-size: 1.25rem; margin: 0 0 .4rem; }
+h3 { font-size: 1.1rem; margin: 0 0 .4rem; }
+p, .muted { color: var(--mg-muted); margin-bottom: .75rem; }
+.template-card { background: var(--bs-body-bg, #fff); border: 1px solid var(--mg-border); border-radius: 14px; padding: 1rem; height: 100%; min-width: 0; box-sizing: border-box; }
+/* Each side scrolls independently; dragging the DevExpress divider adjusts the initial 34/66 split. */
+.template-workspace { flex: 1 1 0; min-height: 0; min-width: 0; margin-top: .75rem; overflow: auto; }
+.template-workspace ::deep .template-splitter { min-width: 720px; background: transparent; border: none; }
+.template-browser { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+.template-browser .section-heading, .filters { flex-shrink: 0; }
+.template-browser .section-heading { flex-wrap: wrap; gap: .4rem; }
+/* The two add actions remain aligned with their titles even in a narrow splitter pane. */
+.section-heading.heading-actions { flex-wrap: nowrap; align-items: center; gap: .5rem; margin-bottom: .4rem; }
+.heading-actions h2,.heading-actions h3 { margin: 0; }
+.heading-actions ::deep button { flex-shrink: 0; }
+.template-browser ::deep .template-list-grid { flex: 1 1 0; min-height: 180px; }
+/* Colour every cell so the active template remains clear after focus moves into the editor, in either theme. */
+.template-browser ::deep .template-list-grid .template-row-selected > td { background-color: var(--mg-info-surface); color: var(--mg-info-text); font-weight: 600; }
+/* The inset marker adds a persistent selection cue without changing column widths. */
+.template-browser ::deep .template-list-grid .template-row-selected > td:first-child { box-shadow: inset 4px 0 0 var(--mg-link); }
+.editor { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.editor-empty { display: flex; flex-direction: column; justify-content: center; text-align: center; }
+.filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; margin: .5rem 0; }
+label { display: block; font-weight: 600; font-size: .85rem; margin-bottom: .35rem; }
+.editor-actions, .loading { display: flex; align-items: center; gap: .6rem; }
+.loading { position: absolute; right: 1rem; top: .5rem; padding: .4rem; background: var(--mg-surface); color: var(--mg-success-text); z-index: 2; }
+.save-status { margin: .5rem 0 1rem; }
+.duplicate-warning { margin-left: .5rem; color: var(--mg-warning-text); cursor: help; }
+.target-heading { margin-top: 1.5rem; }
+.target-grid { overflow-x: auto; margin: .75rem 0; }
+.target-grid ::deep .dxbl-grid { min-width: 900px; }
+.boron-settings { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--mg-border); }
+/* Account for the navigation drawer when stacking the template form on narrow screens. */
+@container page-content (max-width: 700px) {
+    .template-page { padding: .75rem; }
+    .page-heading, .section-heading { align-items: flex-start; gap: .4rem; }
+    .page-heading p { display: none; }
+    .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+    .template-card { padding: .85rem; }
+}

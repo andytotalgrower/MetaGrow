@@ -1,5 +1,5 @@
 @page "/admin"
-@attribute [Authorize(Roles = ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager)]
+@attribute [Authorize]
 @using MetaGrow.Web.Components.Pages.Index
 <PageTitle>Administration | MetaGrow</PageTitle>
 <div class="admin-page">
@@ -9,18 +9,25 @@
         <p>Manage application settings and reference lists.</p>
         <hr class="mg-keyline" />
     </header>
+    <ReportBrandPreferenceEditor />
+    @* Personal preferences are available to every user; management remains restricted. *@
+    <AuthorizeView Roles="@(ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager)" Context="administrator">
     <section aria-labelledby="survey-setup-heading">
         <h2 id="survey-setup-heading">Survey configuration</h2>
         <div class="tiles">
             <IndexTile NavigateUrl="/admin/multicrop-setup" Title="Multi-crop survey setup" Description="Manage survey types, measurement groups, parameters and spray options." IconCssClass="icon-settings" />
+            <IndexTile NavigateUrl="/admin/soil-report-definitions" Title="Soil and tissue report definitions" Description="Maintain report sections, measures, labels, ordering and number formats." IconCssClass="icon-settings" />
         </div>
     </section>
-    <AuthorizeView Roles="@ApiModels.MetaGrow.MetaGrowRoles.Admin">
-        <section aria-labelledby="reference-heading">
-            <h2 id="reference-heading">Reference lists</h2>
-            <div class="tiles">
+    <section aria-labelledby="reference-heading">
+        <h2 id="reference-heading">Reference lists</h2>
+        <div class="tiles">
+            <IndexTile NavigateUrl="/admin/action-lists" Title="Actions list" Description="Maintain survey actions by survey type and category." IconCssClass="icon-settings" />
+            <AuthorizeView Roles="@ApiModels.MetaGrow.MetaGrowRoles.Admin">
                 <IndexTile NavigateUrl="/admin/crop-types" Title="Crop types" Description="Maintain crops and their parent groups." IconCssClass="icon-settings" />
-            </div>
-        </section>
+                <IndexTile NavigateUrl="/farms/report-groups" Title="Reporting groups" Description="Manage groups of farms for combined crop monitoring reports." IconCssClass="icon-settings" />
+            </AuthorizeView>
+        </div>
+    </section>
     </AuthorizeView>
 </div>

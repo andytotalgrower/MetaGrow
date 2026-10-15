@@ -1,13 +1,14 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
 .account-settings-page {
     --settings-blue: #007cba;
     --settings-blue-dark: #015682;
-    --settings-blue-soft: #e5f4fb;
+    --settings-blue-soft: var(--mg-info-surface);
     --settings-red: #d1242b;
-    --settings-ink: #26343d;
-    --settings-muted: #667681;
-    --settings-border: #dce3e7;
+    --settings-ink: var(--mg-text);
+    --settings-muted: var(--mg-muted);
+    --settings-border: var(--mg-border);
     --settings-surface: #fff;
-    --settings-surface-soft: #f6f9fa;
+    --settings-surface-soft: var(--mg-surface-muted);
     container-type: inline-size;
     display: flex;
     flex-direction: column;
@@ -196,13 +197,13 @@
 }
 
 .account-settings-content ::deep .settings-form { max-width: 40rem; }
-.account-settings-content ::deep .form-control { border-color: #cfd9de; border-radius: .5rem; }
+.account-settings-content ::deep .form-control { border-color: var(--mg-border); border-radius: .5rem; }
 .account-settings-content ::deep .form-control:focus { border-color: var(--settings-blue); box-shadow: 0 0 0 .2rem rgba(0, 124, 186, .13); }
 .account-settings-content ::deep .alert { border-radius: .6rem; line-height: 1.5; margin: .9rem 0 1.1rem; max-width: 46rem; padding: .85rem 1rem; }
 .account-settings-content ::deep .alert strong { color: inherit; }
-.account-settings-content ::deep .alert-success { background: #eff9f4; border-color: #cfe7dc; color: #14623c; }
-.account-settings-content ::deep .alert-warning { background: #fff9e8; border-color: #f2d98d; color: #6c5510; }
-.account-settings-content ::deep .alert-danger { background: #fff0f1; border-color: #edc9cb; color: #861b21; }
+.account-settings-content ::deep .alert-success { background: var(--mg-success-surface); border-color: var(--mg-success-border); color: var(--mg-success-text); }
+.account-settings-content ::deep .alert-warning { background: var(--mg-warning-surface); border-color: var(--mg-warning-border); color: var(--mg-warning-text); }
+.account-settings-content ::deep .alert-danger { background: var(--mg-danger-surface); border-color: var(--mg-danger-border); color: var(--mg-danger-text); }
 
 .account-settings-content ::deep .table {
     border: 1px solid var(--settings-border);
@@ -230,16 +231,16 @@
 
 .account-settings-content ::deep .email-status-pill {
     align-items: center;
-    background: #dff3e8;
+    background: var(--mg-success-surface);
     border-radius: 999px;
-    color: #14623c;
+    color: var(--mg-success-text);
     display: inline-flex;
     font-size: .72rem;
     font-weight: 700;
     padding: .32rem .58rem;
 }
 
-.account-settings-content ::deep .email-status-pill.is-pending { background: #fff3cd; color: #735500; }
+.account-settings-content ::deep .email-status-pill.is-pending { background: var(--mg-warning-surface); color: var(--mg-warning-text); }
 
 .account-settings-content ::deep .security-summary {
     align-items: center;
@@ -255,7 +256,7 @@
 
 .account-settings-content ::deep .security-summary > span {
     align-items: center;
-    background: #e9eef1;
+    background: var(--mg-surface-muted);
     border-radius: 50%;
     color: var(--settings-muted);
     display: inline-flex;
@@ -268,8 +269,8 @@
 .account-settings-content ::deep .security-summary > div { display: flex; flex-direction: column; }
 .account-settings-content ::deep .security-summary strong { color: var(--settings-ink); }
 .account-settings-content ::deep .security-summary small { color: var(--settings-muted); }
-.account-settings-content ::deep .security-summary.is-enabled { background: #eff9f4; border-color: #cfe7dc; }
-.account-settings-content ::deep .security-summary.is-enabled > span { background: #d9ece7; color: #14623c; }
+.account-settings-content ::deep .security-summary.is-enabled { background: var(--mg-success-surface); border-color: var(--mg-success-border); }
+.account-settings-content ::deep .security-summary.is-enabled > span { background: var(--mg-success-surface); color: var(--mg-success-text); }
 
 .account-settings-content ::deep .settings-action-grid {
     display: grid;
@@ -294,7 +295,7 @@
 .account-settings-content ::deep .settings-action-card h4 { margin: 0 0 .25rem; }
 .account-settings-content ::deep .settings-action-card p { color: var(--settings-muted); font-size: .86rem; margin: 0; }
 .account-settings-content ::deep .settings-action-card > div { flex: 1 1 auto; }
-.account-settings-content ::deep .settings-danger-card { background: #fffafa; border-color: #edc9cb; }
+.account-settings-content ::deep .settings-danger-card { background: var(--mg-danger-surface); border-color: var(--mg-danger-border); }
 
 .account-settings-content ::deep .settings-button-row {
     align-items: center;

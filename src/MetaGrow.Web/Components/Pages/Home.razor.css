@@ -1,3 +1,4 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
 .home-page {
     container-type: inline-size;
     display: flex;
@@ -8,7 +9,7 @@
 }
 
 .mg-hero { max-width: 48rem; }
-.mg-eyebrow { color: var(--mg-blue, #007cba); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+.mg-eyebrow { color: var(--mg-link); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .mg-hero h1 { font-size: 2rem; margin: 0.4rem 0; }
 .mg-hero p {
     color: #c9c9c9;
@@ -27,17 +28,15 @@ h2 { margin-bottom: 0.25rem; }
 }
 
 .release-note {
-    background: var(--mg-blue-0, #e5f4fb);
+    background: var(--mg-info-surface);
     border-left: 3px solid var(--mg-blue, #007cba);
-    color: var(--mg-dark, #323e48);
+    color: var(--mg-info-text);
     max-width: 46rem;
     padding: 0.875rem 1rem;
 }
 
-body.mantine-dark .release-note { background: rgb(from var(--mg-blue, #007cba) r g b / 14%); color: inherit; }
-
 .incomplete-surveys {
-    background: var(--dxds-color-surface-neutral-rest, #fff);
+    background: var(--dxds-color-surface-neutral-default-rest, #fff);
     border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
     border-radius: .65rem;
     box-shadow: 0 .35rem 1.2rem rgba(14, 40, 65, .055);
@@ -58,9 +57,9 @@ body.mantine-dark .release-note { background: rgb(from var(--mg-blue, #007cba) r
 .queue-heading h2 { margin: .15rem 0 0; }
 .queue-heading p { color: var(--dxds-color-content-neutral-subdued-rest); margin: .25rem 0 0; }
 .queue-count {
-    background: var(--mg-blue-0, #e5f4fb);
+    background: var(--mg-info-surface);
     border-radius: 999px;
-    color: var(--mg-blue-8, #015682);
+    color: var(--mg-link);
     flex: 0 0 auto;
     font-size: .75rem;
     font-weight: 700;
@@ -97,7 +96,7 @@ body.mantine-dark .release-note { background: rgb(from var(--mg-blue, #007cba) r
 
 .queue-state > div { display: flex; flex-direction: column; gap: .2rem; }
 .queue-state span { color: var(--dxds-color-content-neutral-subdued-rest); }
-.queue-clear { background: color-mix(in srgb, #dcfce7 55%, transparent); }
+.queue-clear { background: color-mix(in srgb, var(--mg-success-surface) 55%, transparent); }
 .queue-clear-icon {
     align-items: center;
     background: #198754;
@@ -123,10 +122,10 @@ body.mantine-dark .release-note { background: rgb(from var(--mg-blue, #007cba) r
     white-space: nowrap;
 }
 
-.area-badge.area-banana { background: #fef3c7; color: #854d0e; }
-.area-badge.area-multicrop { background: #d1fae5; color: #065f46; }
-.area-badge.area-other { background: #e2e8f0; color: #475569; }
-.status-badge { background: var(--mg-blue-0, #e5f4fb); color: var(--mg-blue-8, #015682); }
+.area-badge.area-banana { background: var(--mg-warning-surface); color: var(--mg-warning-text); }
+.area-badge.area-multicrop { background: var(--mg-success-surface); color: var(--mg-success-text); }
+.area-badge.area-other { background: var(--mg-surface-muted); color: var(--mg-muted); }
+.status-badge { background: var(--mg-info-surface); color: var(--mg-link); }
 .status-badge.status-in-progress { background: var(--mg-blue, #007cba); color: #fff; }
 .status-badge.status-awaiting-qa { background: #ffc107; color: #4d3a00; }
 .status-badge.status-completed { background: #198754; color: #fff; }

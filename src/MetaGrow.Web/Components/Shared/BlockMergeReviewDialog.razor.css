@@ -1,17 +1,18 @@
-.block-merge-review { display: grid; gap: 1rem; color: #183c39; }
+/* Shared semantic colours follow the saved light/dark scheme. */
+.block-merge-review { display: grid; gap: 1rem; color: var(--mg-text); }
 .merge-footer-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: .65rem; width: 100%; }
 .block-merge-review p, .block-merge-review h3, .block-merge-review h4 { margin: 0; }
 .merge-selection { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .merge-selection label { display: grid; gap: .4rem; font-weight: 600; }
-.merge-selection select { width: 100%; padding: .65rem; border: 1px solid #b6cdc5; border-radius: .4rem; background: white; }
+.merge-selection select { width: 100%; padding: .65rem; border: 1px solid var(--mg-border); border-radius: .4rem; background: var(--mg-surface); }
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: .5rem; border-bottom: 1px solid #dce5e1; text-align: left; overflow-wrap: anywhere; }
-.different { background: #fff8dc; }
-.merge-error { color: #8a2525; background: #fff0ee; border-radius: .5rem; padding: .8rem; }
-.merge-notice { display: block; background: #fff7df; padding: .8rem; border-radius: .5rem; }
+th, td { padding: .5rem; border-bottom: 1px solid var(--mg-border); text-align: left; overflow-wrap: anywhere; }
+.different { background: var(--mg-warning-surface); }
+.merge-error { color: var(--mg-danger-text); background: var(--mg-danger-surface); border-radius: .5rem; padding: .8rem; }
+.merge-notice { display: block; background: var(--mg-warning-surface); padding: .8rem; border-radius: .5rem; }
 .merge-notice p { margin: .5rem 0; }
-.merge-confirm { padding: .8rem; border: 1px solid #b6cdc5; border-radius: .5rem; }
+.merge-confirm { padding: .8rem; border: 1px solid var(--mg-border); border-radius: .5rem; }
 .merge-confirm input, .merge-notice input { margin-right: .4rem; }
-.history-note, small { color: #667875; font-size: .85rem; }
+.history-note, small { color: var(--mg-muted); font-size: .85rem; }
 summary { cursor: pointer; }
 @media (max-width: 600px) { .merge-selection { grid-template-columns: 1fr; } }

@@ -11,9 +11,10 @@
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject SoilReportApiClient _soilReports
 
 <PageTitle>Generate Sample surveys from CSV | MetaGrow</PageTitle>
-<NavigationLock ConfirmExternalNavigation="@(PendingFiles.Count > 0 || _uploading || _committing)" OnBeforeInternalNavigation="ConfirmNavigationAsync" />
+<NavigationLock ConfirmExternalNavigation="@(PendingFiles.Count > 0 || _pendingSoilSettings.Count > 0 || Busy)" OnBeforeInternalNavigation="ConfirmNavigationAsync" />
 
 <DxToastProvider Name="SampleSurveyGenerationMessages" MaxToastCount="3"
                  AnimationType="ToastAnimationType.Slide"
@@ -85,6 +86,10 @@
                 </div>
             </div>
 
+            @if (_resultTypeId == SampleLaboratoryResultType.Soil)
+            {
+                <SoilTemplatePicker @bind-TemplateId="_soilTemplateId" Disabled="@(Busy || _files.Count > 0)" />
+            }
             <div id="generation-csv-drop-zone" class="csv-drop-zone @(_uploading ? "busy" : string.Empty) @(!CanUpload ? "disabled" : string.Empty)">
                 <span class="drop-icon" aria-hidden="true">⇧</span>
                 <strong>Drag and drop returned @ResultTypeName CSV files here</strong>
@@ -112,7 +117,7 @@
             <section class="queue-card" aria-labelledby="file-queue-heading">
                 <div class="section-heading split">
                     <div><h2 id="file-queue-heading">Results to import</h2><p>Review each file. Files are never merged; successful imports remain saved if another file fails.</p></div>
-                    <DxButton Text="Clear queue" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!Busy && !_files.Any(file => file.OutcomeUnknown))" Click="ResetAll" />
+                    <DxButton Text="Clear queue" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!Busy && _pendingSoilSettings.Count == 0 && !_files.Any(file => file.OutcomeUnknown))" Click="ResetAll" />
                 </div>
                 <div class="file-queue" aria-live="polite">
                     @foreach (var file in _files)
@@ -145,6 +150,11 @@
                             @if (file.Error is not null) { <p class="queue-error" role="alert">@file.Error</p> }
                             @if (file.Receipt is not null)
                             {
+                                @if (_pendingSoilSettings.Contains(file.Id))
+                                {
+                                    <DxButton Text="Retry soil template setup" Enabled="@(!Busy)" Click="@(() => SaveGeneratedSoilSettings(file))" />
+                                    @if (_savingSoilSettings) { <DxWaitIndicator Visible="true" /> }
+                                }
                                 <div class="queue-receipts">
                                     @foreach (var survey in file.Receipt.Surveys)
                                     {
@@ -401,23 +411,28 @@
     private int _propertyId;
     private int _agronomistId;
     private int _resultTypeId = SampleLaboratoryResultType.Soil;
+    private int _soilTemplateId;
+    // Import receipts remain authoritative when a separate MetaGrow settings save needs retrying.
+    private readonly HashSet<Guid> _pendingSoilSettings = [];
+    private bool _savingSoilSettings;
     private bool _loading = true;
     private bool _uploading;
     private bool _committing;
     private bool _confirmVisible;
     private string? _loadError;
-    private bool Busy => _loading || _uploading || _committing;
+    private bool Busy => _loading || _uploading || _committing || _savingSoilSettings;
     private string ResultTypeName => SampleLaboratoryResultType.Name(_resultTypeId);
     private IReadOnlyList<BlockChoice> AvailableBlockChoices => _blockChoices;
     private bool HasDuplicateBlocks => _active.HasDuplicateBlocks;
     private bool CanUpload => _propertyId > 0 && _agronomistId > 0 && _files.Count < SampleGenerationBatchRules.MaxFiles &&
-        SampleLaboratoryResultType.IsImportSupported(_resultTypeId) && !Busy;
+        SampleLaboratoryResultType.IsImportSupported(_resultTypeId) && !Busy && (_resultTypeId != SampleLaboratoryResultType.Soil || _soilTemplateId > 0);
     private List<SampleGenerationQueueEntry> PendingFiles => _files.Where(file => file.Receipt is null).ToList();
     private int PendingSurveyCount => PendingFiles.Sum(file => file.Preview?.SurveyGroups.Count ?? 0);
     private int PendingResultCount => PendingFiles.Sum(file => file.Preview?.Rows.Count ?? 0);
     private List<string> BatchErrors => _files.Any(file => file.Preview is not null)
         ? SampleGenerationBatchRules.Validate(_files.Where(file => file.Preview is not null).Select(file => file.Preview!).ToList()) : [];
-    private bool CanCommit => !Busy && PendingFiles.Count > 0 && PendingFiles.All(file => file.IsReady) && BatchErrors.Count == 0;
+    private bool CanCommit => !Busy && PendingFiles.Count > 0 && PendingFiles.All(file => file.IsReady) && BatchErrors.Count == 0
+        && (_resultTypeId != SampleLaboratoryResultType.Soil || _soilTemplateId > 0);
     private string CommitReadinessText => _active.IsReady ? "This file is ready"
         : HasDuplicateBlocks ? "Select a different block for each result row"
         : "Complete this file's checks, block selections and test types";
@@ -609,6 +624,7 @@
                 try
                 {
                     file.Receipt = await TgsApi.CommitSampleChemistrySurveyGeneration(file.ToRequest(), token);
+                    if (file.Receipt is not null) await SaveGeneratedSoilSettings(file);
                     if (file.Receipt is null)
                     {
                         file.Error = TgsApi.ErrorMessage ?? "The import did not return a receipt.";
@@ -652,9 +668,11 @@
                 file.Receipt.PropertyName = file.Preview!.PropertyName;
                 file.Receipt.AgronomistName = file.Preview.AgronomistName;
                 file.Receipt.LabName = file.Preview.LabName;
+                await SaveGeneratedSoilSettings(file);
             }
             file.OutcomeUnknown = false;
-            file.Error = status.Imported ? null : $"{file.Error ?? "No completed import was found."} Review this file, then select Create Survey & Import Data to retry.";
+            if (!_pendingSoilSettings.Contains(file.Id))
+                file.Error = status.Imported ? null : $"{file.Error ?? "No completed import was found."} Review this file, then select Create Survey & Import Data to retry.";
         }
         catch { file.Error = "The import outcome could not be checked. Check import status before retrying."; }
     }
@@ -668,9 +686,35 @@
         finally { _uploading = false; }
     }
 
+    private async Task SaveGeneratedSoilSettings(SampleGenerationQueueEntry file)
+    {
+        if (_resultTypeId != SampleLaboratoryResultType.Soil || file.Receipt is null || _savingSoilSettings) return;
+        // The retry only saves MetaGrow settings; the successful laboratory import must never be repeated.
+        _savingSoilSettings = true;
+        _pendingSoilSettings.Add(file.Id);
+        try
+        {
+            foreach (var survey in file.Receipt.Surveys)
+            {
+                var settings = await _soilReports.Settings(survey.SurveyId);
+                if (settings.TemplateId > 0) continue; // A retry must preserve choices already saved, including later user edits.
+                settings.TemplateId = _soilTemplateId; settings.RegionId = 1;
+                await _soilReports.SaveSettings(settings);
+            }
+            _pendingSoilSettings.Remove(file.Id); file.Error = null;
+        }
+        catch (Exception exception)
+        {
+            file.Error = "Import completed. Soil report template setup needs retrying: " + exception.Message;
+            ShowToast("Soil template setup", file.Error, ToastRenderStyle.Warning);
+        }
+        finally { _savingSoilSettings = false; }
+    }
+
     private void ClearQueue()
     {
         _files.Clear();
+        _pendingSoilSettings.Clear();
         _active = new();
         _batchErrors = [];
         _confirmVisible = false;
@@ -678,7 +722,7 @@
 
     private void ResetAll()
     {
-        if (Busy || _files.Any(file => file.OutcomeUnknown)) return;
+        if (Busy || _pendingSoilSettings.Count > 0 || _files.Any(file => file.OutcomeUnknown)) return;
         ClearQueue();
     }
 
@@ -688,14 +732,16 @@
     });
     private async Task ConfirmNavigationAsync(LocationChangingContext context)
     {
-        if (_uploading || _committing || _files.Any(file => file.OutcomeUnknown))
+        if (_uploading || _committing || _savingSoilSettings || _files.Any(file => file.OutcomeUnknown))
         {
             context.PreventNavigation();
             ShowToast("Import queue", "Wait for the current operation, or check the unknown import status, before leaving this page.", ToastRenderStyle.Warning);
             return;
         }
-        if (PendingFiles.Count > 0 && !await JS.InvokeAsync<bool>("confirm",
-            "Leave this page and discard the remaining file previews? Completed imports will stay saved."))
+        var leaveMessage = _pendingSoilSettings.Count > 0
+            ? "Some imported surveys still need their soil report template saved. Leave this page? Completed imports will stay saved; select the template on each survey before opening its report. Remaining file previews will be discarded."
+            : "Leave this page and discard the remaining file previews? Completed imports will stay saved.";
+        if ((PendingFiles.Count > 0 || _pendingSoilSettings.Count > 0) && !await JS.InvokeAsync<bool>("confirm", leaveMessage))
             context.PreventNavigation();
     }
 

@@ -1,0 +1,12 @@
+@using MetaGrow.Shared.Models
+@using MetaGrow.Web.Services
+<header class="soil-sheet-header">
+    @* Keep the report descriptor in the same title case as the page heading, including accessible text. *@
+    <div><span>@(Document.Options.IncludeSoil && !Document.ShowsTissue ? "Soil Nutrient Balance" : Document.MaterialLabel)</span><h2>@Title</h2><p>@Document.PropertyName · @Document.SurveyDate.ToString("dd MMM yyyy")</p></div>
+    <div class="identity"><img src="@Brand.LogoPath" alt="@Brand.AltText" /><small>Survey @Document.SurveyId · Revision @Document.Revision<br />@Document.Status</small></div>
+</header>
+@code {
+    [Parameter, EditorRequired] public SoilReportDocument Document { get; set; } = default!;
+    [Parameter, EditorRequired] public ReportBrandOption Brand { get; set; } = default!;
+    [Parameter] public string Title { get; set; } = "";
+}

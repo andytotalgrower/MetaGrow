@@ -1,5 +1,5 @@
 @using ApiModels.MetaGrow
-@inject NavigationManager Navigation
+@inject NavigationManager _navigation
 
 @if (ShowGuide)
 {
@@ -11,7 +11,7 @@
                 <strong>Yes — find my survey <span aria-hidden="true">→</span></strong>
                 <span>Find your existing survey, then select Import beside it.</span>
             </button>
-            <AuthorizeView Roles="@GenerationRoles">
+            <AuthorizeView Roles="@_generationRoles">
                 <Authorized>
                     <button type="button" class="guide-choice" @onclick="@(() => ChooseAsync("generate"))">
                         <strong>No — create from CSV <span aria-hidden="true">→</span></strong>
@@ -31,18 +31,30 @@
 
 <nav class="sample-nav" aria-label="Sample survey area">
     <a class="@ActiveClass("surveys")" aria-current="@CurrentPage("surveys")" href="/surveys/samples">Surveys</a>
-    <a class="@ActiveClass("results")" aria-current="@CurrentPage("results")" href="/surveys/samples/lab-results">Lab results</a>
-    <a class="@ActiveClass("legacy")" aria-current="@CurrentPage("legacy")" href="/surveys/samples/lab-results/historical">Legacy data</a>
-    <AuthorizeView Roles="@GenerationRoles">
+    <AuthorizeView Roles="@_generationRoles">
         <a class="@ActiveClass("generate")" aria-current="@CurrentPage("generate")" href="/surveys/samples/generate-from-csv">Generate from CSV</a>
+    </AuthorizeView>
+    @* Keep the lab pages and links available while hiding these tabs from the normal Samples workflow. *@
+    @if (ShowLabDataTabs)
+    {
+        <a class="@ActiveClass("results")" aria-current="@CurrentPage("results")" href="/surveys/samples/lab-results">Lab results</a>
+        <a class="@ActiveClass("legacy")" aria-current="@CurrentPage("legacy")" href="/surveys/samples/lab-results/historical">Legacy data</a>
+    }
+    @* Template configuration is restricted independently of the broader Samples workspace. *@
+    <AuthorizeView Roles="@(MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager)">
+        <a class="@ActiveClass("templates")" aria-current="@CurrentPage("templates")" href="/surveys/samples/test-templates">Test templates</a>
+    </AuthorizeView>
+    <AuthorizeView Roles="@_generationRoles">
+        <a class="@ActiveClass("soil-reports")" aria-current="@CurrentPage("soil-reports")" href="/surveys/samples/soil-reports">Soil and tissue reports</a>
     </AuthorizeView>
 </nav>
 
 @code {
-    private const string GenerationRoles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist;
+    private const string _generationRoles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist;
 
     [Parameter] public string ActivePage { get; set; } = "surveys";
     [Parameter] public bool ShowGuide { get; set; } = true;
+    [Parameter] public bool ShowLabDataTabs { get; set; }
     [Parameter] public EventCallback GuideRequested { get; set; }
 
     private string? ActiveClass(string page) => ActivePage == page ? "active" : null;
@@ -57,6 +69,6 @@
         }
 
         var path = destination == "surveys" ? "/surveys/samples" : "/surveys/samples/generate-from-csv";
-        Navigation.NavigateTo($"{path}?importGuide={destination}");
+        _navigation.NavigateTo($"{path}?importGuide={destination}");
     }
 }

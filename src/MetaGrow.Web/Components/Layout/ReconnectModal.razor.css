@@ -1,3 +1,4 @@
+/* Shared semantic colours follow the saved light/dark scheme. */
 .components-reconnect-first-attempt-visible,
 .components-reconnect-repeated-attempt-visible,
 .components-reconnect-failed-visible,
@@ -21,7 +22,7 @@
 
 
 #components-reconnect-modal {
-    background-color: white;
+    background-color: var(--mg-surface);
     width: 20rem;
     margin: 20vh auto;
     padding: 2rem;

@@ -59,6 +59,9 @@ builder.Services.AddMetagenAccountSettings(options =>
     options.Features = MetaGrowAccountSettingsBackend.SupportedFeatureSet;
 });
 builder.Services.AddScoped<ReportShareApiClient>();
+builder.Services.AddScoped<IReportPreferenceApiClient, ReportPreferenceApiClient>();
+builder.Services.AddScoped<SoilReportDefinitionApiClient>();
+builder.Services.AddScoped<SoilReportApiClient>();
 builder.Services.AddScoped<PropertyDeletionApiClient>();
 builder.Services.AddScoped<PropertyMergeApiClient>();
 builder.Services.AddScoped<BlockMergeApiClient>();
