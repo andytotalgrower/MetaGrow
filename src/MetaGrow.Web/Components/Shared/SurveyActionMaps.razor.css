@@ -1,0 +1,45 @@
+/* The section lives inside either report and keeps the same paper-style presentation. */
+.action-map-section { margin: 1.5rem 0; }
+.map-section-heading, .map-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.map-section-heading h2, .map-panel-heading h3 { margin: 0; }
+.map-panel { background: white; border: 1px solid #dce3df; border-radius: 12px; padding: 1.25rem; margin-top: 1rem; }
+.map-context { color: #53645c; margin-top: .5rem; }
+.map-legend { display: grid; gap: .5rem; margin-top: 1rem; }
+.map-legend-item { display: flex; gap: .75rem; align-items: center; break-inside: avoid; }
+.map-swatch { flex: 0 0 2rem; height: 2rem; display: grid; place-items: center; border: 1px solid #777; border-radius: 4px; font-weight: 700; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.map-neutral { background: #d4d4d4; color: #333; }
+.map-key-heading { margin: .8rem 0 .4rem; }
+.map-key-instruction { display: flex; flex-direction: column; gap: .2rem; }
+.map-notice { background: #fff7e5; padding: 1rem; margin-top: 1rem; border-radius: 8px; }
+.map-notice ul { margin-bottom: 0; }
+.map-notice summary { cursor: pointer; font-weight: 600; }
+/* Recommendation-first lists match the order workers use to plan visits to blocks. */
+.work-summary { background: white; border: 1px solid #dce3df; border-radius: 12px; padding: 1.25rem; margin: 1.5rem 0; }
+.work-summary h2 { margin: 0; }
+.work-summary-list { margin: 0; }
+.work-summary-item { padding: .8rem 0; border-bottom: 1px solid #dce3df; break-inside: avoid; }
+.work-summary-item:last-child { border-bottom: none; }
+.work-category { display: block; font-weight: normal; color: #53645c; font-size: .85rem; margin-bottom: .25rem; }
+.work-summary-item dd { margin: .4rem 0 0; }
+.map-name-editor { padding: 1rem; background: #f4f7f5; margin-top: 1rem; border-radius: 8px; }
+.map-name-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr) auto; align-items: center; gap: 1rem; padding: .75rem 0; border-bottom: 1px solid #dce3df; }
+.map-name-row p { margin: .3rem 0; }
+@media (max-width: 650px) { .map-name-row { grid-template-columns: 1fr; } }
+@media print {
+    .no-print, .maps-print-hidden, .map-print-hidden { display: none !important; }
+    /* Put the break on the section; its screen margin must not create a preceding blank page. */
+    .action-map-section { margin: 0; break-before: page; }
+    /* Keep a normal-sized map and its complete key on one landscape survey page. */
+    .map-panel { border: 0; border-radius: 0; padding: 0; margin: 0; break-before: page; break-inside: avoid; }
+    .map-panel:first-of-type { break-before: auto; }
+    .map-panel-heading, .map-context { break-after: avoid; }
+    .map-panel-heading h3 { font-size: 12pt; }
+    .map-context { font-size: 9pt; margin: 1mm 0 2mm; }
+    .map-key-heading { font-size: 10pt; margin: 2mm 0 1mm; break-after: avoid; }
+    .map-legend { font-size: 8pt; margin-top: 1mm; gap: 1.5mm 4mm; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .map-legend-item { align-items: flex-start; gap: 2mm; }
+    .map-swatch { flex-basis: 5mm; height: 5mm; }
+    .map-notice { display: none !important; }
+    .work-summary { border: 0; padding: 0; margin: 0 0 5mm; }
+    .work-summary h2, .work-summary > p { break-after: avoid; }
+}

@@ -365,6 +365,14 @@
 
         @RenderTables(true)
 
+        @* Maps are optional and precede photos in both the online and printable report. *@
+        @if (_report.ActionMaps.Recommendations.Count > 0 || _report.ActionMaps.Warnings.Count > 0)
+        {
+            <SurveyActionMaps Data="_report.ActionMaps" SurveyType="banana" SurveyId="_report.SurveyId"
+                              PropertyName="@_report.PropertyName" SurveyDate="_report.SurveyDate" ReadOnly="Shared"
+                              Saved="OnActionMapsSaved" />
+        }
+
         @if (_report.Photos.Count > 0)
         {
             <section class="report-panel photo-section" aria-labelledby="banana-photos-title">
@@ -551,6 +559,12 @@
     private void BackToSurveys() => Navigation.NavigateTo("/surveys/banana");
     private void EditSurvey() => Navigation.NavigateTo($"/surveys/banana/{SurveyId}/edit");
     private void ManagePhotos() => Navigation.NavigateTo($"/surveys/banana/{SurveyId}/photos");
+
+    // Keep the embedded model current so later renders and printouts retain saved map names.
+    private void OnActionMapsSaved(SurveyActionMapDto maps)
+    {
+        if (_report is not null) _report.ActionMaps = maps;
+    }
 
     private async Task PrintReportAsync()
     {

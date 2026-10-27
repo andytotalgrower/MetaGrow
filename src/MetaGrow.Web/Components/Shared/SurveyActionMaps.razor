@@ -1,0 +1,182 @@
+@using ApiModels
+@using MetaGrow.Web.Models
+@using MetaGrow.Web.Services
+@using Metagen.Shared.Services
+@inject ITgsApiService _api
+@inject IServiceProvider _services
+@inject IToastNotificationService _toasts
+
+@if (_data.Recommendations.Count > 0 || _view.Warnings.Count > 0)
+{
+    @* Work planning remains useful even when maps are hidden or boundaries have never been uploaded. *@
+    @if (_view.WorkSummary.Count > 0)
+    {
+        <section class="work-summary" aria-label="Work summary">
+            <h2>Work summary</h2>
+            <p>Recommendations and the blocks where the work is required.</p>
+            <dl class="work-summary-list">
+                @foreach (var work in _view.WorkSummary)
+                {
+                    <div class="work-summary-item">
+                        <dt><span class="work-category">@work.Category</span><strong>@work.Recommendation</strong></dt>
+                        <dd><strong>Blocks:</strong> @(work.Blocks.Count > 0 ? string.Join(", ", work.Blocks) : "Block names unavailable")</dd>
+                    </div>
+                }
+            </dl>
+        </section>
+    }
+    <section class="action-map-section @(!_showMaps || !_view.Maps.Any(map => map.Visible) ? "maps-print-hidden" : "")" aria-label="Survey action maps">
+        <DxToastProvider Name="ActionMapMessages" />
+        <div class="map-section-heading no-print">
+            <h2>Action maps</h2>
+            @if (_view.Maps.Count > 0)
+            {
+                <DxCheckBox CheckType="CheckType.Switch" @bind-Checked="_showMaps">Show action maps</DxCheckBox>
+            }
+            @if (!ReadOnly && _data.Recommendations.Count > 0)
+            {
+                <DxButton Text="@(_editing ? "Close map names" : "Edit map names")" Click="@(() => _editing = !_editing)" Enabled="@(!_saving)" />
+            }
+        </div>
+
+        @if (_view.Warnings.Count > 0 || _view.MissingKmlBlocks.Count > 0)
+        {
+            @* Native disclosure stays collapsed initially and is completely excluded from printing. *@
+            <details class="map-notice no-print">
+                <summary>@(_view.MissingKmlBlocks.Count > 0 ? $"Blocks without usable KML ({_view.MissingKmlBlocks.Count})" : "Map availability details")</summary>
+                @if (_view.MissingKmlBlocks.Count > 0)
+                {
+                    <ul class="missing-kml-blocks">@foreach (var block in _view.MissingKmlBlocks) { <li>@block</li> }</ul>
+                }
+                @if (_view.Warnings.Count > 0)
+                {
+                    <ul>@foreach (var warning in _view.Warnings) { <li>@warning</li> }</ul>
+                }
+            </details>
+        }
+
+        @if (_editing && !ReadOnly)
+        {
+            <div class="map-name-editor no-print">
+                <p>A map name groups recommendations within a category. Saving applies the name to every item in that recommendation, as in TgsWebsite. Leave it blank for the category map.</p>
+                @foreach (var action in _data.Recommendations)
+                {
+                    <div class="map-name-row" @key="action.SurveyActionId">
+                        <div><strong>@action.ActionGroupName</strong><p>@action.Summary</p></div>
+                        <div>
+                            <label for="@($"map-name-{action.SurveyActionId}")">Map name</label>
+                            <DxTextBox Id="@($"map-name-{action.SurveyActionId}")" @bind-Text="_names[action.SurveyActionId]" MaxLength="50" Enabled="@(!_saving)" />
+                        </div>
+                        <DxButton Text="Save" Click="@(() => SaveName(action))" Enabled="@(!_saving && _names[action.SurveyActionId] != action.MapName)" />
+                    </div>
+                }
+                @if (_saving)
+                {
+                    <div role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Saving map name…</div>
+                }
+            </div>
+        }
+
+        @if (_showMaps)
+        {
+            @foreach (var map in _view.Maps)
+            {
+                <article class="map-panel @(!map.Visible ? "map-print-hidden" : "")" @key="map.Key">
+                    <div class="map-panel-heading">
+                        <h3>@map.Title</h3>
+                        <div class="no-print"><DxCheckBox CheckType="CheckType.Switch" @bind-Checked="map.Visible">Show map</DxCheckBox></div>
+                    </div>
+                    @if (map.Visible)
+                    {
+                        <p class="map-context">@PropertyName · @SurveyDate.ToString("dd MMMM yyyy") · Survey @SurveyId</p>
+                        <SurveyActionMapCanvas Map="map" />
+                        <h4 class="map-key-heading">Recommendation summary / map key</h4>
+                        <div class="map-legend" aria-label="Map legend">
+                            @foreach (var item in map.Legend)
+                            {
+                                <div class="map-legend-item">
+                                    <span class="map-swatch" style="background:@item.Colour;color:@item.TextColour">@item.Number</span>
+                                    <div class="map-key-instruction"><strong>@item.Summary</strong><span><strong>Blocks:</strong> @(item.Blocks.Count > 0 ? string.Join(", ", item.Blocks) : "Block names unavailable")</span></div>
+                                </div>
+                            }
+                            <div class="map-legend-item"><span class="map-swatch map-neutral">–</span><span>No matching recommendation</span></div>
+                        </div>
+                    }
+                </article>
+            }
+        }
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public SurveyActionMapDto Data { get; set; } = new();
+    [Parameter, EditorRequired] public string SurveyType { get; set; } = "";
+    [Parameter] public int SurveyId { get; set; }
+    [Parameter] public string? PropertyName { get; set; }
+    [Parameter] public DateTime SurveyDate { get; set; }
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public EventCallback<SurveyActionMapDto> Saved { get; set; }
+    private SurveyActionMapDto _data = new();
+    private SurveyActionMapDto? _lastData;
+    private SurveyActionMapView _view = new();
+    private Dictionary<int, string> _names = [];
+    private bool _showMaps = true;
+    private bool _editing;
+    private bool _saving;
+    private string _scope = "";
+
+    protected override void OnParametersSet()
+    {
+        var scope = $"{SurveyType}:{SurveyId}";
+        if (ReferenceEquals(_lastData, Data) && _scope == scope) return;
+        if (_scope != scope)
+        {
+            // Each survey starts with every available map visible, including shared reports.
+            _showMaps = true;
+            _editing = false;
+            _view = new();
+            _scope = scope;
+        }
+        _lastData = Data;
+        SetData(Data);
+    }
+
+    private void SetData(SurveyActionMapDto data)
+    {
+        var visibility = _view.Maps.ToDictionary(map => map.Key, map => map.Visible);
+        _data = data;
+        _view = SurveyActionMapLayout.Build(data, SurveyType);
+        foreach (var map in _view.Maps) map.Visible = visibility.GetValueOrDefault(map.Key, true);
+        _names = data.Recommendations.ToDictionary(action => action.SurveyActionId, action => action.MapName);
+    }
+
+    private async Task SaveName(SurveyMapRecommendationDto action)
+    {
+        if (_saving || ReadOnly) return;
+        _saving = true;
+        try
+        {
+            // Resolve identity only for edits; public shares render embedded maps without credentials.
+            var authentication = _services.GetRequiredService<AuthenticationStateProvider>();
+            var tokens = _services.GetRequiredService<ApiTokenService>();
+            var token = await tokens.GetAccessTokenAsync((await authentication.GetAuthenticationStateAsync()).User)
+                ?? throw new InvalidOperationException("Your session has expired. Please sign in again.");
+            var result = await _api.SaveSurveyMapName(SurveyType, SurveyId, action.SurveyActionId,
+                new SurveyMapNameUpdateRequest { MapName = _names[action.SurveyActionId].Trim(), OriginalItemNames = action.OriginalItemNames }, token)
+                ?? throw new InvalidOperationException(_api.ErrorMessage ?? "The map name could not be saved.");
+            // Preserve other unsaved names while refreshing saved grouping and legend data.
+            var drafts = _data.Recommendations.Where(item => item.SurveyActionId != action.SurveyActionId && _names[item.SurveyActionId] != item.MapName)
+                .ToDictionary(item => item.SurveyActionId, item => _names[item.SurveyActionId]);
+            SetData(result);
+            _lastData = result;
+            foreach (var draft in drafts) if (_names.ContainsKey(draft.Key)) _names[draft.Key] = draft.Value;
+            await Saved.InvokeAsync(result);
+            _toasts.ShowToast(new ToastOptions { ProviderName = "ActionMapMessages", Text = "Map name saved.", RenderStyle = ToastRenderStyle.Success });
+        }
+        catch (Exception exception)
+        {
+            _toasts.ShowToast(new ToastOptions { ProviderName = "ActionMapMessages", Text = exception.Message, RenderStyle = ToastRenderStyle.Danger });
+        }
+        finally { _saving = false; }
+    }
+}

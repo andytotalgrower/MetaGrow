@@ -320,6 +320,14 @@
 
         @RenderCharts(true)
 
+        @* Maps are optional and precede photos in both the online and printable report. *@
+        @if (_report.ActionMaps.Recommendations.Count > 0 || _report.ActionMaps.Warnings.Count > 0)
+        {
+            <SurveyActionMaps Data="_report.ActionMaps" SurveyType="multicrop" SurveyId="_report.SurveyId"
+                              PropertyName="@_report.PropertyName" SurveyDate="_report.SurveyDate" ReadOnly="Shared"
+                              Saved="OnActionMapsSaved" />
+        }
+
         @if (_report.Photos.Count > 0)
         {
             <section class="report-panel photo-section" aria-labelledby="photos-title">
@@ -627,6 +635,18 @@
     private void ManageBlockGroups() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/block-groups");
     private void ManagePhotos() => Navigation.NavigateTo($"/surveys/multicrop/{SurveyId}/photos");
     private void DownloadPbd() => Navigation.NavigateTo($"/downloads/surveys/multicrop/{SurveyId}/pbd", forceLoad: true);
+    // Refresh the map labels in the recommendation table as well as the map section.
+    private void OnActionMapsSaved(SurveyActionMapDto maps)
+    {
+        if (_report is null) return;
+        _report.ActionMaps = maps;
+        foreach (var action in _report.Actions)
+        {
+            var recommendation = maps.Recommendations.FirstOrDefault(item => item.SurveyActionId == action.SurveyActionId);
+            if (recommendation is not null) action.MapName = recommendation.MapName;
+        }
+    }
+
     private async Task PrintReportAsync()
     {
         if (_report is null) return;

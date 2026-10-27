@@ -1,0 +1,55 @@
+@using MetaGrow.Web.Models
+@using MetaGrow.Web.Services
+
+<div class="map-canvas-tools no-print">
+    <DxButton Text="Zoom in" Click="@(() => _zoom = Math.Min(400, _zoom + 50))" Enabled="@(_zoom < 400)" />
+    <DxButton Text="Zoom out" Click="@(() => _zoom = Math.Max(100, _zoom - 50))" Enabled="@(_zoom > 100)" />
+    <DxButton Text="Fit to farm" Click="@(() => _zoom = 100)" />
+    <span>Select a block for its recommendation. Scroll to move around a zoomed map.</span>
+</div>
+<div class="map-canvas-scroll">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 650" class="map-canvas" style="width:@(_zoom)%" role="img" aria-label="@Map.Title">
+        <title>@Map.Title</title>
+        <rect width="1000" height="650" fill="white" />
+        @foreach (var shape in Map.Shapes)
+        {
+            <g tabindex="0" role="button" aria-label="@($"{shape.BlockName}: {Details(shape)}")"
+               @onclick="@(() => _selected = shape)" @onkeydown="@(args => SelectKey(args, shape))">
+                <title>@shape.BlockName: @Details(shape)</title>
+                <path d="@shape.Path" fill="@shape.Colour" stroke="#555" stroke-width="1.5" fill-rule="evenodd" />
+                <text x="@SurveyActionMapLayout.Number(shape.LabelX)" y="@SurveyActionMapLayout.Number(shape.LabelY)"
+                      text-anchor="middle" fill="@shape.TextColour" font-size="12" font-weight="600" pointer-events="none">@shape.BlockName</text>
+                @if (shape.LegendNumber.HasValue)
+                {
+                    <g><text x="@SurveyActionMapLayout.Number(shape.LabelX)" y="@SurveyActionMapLayout.Number(shape.LabelY + 15)"
+                          text-anchor="middle" fill="@shape.TextColour" font-size="11" pointer-events="none">@shape.LegendNumber</text></g>
+                }
+            </g>
+        }
+        <text x="965" y="28" text-anchor="middle" fill="#333" font-size="15">↑ N</text>
+    </svg>
+</div>
+@if (_selected is not null)
+{
+    <div class="map-block-details no-print" role="status"><strong>@_selected.BlockName</strong><span>@Details(_selected)</span></div>
+}
+
+@code {
+    [Parameter, EditorRequired] public SurveyActionMapPanel Map { get; set; } = new();
+    private SurveyActionMapPanel? _lastMap;
+    private SurveyActionMapShape? _selected;
+    private int _zoom = 100;
+
+    protected override void OnParametersSet()
+    {
+        // A renamed recommendation must not leave stale block details open.
+        if (!ReferenceEquals(_lastMap, Map)) _selected = null;
+        _lastMap = Map;
+    }
+
+    private static string Details(SurveyActionMapShape shape) => string.IsNullOrEmpty(shape.Summary) ? "No matching recommendation" : shape.Summary;
+    private void SelectKey(KeyboardEventArgs args, SurveyActionMapShape shape)
+    {
+        if (args.Key is "Enter" or " ") _selected = shape;
+    }
+}

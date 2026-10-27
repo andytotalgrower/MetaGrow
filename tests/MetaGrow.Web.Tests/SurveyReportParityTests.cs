@@ -21,6 +21,178 @@ namespace MetaGrow.Web.Tests;
 public class SurveyReportParityTests
 {
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Report_map_uses_actual_property_and_displays_dated_recommendation_with_blocks(bool banana)
+    {
+        var data = SurveyActionMapTests.Fixture(banana ? "banana" : "multicrop");
+        data.Recommendations[0].Summary = "23/10 Setbest recommended";
+        var html = banana
+            ? await Render<BananaReport>(new BananaOnlineReportDto { PropertyName = "River Farm", ActionMaps = data })
+            : await Render<MultiCropReport>(new MultiCropOnlineReportDto { PropertyName = "River Farm", ActionMaps = data });
+        Assert.DoesNotContain("_report.PropertyName", html);
+        Assert.Matches("class=\"map-context\"[^>]*>River Farm", html);
+        var key = Regex.Match(html, "class=\"map-legend\".*?</article>", RegexOptions.Singleline).Value;
+        Assert.Contains("23/10 Setbest recommended", key);
+        Assert.Contains("Block A, Block B", key);
+        Assert.Contains("Work summary", html);
+    }
+
+    [Fact]
+    public async Task Missing_kml_is_a_collapsed_online_disclosure_and_work_lists_affected_blocks()
+    {
+        var data = SurveyActionMapTests.Fixture();
+        data.Blocks[1].Kml.Clear();
+        var html = await RenderParameters<SurveyActionMaps>(new()
+        {
+            ["Data"] = data, ["SurveyType"] = "banana", ["ReadOnly"] = true
+        });
+        var disclosure = Regex.Match(html, "<details[^>]*class=\"map-notice no-print\"[^>]*>.*?</details>", RegexOptions.Singleline);
+        Assert.True(disclosure.Success);
+        Assert.DoesNotContain(" open", disclosure.Value.Split('>')[0]);
+        Assert.Contains("Blocks without usable KML (1)", disclosure.Value);
+        Assert.Matches("<li[^>]*>Block B</li>", disclosure.Value);
+        Assert.Contains("Work summary", html);
+        Assert.Matches("Blocks:</strong>\\s*Block A, Block B", html);
+        Assert.Contains("map-canvas", html);
+    }
+
+    [Fact]
+    public async Task Action_map_switches_remove_map_content_and_preserve_default_visibility()
+    {
+        var collection = new ServiceCollection().AddLogging();
+        collection.AddDevExpressBlazor();
+        collection.AddSingleton(DispatchProxy.Create<ITgsApiService, EmptyProxy>());
+        collection.AddSingleton<IJSRuntime, NoJavaScript>();
+        collection.AddSingleton<IComponentActivator, MapComponentActivator>();
+        collection.AddSingleton<NavigationManager, TestNavigation>();
+        await using var services = collection.BuildServiceProvider();
+        var activator = (MapComponentActivator)services.GetRequiredService<IComponentActivator>();
+        await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
+        await renderer.Dispatcher.InvokeAsync(async () =>
+        {
+            var output = await renderer.RenderComponentAsync<SurveyActionMaps>(ParameterView.FromDictionary(new Dictionary<string, object?>
+            {
+                ["Data"] = SurveyActionMapTests.Fixture(), ["SurveyType"] = "banana", ["ReadOnly"] = true
+            }));
+            Assert.Contains("map-canvas", output.ToHtmlString());
+            var component = activator.Map!;
+            var view = (MetaGrow.Web.Models.SurveyActionMapView)typeof(SurveyActionMaps).GetField("_view", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(component)!;
+            var render = typeof(ComponentBase).GetMethod("StateHasChanged", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            // These are the values bound to the two DevExpress switch controls.
+            view.Maps[0].Visible = false;
+            render.Invoke(component, null);
+            Assert.DoesNotContain("map-canvas", output.ToHtmlString());
+            Assert.Contains("maps-print-hidden", output.ToHtmlString());
+            Assert.Contains("Work summary", output.ToHtmlString());
+            view.Maps[0].Visible = true;
+            typeof(SurveyActionMaps).GetField("_showMaps", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component, false);
+            render.Invoke(component, null);
+            Assert.DoesNotContain("map-canvas", output.ToHtmlString());
+            typeof(SurveyActionMaps).GetField("_showMaps", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component, true);
+            render.Invoke(component, null);
+            Assert.Contains("map-canvas", output.ToHtmlString());
+        });
+    }
+
+    private sealed class MapComponentActivator(IServiceProvider _services) : IComponentActivator
+    {
+        public SurveyActionMaps? Map { get; private set; }
+        public IComponent CreateInstance(Type type)
+        {
+            var component = (IComponent)ActivatorUtilities.CreateInstance(_services, type);
+            if (component is SurveyActionMaps map) Map = map;
+            return component;
+        }
+    }
+
+    [ChromeTheory]
+    [InlineData("banana")]
+    [InlineData("multicrop")]
+    public async Task Action_map_and_legend_print_together_without_clipping(string type)
+    {
+        var data = SurveyActionMapTests.Fixture(type);
+        // Exercise a realistic multi-entry key on the same landscape paper as the main reports.
+        for (var index = 3; index <= 8; index++)
+        {
+            data.Blocks.Add(new() { BlockId = index, BlockType = type, BlockName = $"Block {index}", Kml = [.. data.Blocks[0].Kml] });
+            data.Recommendations.Add(new() { SurveyActionId = index + 20, ActionGroupId = 1, ActionGroupName = "Nutrition",
+                Summary = $"23/10 Recommendation {index}", BlockIds = [index] });
+        }
+        // Even a long, expanded diagnostic disclosure must consume no printed space.
+        data.Blocks[1].Kml.Clear();
+        data.Warnings = Enumerable.Range(1, 200).Select(number => $"Unavailable boundary {number}").ToList();
+        var html = await RenderParameters<SurveyActionMaps>(new()
+        {
+            ["Data"] = data, ["SurveyType"] = type,
+            ["SurveyId"] = 17, ["PropertyName"] = "Map verification farm", ["SurveyDate"] = new DateTime(2026, 10, 21), ["ReadOnly"] = true
+        });
+        html = html.Replace("<details ", "<details open ");
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "src", "MetaGrow.Web"))) root = root.Parent;
+        Assert.NotNull(root);
+        var cssPath = Path.Combine(root.FullName, "src", "MetaGrow.Web", "obj", "Debug", "net10.0", "scopedcss", "bundle", "MetaGrow.Web.styles.css");
+        var css = await File.ReadAllTextAsync(cssPath);
+        // Keep the generated fixture available in test output for visual inspection of the actual Razor SVG.
+        var directory = Path.Combine(AppContext.BaseDirectory, "action-map-preview", type);
+        Directory.CreateDirectory(directory);
+        var input = Path.Combine(directory, "report.html");
+        var pdfPath = Path.Combine(directory, "report.pdf");
+        var imagePath = Path.Combine(directory, "report.png");
+        await File.WriteAllTextAsync(input, "<!doctype html><html><head><meta charset='utf-8'><style>" + css +
+            "body{font:14px Arial;margin:0;background:white}.no-print{display:none!important}@page{size:A4 landscape;margin:11mm 12mm 19mm}</style></head><body>" + html + "</body></html>");
+        var start = new ProcessStartInfo(ChromeTheoryAttribute.ChromePath)
+        {
+            UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden
+        };
+        foreach (var argument in new[] { "--headless", "--disable-gpu", "--no-pdf-header-footer", "--no-first-run",
+            "--disable-extensions", "--disable-background-networking", "--user-data-dir=" + Path.Combine(directory, "profile"),
+            "--window-size=1200,1000", "--screenshot=" + imagePath, "--print-to-pdf=" + pdfPath, new Uri(input).AbsoluteUri })
+            start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)!;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        try { await process.WaitForExitAsync(timeout.Token); }
+        catch (OperationCanceledException) { process.Kill(entireProcessTree: true); throw; }
+        Assert.Equal(0, process.ExitCode);
+        var pdf = Encoding.Latin1.GetString(await File.ReadAllBytesAsync(pdfPath));
+        // One work-summary page followed by one complete map/legend page; diagnostics add none.
+        Assert.Equal(2, Regex.Matches(pdf, @"/Type\s*/Page\b").Count);
+        Assert.True(new FileInfo(imagePath).Length > 1000);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Action_maps_render_before_photos_and_shared_reports_have_no_name_editor(bool banana)
+    {
+        // Embedded maps need neither extra API calls nor a logged-in identity in a public report.
+        var maps = SurveyActionMapTests.Fixture(banana ? "banana" : "multicrop");
+        var html = banana
+            ? await Render<BananaReport>(new BananaOnlineReportDto { ActionMaps = maps, Photos = [new() { Url = "https://example.test/photo.jpg" }] })
+            : await Render<MultiCropReport>(new MultiCropOnlineReportDto { ActionMaps = maps, Photos = [new() { Url = "https://example.test/photo.jpg" }] });
+        Assert.True(html.IndexOf("action-map-section", StringComparison.Ordinal) < html.IndexOf(banana ? "id=\"banana-photos-title\"" : "id=\"photos-title\"", StringComparison.Ordinal));
+        Assert.Contains("map-canvas", html);
+        Assert.Contains("Apply fertiliser", html);
+        Assert.DoesNotContain("Edit map names", html);
+        Assert.DoesNotContain("maps-print-hidden", html);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Reports_without_actions_omit_maps_and_reports_without_kml_still_render(bool banana)
+    {
+        var empty = banana ? await Render<BananaReport>(new BananaOnlineReportDto()) : await Render<MultiCropReport>(new MultiCropOnlineReportDto());
+        Assert.DoesNotContain("action-map-section", empty);
+        var maps = SurveyActionMapTests.Fixture(banana ? "banana" : "multicrop");
+        maps.Blocks.Clear();
+        var html = banana ? await Render<BananaReport>(new BananaOnlineReportDto { ActionMaps = maps })
+            : await Render<MultiCropReport>(new MultiCropOnlineReportDto { ActionMaps = maps });
+        Assert.Contains("No block boundaries", html);
+        Assert.DoesNotContain("map-canvas", html);
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]
