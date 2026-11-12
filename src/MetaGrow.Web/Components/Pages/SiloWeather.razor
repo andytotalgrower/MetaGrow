@@ -1,0 +1,430 @@
+@page "/weather"
+@using ApiModels
+@using MetaGrow.Web.Services
+@using System.Text.Json
+@attribute [Authorize]
+@implements IDisposable
+@inject SiloWeatherApiClient WeatherApi
+@inject IToastNotificationService ToastService
+@inject ILogger<SiloWeather> Logger
+@inject IJSRuntime JS
+
+<PageTitle>SILO Weather | MetaGrow</PageTitle>
+
+<DxToastProvider Name="@_toastProvider" HorizontalAlignment="HorizontalAlignment.Right"
+                 StickToViewport="true" />
+
+<div class="weather-page">
+    <h1>SILO Weather</h1>
+    <section class="weather-filters" aria-label="Weather filters">
+        <div class="weather-field">
+            <label for="silo-region">Region</label>
+            <DxComboBox Id="silo-region" Data="@_regions" @bind-Value="_recipientId"
+                        @bind-Value:after="RegionChangedAsync"
+                        TextFieldName="@nameof(SiloCollectionPointDto.PropertyName)"
+                        ValueFieldName="@nameof(SiloCollectionPointDto.RecipientId)"
+                        SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
+                        AllowUserInput="false" NullText="Search for a region"
+                        Enabled="@(_regions.Count > 0)" />
+        </div>
+        <div class="weather-field">
+            <label for="silo-from">From</label>
+            <DxDateEdit Id="silo-from" @bind-Date="_from" @bind-Date:after="DateRangeChangedAsync" DisplayFormat="dd/MM/yyyy"
+                        Enabled="@(_history.Count > 0)" />
+        </div>
+        <div class="weather-field">
+            <label for="silo-to">To</label>
+            <DxDateEdit Id="silo-to" @bind-Date="_to" @bind-Date:after="DateRangeChangedAsync" DisplayFormat="dd/MM/yyyy"
+                        Enabled="@(_history.Count > 0)" />
+        </div>
+        <div class="weather-actions">
+            <DxButton Text="Reset dates" Click="ResetDatesAsync" Enabled="@(_history.Count > 0)"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+        </div>
+    </section>
+
+    @if (_history.Count > 0 && !HasValidDateRange)
+    {
+        <p role="status">Enter a From date on or before the To date, with a To date no later than @_historyThrough.ToString("dd MMM yyyy").</p>
+    }
+
+    @if (_loading)
+    {
+        <div class="weather-status" role="status">
+            <DxWaitIndicator Visible="true" />
+            <span>@(_recipientId.HasValue ? "Loading weather history…" : "Loading regions…")</span>
+        </div>
+    }
+    else if (_loadError is not null)
+    {
+        <div class="weather-status" role="alert">
+            <span>@_loadError</span>
+            <DxButton Text="Retry" Click="RetryAsync" RenderStyle="ButtonRenderStyle.Secondary" />
+        </div>
+    }
+    else if (_regions.Count == 0)
+    {
+        <p>No SILO regions are configured.</p>
+    }
+    else if (!_recipientId.HasValue)
+    {
+        <p>Select a region to view its weather history.</p>
+    }
+    else if (_history.Count == 0)
+    {
+        <p>No weather observations are saved for this region.</p>
+    }
+    else
+    {
+        <p>Latest saved observation for this region: @_history[^1].Date.ToString("dd MMM yyyy")</p>
+        @if (_results.Count == 0)
+        {
+            <p>No weather observations were found in the selected date range.</p>
+        }
+        else
+        {
+            <div class="weather-chart">
+                <DxChart Data="@_results" Width="100%" Height="420px">
+                    <DxChartArgumentAxis>
+                        <DxChartAxisLabel Format="ChartElementFormat.ShortDate" />
+                    </DxChartArgumentAxis>
+                    @* Each unit has its own scale. The grid and chart share the same filtered days. *@
+                    <DxChartValueAxis Name="Water">
+                        <DxChartAxisTitle Text="Rainfall and ET (mm)" />
+                    </DxChartValueAxis>
+                    <DxChartValueAxis Name="Temperature" Alignment="ChartAxisAlignment.Far">
+                        <DxChartAxisTitle Text="Temperature (°C)" />
+                    </DxChartValueAxis>
+                    <DxChartValueAxis Name="Radiation" Alignment="ChartAxisAlignment.Far">
+                        <DxChartAxisTitle Text="Radiation (MJ/m²)" />
+                    </DxChartValueAxis>
+                    <DxChartLineSeries Name="Rainfall (mm)" Axis="Water" ArgumentField="@((WeatherDay day) => day.Date)"
+                                       ValueField="@((WeatherDay day) => day.Rainfall)" BreakOnEmptyPoints="true">
+                        <DxChartSeriesPoint Visible="@(_results.Count == 1)" />
+                    </DxChartLineSeries>
+                    <DxChartLineSeries Name="Min temp (°C)" Axis="Temperature" ArgumentField="@((WeatherDay day) => day.Date)"
+                                       ValueField="@((WeatherDay day) => day.MinimumTemperature)" BreakOnEmptyPoints="true">
+                        <DxChartSeriesPoint Visible="@(_results.Count == 1)" />
+                    </DxChartLineSeries>
+                    <DxChartLineSeries Name="Max temp (°C)" Axis="Temperature" ArgumentField="@((WeatherDay day) => day.Date)"
+                                       ValueField="@((WeatherDay day) => day.MaximumTemperature)" BreakOnEmptyPoints="true">
+                        <DxChartSeriesPoint Visible="@(_results.Count == 1)" />
+                    </DxChartLineSeries>
+                    <DxChartLineSeries Name="Solar radiation (MJ/m²)" Axis="Radiation" ArgumentField="@((WeatherDay day) => day.Date)"
+                                       ValueField="@((WeatherDay day) => day.Radiation)" BreakOnEmptyPoints="true">
+                        <DxChartSeriesPoint Visible="@(_results.Count == 1)" />
+                    </DxChartLineSeries>
+                    <DxChartLineSeries Name="Tall-crop ET (mm)" Axis="Water" ArgumentField="@((WeatherDay day) => day.Date)"
+                                       ValueField="@((WeatherDay day) => day.TallCropEvapotranspiration)" BreakOnEmptyPoints="true">
+                        <DxChartSeriesPoint Visible="@(_results.Count == 1)" />
+                    </DxChartLineSeries>
+                    <DxChartLegend Position="RelativePosition.Outside" VerticalAlignment="VerticalEdge.Bottom"
+                                   Orientation="Orientation.Horizontal" AllowToggleSeries="true" />
+                    <DxChartTooltip Enabled="true">
+                        @* The series name identifies the measurement and its unit. *@
+                        <div class="weather-tooltip">
+                            <strong>@context.Point.SeriesName</strong>
+                            <span>@(context.Point.Argument is DateTime date ? date.ToString("dd MMM yyyy") : context.Point.Argument)</span>
+                            <span>@context.Point.Value</span>
+                        </div>
+                    </DxChartTooltip>
+                </DxChart>
+            </div>
+            @if (_exporting)
+            {
+                <div class="weather-status" role="status">
+                    <DxWaitIndicator Visible="true" />
+                    <span>Exporting weather data…</span>
+                </div>
+            }
+            <div class="weather-grid">
+                <DxGrid @ref="_grid" @key="_results" Data="@_results" KeyFieldName="@nameof(WeatherDay.Date)"
+                        PageSize="25" HighlightRowOnHover="true">
+                    <ToolbarTemplate>
+                        <DxToolbar>
+                            <Items>
+                                <DxToolbarItem Text="Export to Excel" Click="ExportWeatherAsync" Enabled="@(!_exporting)" />
+                            </Items>
+                        </DxToolbar>
+                    </ToolbarTemplate>
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(WeatherDay.Date)" Caption="Date" DisplayFormat="dd/MM/yyyy"
+                                          SortIndex="0" SortOrder="GridColumnSortOrder.Descending" />
+                        <DxGridDataColumn FieldName="@nameof(WeatherDay.Rainfall)" Caption="Rainfall (mm)" />
+                        <DxGridDataColumn FieldName="@nameof(WeatherDay.MinimumTemperature)" Caption="Min temp (°C)" />
+                        <DxGridDataColumn FieldName="@nameof(WeatherDay.MaximumTemperature)" Caption="Max temp (°C)" />
+                        <DxGridDataColumn FieldName="@nameof(WeatherDay.Radiation)" Caption="Solar radiation (MJ/m²)" />
+                        <DxGridDataColumn FieldName="@nameof(WeatherDay.TallCropEvapotranspiration)" Caption="Tall-crop ET (mm)" />
+                    </Columns>
+                    <DetailRowTemplate Context="detail">
+                        <DxGrid Data="@(((WeatherDay)detail.DataItem).Readings)" ShowAllRows="true" PagerVisible="false">
+                            <Columns>
+                                <DxGridDataColumn FieldName="@nameof(SiloDailyWeatherDto.VariableCode)" Caption="Variable" />
+                                <DxGridDataColumn FieldName="@nameof(SiloDailyWeatherDto.WeatherValue)" Caption="Value" />
+                                <DxGridDataColumn FieldName="@nameof(SiloDailyWeatherDto.SourceCode)" Caption="Source code" />
+                                <DxGridDataColumn FieldName="@nameof(SiloDailyWeatherDto.RetrievedUtc)" Caption="Retrieved (UTC)"
+                                                  DisplayFormat="dd/MM/yyyy HH:mm:ss" />
+                            </Columns>
+                        </DxGrid>
+                    </DetailRowTemplate>
+                </DxGrid>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private const string _toastProvider = "SiloWeatherMessages";
+    private const string _filterCookieName = "metagrow.weather.filters";
+    private static readonly TimeZoneInfo _brisbaneTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Australia/Brisbane");
+    private static readonly TimeSpan _filterDelay = TimeSpan.FromMilliseconds(500);
+    private IReadOnlyList<SiloCollectionPointDto> _regions = [];
+    private IReadOnlyList<WeatherDay> _history = [];
+    private IReadOnlyList<WeatherDay> _results = [];
+    private CancellationTokenSource? _activeLoad;
+    private CancellationTokenSource? _pendingDateChange;
+    private IGrid? _grid;
+    private WeatherFilterPreferences? _savedFilters;
+    private int? _recipientId;
+    private DateTime? _from;
+    private DateTime? _to;
+    private DateTime _historyThrough;
+    private bool _loading = true;
+    private bool _exporting;
+    private string? _loadError;
+
+    private bool HasValidDateRange =>
+        _from is { } from && _to is { } to && from.Date <= to.Date && to.Date <= _historyThrough;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        // Read browser preferences on the first interactive render.
+        await LoadRegionsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadRegionsAsync()
+    {
+        await RunLoadAsync(async cancellationToken =>
+        {
+            var regions = await WeatherApi.GetRegionsAsync(cancellationToken);
+            var savedFilters = await ReadFiltersAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            _regions = regions.OrderBy(region => region.PropertyName, StringComparer.CurrentCultureIgnoreCase).ToArray();
+
+            // A configured recipient may have been removed since the cookie was written.
+            if (savedFilters?.RecipientId is { } recipientId && _regions.Any(region => region.RecipientId == recipientId))
+            {
+                _savedFilters = savedFilters;
+                _recipientId = recipientId;
+            }
+        }, "SILO regions could not be loaded.");
+
+        if (_recipientId.HasValue)
+            await LoadHistoryAsync();
+    }
+
+    private Task RegionChangedAsync() =>
+        Task.WhenAll(SaveFiltersAsync(new WeatherFilterPreferences(_recipientId)), LoadHistoryAsync());
+
+    private Task LoadHistoryAsync()
+    {
+        // Clear the previous region while the new history and its date bounds are loading.
+        _pendingDateChange?.Cancel();
+        _history = _results = [];
+        _from = _to = null;
+        return RunLoadAsync(async cancellationToken =>
+        {
+            if (_recipientId is not { } recipientId)
+                return;
+
+            await Task.Delay(_filterDelay, cancellationToken);
+            var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, _brisbaneTimeZone).Date;
+            var readings = await WeatherApi.GetHistoryAsync(recipientId, DateOnly.FromDateTime(today), cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            _history = readings.GroupBy(reading => reading.ObservationDate)
+                .OrderBy(day => day.Key)
+                .Select(day => new WeatherDay(day.Key.ToDateTime(TimeOnly.MinValue), day.ToArray()))
+                .ToArray();
+            _historyThrough = today;
+            SetDefaultDates();
+            if (_history.Count > 0 && _savedFilters is { From: { } from, To: { } to }
+                && from.Date <= to.Date && to.Date <= today)
+            {
+                _from = from.Date;
+                _to = to.Date;
+                FilterHistory(from, to);
+            }
+        }, "Weather history could not be loaded.");
+    }
+
+    private async Task RunLoadAsync(Func<CancellationToken, Task> load, string error)
+    {
+        // A replaced request owns its cancellation source but can no longer update the page.
+        _activeLoad?.Cancel();
+        using var request = new CancellationTokenSource();
+        _activeLoad = request;
+        _loading = true;
+        _loadError = null;
+        try
+        {
+            await load(request.Token);
+        }
+        catch (OperationCanceledException) when (request.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception) when (!request.IsCancellationRequested)
+        {
+            Logger.LogWarning(exception, "{WeatherLoadError}", error);
+            _loadError = error;
+            ShowToast(error, ToastRenderStyle.Danger);
+        }
+        catch (Exception) when (request.IsCancellationRequested)
+        {
+            // A transport failure can arrive after the request was replaced or the page closed.
+        }
+        finally
+        {
+            if (_activeLoad == request)
+            {
+                _activeLoad = null;
+                _loading = false;
+            }
+        }
+    }
+
+    private Task RetryAsync() => _recipientId.HasValue ? LoadHistoryAsync() : LoadRegionsAsync();
+
+    private async Task DateRangeChangedAsync()
+    {
+        // Cancel even when the new range is invalid so an older edit cannot replace the results.
+        _pendingDateChange?.Cancel();
+        if (!HasValidDateRange || _from is not { } from || _to is not { } to)
+            return;
+
+        using var dateChange = new CancellationTokenSource();
+        _pendingDateChange = dateChange;
+        try
+        {
+            await Task.Delay(_filterDelay, dateChange.Token);
+            // Both dates are inclusive, and the loaded history can be filtered without a new API request.
+            if (!dateChange.IsCancellationRequested)
+            {
+                FilterHistory(from, to);
+                await SaveFiltersAsync(new WeatherFilterPreferences(_recipientId, from.Date, to.Date));
+            }
+        }
+        catch (OperationCanceledException) when (dateChange.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            if (_pendingDateChange == dateChange)
+                _pendingDateChange = null;
+        }
+    }
+
+    private void FilterHistory(DateTime from, DateTime to) =>
+        _results = _history.Where(day => day.Date >= from.Date && day.Date <= to.Date).ToArray();
+
+    private Task ResetDatesAsync()
+    {
+        _pendingDateChange?.Cancel();
+        SetDefaultDates();
+        // Store the region without fixed dates so the default advances with new weather history.
+        return SaveFiltersAsync(new WeatherFilterPreferences(_recipientId));
+    }
+
+    private void SetDefaultDates()
+    {
+        _from = _history.Count > 0 ? _history[0].Date : null;
+        _to = _historyThrough;
+        _results = _history;
+    }
+
+    private async Task<WeatherFilterPreferences?> ReadFiltersAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("metaGrowFilterPreferences.get", cancellationToken, _filterCookieName);
+            return string.IsNullOrWhiteSpace(json) ? null : JsonSerializer.Deserialize<WeatherFilterPreferences>(json);
+        }
+        catch (Exception exception) when (exception is JsonException or JSException or JSDisconnectedException)
+        {
+            // Weather remains usable with a malformed cookie or unavailable browser storage.
+            return null;
+        }
+    }
+
+    private async Task SaveFiltersAsync(WeatherFilterPreferences filters)
+    {
+        _savedFilters = filters;
+        try
+        {
+            await JS.InvokeVoidAsync("metaGrowFilterPreferences.set", _filterCookieName, JsonSerializer.Serialize(filters));
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException)
+        {
+            // Keep the current selection even if the browser cannot persist it.
+        }
+    }
+
+    private async Task ExportWeatherAsync()
+    {
+        if (_grid is null || _results.Count == 0 || _exporting)
+            return;
+
+        _exporting = true;
+        try
+        {
+            // Export the filtered grid across all pages using the standard DevExpress Excel export.
+            await _grid.ExportToXlsxAsync($"silo-weather_{_recipientId}", new GridXlExportOptions
+            {
+                ExportSelectedRowsOnly = false,
+                SheetName = "Weather"
+            });
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "SILO Weather export failed.");
+            ShowToast("Weather data could not be exported.", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
+    private void ShowToast(string message, ToastRenderStyle style) => ToastService.ShowToast(new ToastOptions
+    {
+        ProviderName = _toastProvider,
+        Text = message,
+        RenderStyle = style
+    });
+
+    public void Dispose()
+    {
+        _pendingDateChange?.Cancel();
+        _activeLoad?.Cancel();
+        _activeLoad = null;
+    }
+
+    private sealed record WeatherFilterPreferences(int? RecipientId, DateTime? From = null, DateTime? To = null);
+
+    private sealed record WeatherDay(DateTime Date, IReadOnlyList<SiloDailyWeatherDto> Readings)
+    {
+        public decimal? Rainfall { get; } = FindValue(Readings, "daily_rain");
+        public decimal? MinimumTemperature { get; } = FindValue(Readings, "min_temp");
+        public decimal? MaximumTemperature { get; } = FindValue(Readings, "max_temp");
+        public decimal? Radiation { get; } = FindValue(Readings, "radiation");
+        public decimal? TallCropEvapotranspiration { get; } = FindValue(Readings, "et_tall_crop");
+
+        // Missing variables stay blank. A stored zero is a valid measurement.
+        private static decimal? FindValue(IReadOnlyList<SiloDailyWeatherDto> readings, string code) =>
+            readings.FirstOrDefault(reading => reading.VariableCode == code)?.WeatherValue;
+    }
+}

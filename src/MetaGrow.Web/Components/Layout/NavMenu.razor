@@ -15,6 +15,10 @@
             <AuthorizeView Roles="@(ApiModels.MetaGrow.MetaGrowRoles.Admin + "," + ApiModels.MetaGrow.MetaGrowRoles.AgricultureManager)">
                 <DxMenuItem NavigateUrl="/farms" Text="Farms/Growers" CssClass="@MenuItemCssClass("/farms")" IconCssClass="icon icon-editable-grid" />
             </AuthorizeView>
+            <AuthorizeView>
+                @* Weather is available to every signed-in user. *@
+                <DxMenuItem NavigateUrl="/weather" Text="Weather" CssClass="@MenuItemCssClass("/weather")" IconCssClass="icon icon-weather" />
+            </AuthorizeView>
             <AuthorizeView Roles="@ApiModels.MetaGrow.MetaGrowRoles.Agronomist">
                 <DxMenuItem NavigateUrl="/farms/duplicates" Text="Duplicate farms" CssClass="@MenuItemCssClass("/farms/duplicates")" IconCssClass="icon icon-editable-grid" />
             </AuthorizeView>

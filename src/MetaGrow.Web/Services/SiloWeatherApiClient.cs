@@ -1,0 +1,32 @@
+using ApiModels;
+using Metagen.Shared.Services;
+
+namespace MetaGrow.Web.Services;
+
+public sealed class SiloWeatherApiClient(
+    HttpClient httpClient,
+    ISettingsService settings,
+    IConfiguration configuration,
+    IHostEnvironment environment)
+{
+    public Task<List<SiloCollectionPointDto>> GetRegionsAsync(CancellationToken cancellationToken) =>
+        ReadAsync<List<SiloCollectionPointDto>>("silo/points", cancellationToken);
+
+    // Always send the recipient ID. Omitting it would request all grid cells.
+    public Task<List<SiloDailyWeatherDto>> GetHistoryAsync(int recipientId, DateOnly throughDate,
+        CancellationToken cancellationToken) =>
+        ReadAsync<List<SiloDailyWeatherDto>>(FormattableString.Invariant(
+            $"silo/weather?recipientId={recipientId}&startDate=1889-01-01&endDate={throughDate:yyyy-MM-dd}"),
+            cancellationToken);
+
+    private async Task<T> ReadAsync<T>(string path, CancellationToken cancellationToken)
+    {
+        var connection = TgsApiConnection.Resolve(settings, configuration, environment);
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(connection.BaseUri, path));
+        request.Headers.Authorization = connection.Authorization;
+        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<T>(cancellationToken)
+            ?? throw new InvalidDataException("TgsApi returned an empty SILO response.");
+    }
+}

@@ -1,5 +1,3 @@
-using System.Net.Http.Headers;
-using System.Text;
 using ApiModels.Realtime;
 using Metagen.Shared.Services;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -17,7 +15,7 @@ public sealed class RealtimeHubListener(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            ConnectionSettings connectionSettings;
+            TgsApiConnection connectionSettings;
             try
             {
                 connectionSettings = ResolveConnectionSettings();
@@ -31,9 +29,9 @@ public sealed class RealtimeHubListener(
 
             var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             await using var connection = new HubConnectionBuilder()
-                .WithUrl(connectionSettings.HubUrl, options =>
+                .WithUrl(new Uri(connectionSettings.BaseUri, RealtimeRoutes.Hub), options =>
                 {
-                    options.Headers["Authorization"] = connectionSettings.AuthorizationHeader;
+                    options.Headers["Authorization"] = connectionSettings.Authorization.ToString();
                 })
                 .WithAutomaticReconnect()
                 .Build();
@@ -87,29 +85,10 @@ public sealed class RealtimeHubListener(
         null,
         DateTime.UtcNow);
 
-    private ConnectionSettings ResolveConnectionSettings()
+    private TgsApiConnection ResolveConnectionSettings()
     {
         using var scope = scopeFactory.CreateScope();
         var settings = scope.ServiceProvider.GetRequiredService<ISettingsService>();
-        var overrideUrl = Environment.GetEnvironmentVariable("METAGROW_TGS_API_URL");
-        var developmentUrl = configuration["TgsApi:DevelopmentBaseUrl"];
-        var rootUrl = !string.IsNullOrWhiteSpace(overrideUrl)
-            ? overrideUrl
-            : environment.IsDevelopment() && !string.IsNullOrWhiteSpace(developmentUrl)
-                ? developmentUrl
-                : settings.GetEncryptedSetting("TgsApiUrl");
-
-        if (string.IsNullOrWhiteSpace(rootUrl))
-            throw new InvalidOperationException("The TgsApi URL is not configured for realtime updates.");
-
-        var clientGuid = settings.GetEncryptedSetting("TgsApiGuid");
-        var email = settings.GetEncryptedSetting("TgsApiEmail");
-        var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientGuid}:{email}"));
-        var authorization = new AuthenticationHeaderValue("Basic", credentials).ToString();
-        var baseUri = new Uri(rootUrl.EndsWith('/') ? rootUrl : rootUrl + "/");
-
-        return new ConnectionSettings(new Uri(baseUri, RealtimeRoutes.Hub), authorization);
+        return TgsApiConnection.Resolve(settings, configuration, environment);
     }
-
-    private sealed record ConnectionSettings(Uri HubUrl, string AuthorizationHeader);
 }

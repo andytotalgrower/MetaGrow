@@ -72,6 +72,8 @@ builder.Services.AddScoped<MetaGrow.Web.Components.Account.IdentityRedirectManag
 builder.Services.AddScoped<EncryptionService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddScoped<IStringSimilarityService, StringSimilarityService>();
+// SILO reads use the server's TgsApi connection for all signed-in MetaGrow users.
+builder.Services.AddHttpClient<SiloWeatherApiClient>();
 builder.Services.AddSingleton<IRealtimeChangeNotifier, RealtimeChangeNotifier>();
 builder.Services.AddHostedService<RealtimeHubListener>();
 builder.Services.AddHttpClient<ITgsApiService, TgsApiService>(client =>
