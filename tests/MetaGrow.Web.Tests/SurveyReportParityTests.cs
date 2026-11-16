@@ -35,7 +35,8 @@ public class SurveyReportParityTests
         var key = Regex.Match(html, "class=\"map-legend\".*?</article>", RegexOptions.Singleline).Value;
         Assert.Contains("23/10 Setbest recommended", key);
         Assert.Contains("Block A, Block B", key);
-        Assert.Contains("Work summary", html);
+        // The banana report already provides the same information in its Actions section.
+        Assert.Equal(!banana, html.Contains("Work summary", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -261,18 +262,25 @@ public class SurveyReportParityTests
     }
 
     [Fact]
-    public async Task Banana_print_orders_actions_history_rust_summary_checklist_optional_sections()
+    public async Task Banana_print_places_checklist_after_actions_and_omits_duplicate_work_summary()
     {
         var report = new BananaOnlineReportDto
         {
             Comments = [new() { Title = "Notes", Text = "Read this first" }],
             Actions = [new() { ActionGroupId = 1, Recommendation = "Feed", Blocks = "A" }],
+            ActionMaps = SurveyActionMapTests.Fixture(),
             Charts = [new() { Code = "mites-beneficials", Title = "Mites" }, new() { Code = "sigatoka-lesions", Title = "Lesions", IsHistorical = true }, new() { Code = "leaf-emergence-rate", Title = "LER", IsHistorical = true }],
             RustThrips = new() { Dates = [new DateTime(2026, 9, 3)], Rows = [new() { BlockName = "A", Values = ["P"] }] },
             Tables = [new() { Code = "nematode", Title = "Nematode" }, new() { Code = "soil-health", Title = "Soil health" }, new() { Code = "bwb", Title = "BWB" }, new() { Code = "pest-summary", Title = "Pest summary", Rows = [new() { Label = "A" }] }]
         };
         var html = await Render<BananaReport>(report);
-        Ordered(html, "banana-actions-title", "banana-chart-leaf-emergence-rate", "banana-chart-sigatoka-lesions", "banana-chart-mites-beneficials", "rust-thrips-history-title", "banana-table-pest-summary", "banana-action-checklist-title", "banana-table-bwb", "banana-table-soil-health", "banana-table-nematode");
+        // Keep the map and its key while omitting the second list of recommendations.
+        Assert.DoesNotContain("Work summary", html);
+        Assert.Contains("map-canvas", html);
+        // The worker checklist is included in the report markup for print only.
+        Assert.Matches("<section class=\"report-panel operational-section action-checklist-section print-only\" aria-labelledby=\"banana-action-checklist-title\"", html);
+        Assert.Contains("checklist-target", html);
+        Ordered(html, "banana-actions-title", "banana-action-checklist-title", "banana-chart-leaf-emergence-rate", "banana-chart-sigatoka-lesions", "banana-chart-mites-beneficials", "rust-thrips-history-title", "banana-table-pest-summary", "banana-table-bwb", "banana-table-soil-health", "banana-table-nematode");
     }
 
     [Fact]
@@ -348,6 +356,44 @@ public class SurveyReportParityTests
             "@media print{.no-print,.survey-report-footer{display:none!important}}</style></head><body>" +
             "<main class=\"app-shell\">" + reportHtml + "</main></body></html>";
         var temporaryRoot = Path.GetFullPath(Path.GetTempPath());
+        Assert.Equal(1, await CountPrintedPages(html, temporaryRoot));
+    }
+
+    [ChromeTheory]
+    [InlineData(13)]
+    [InlineData(20)]
+    public async Task Rust_thrips_history_prints_33_block_rows_on_one_page(int visitCount)
+    {
+        // Match the reported block count and exercise both the actual and widest date layouts.
+        var dates = Enumerable.Range(0, visitCount).Select(index => new DateTime(2026, 11, 16).AddDays(-28 * index)).ToList();
+        var report = new BananaOnlineReportDto
+        {
+            RustThrips = new()
+            {
+                Dates = dates,
+                Rows = Enumerable.Range(1, 33).Select(index => new BananaRustThripsRowDto
+                {
+                    BlockName = $"Block {index} North",
+                    Values = dates.Select(_ => "P").ToList()
+                }).ToList()
+            }
+        };
+
+        var reportHtml = await Render<BananaReport>(report);
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "src", "MetaGrow.Web"))) root = root.Parent;
+        Assert.NotNull(root);
+        var css = await File.ReadAllTextAsync(Path.Combine(root.FullName, "src", "MetaGrow.Web", "obj", "Debug", "net10.0",
+            "scopedcss", "bundle", "MetaGrow.Web.styles.css"));
+        var html = "<!doctype html><html><head><style>body{margin:0;font-family:Arial,sans-serif}" +
+            css + "</style></head><body>" + reportHtml + "</body></html>";
+
+        // The cover is one page and the complete rust thrips table should fit on the next.
+        Assert.Equal(2, await CountPrintedPages(html, Path.GetFullPath(Path.GetTempPath())));
+    }
+
+    private static async Task<int> CountPrintedPages(string html, string temporaryRoot)
+    {
         var directory = Path.Combine(temporaryRoot, "metagrow-print-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
@@ -369,7 +415,7 @@ public class SurveyReportParityTests
             catch (OperationCanceledException) { process.Kill(entireProcessTree: true); throw; }
             Assert.Equal(0, process.ExitCode);
             var pdf = Encoding.Latin1.GetString(await File.ReadAllBytesAsync(output));
-            Assert.Single(Regex.Matches(pdf, @"/Type\s*/Page\b"));
+            return Regex.Matches(pdf, @"/Type\s*/Page\b").Count;
         }
         finally
         {
@@ -409,6 +455,27 @@ public class SurveyReportParityTests
         html = await RenderParameters<MultiCropPrintChart>(new() { ["Section"] = section });
         Assert.Contains("polyline class=\"history-line area-average\"", html);
         Assert.DoesNotContain("circle class=\"history-point\"", html);
+    }
+
+    [Fact]
+    public async Task Compact_history_chart_keeps_end_dates_when_visits_cluster_near_the_end()
+    {
+        var dates = new[] { new DateTime(2025, 12, 2), new DateTime(2026, 10, 20), new DateTime(2026, 11, 16) };
+        var section = new MultiCropReportSectionDto
+        {
+            Title = "History",
+            IsHistorical = true,
+            Series = [new() { Name = "This farm", Points = dates.Select(date => new MultiCropReportPointDto { Date = date, Value = 1 }).ToList() }]
+        };
+
+        var html = await RenderParameters<MultiCropPrintChart>(new() { ["Section"] = section, ["Compact"] = true });
+
+        // The labels stay within the existing view box while every observation remains plotted.
+        Assert.Contains("viewBox=\"0 0 1000 840\"", html);
+        Assert.Matches("<text class=\"axis-label\" x=\"56\" [^>]+>02 Dec 25</text>", html);
+        Assert.Matches("<text class=\"axis-label\" x=\"944\" [^>]+>16 Nov 26</text>", html);
+        Assert.DoesNotContain(">20 Oct 26</text>", html);
+        Assert.Equal(dates.Length, Regex.Matches(html, "class=\"history-point\"").Count);
     }
 
     [Theory]

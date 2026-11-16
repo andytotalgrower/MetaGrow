@@ -1,5 +1,15 @@
 window.metaGrowReportPrinting = {
     pendingTimer: null,
+    _printPhotosCookie: "metagrow-print-photos",
+
+    // Both survey reports use the same browser preference, whether opened normally or for direct printing.
+    getPrintPhotos: function () {
+        return window.metaGrowFilterPreferences.get(this._printPhotosCookie) === "true";
+    },
+
+    setPrintPhotos: function (includePhotos) {
+        window.metaGrowFilterPreferences.set(this._printPhotosCookie, includePhotos ? "true" : "false");
+    },
 
     print: function (fileName, delayMilliseconds) {
         const delay = Number.isFinite(delayMilliseconds)
@@ -22,9 +32,15 @@ window.metaGrowReportPrinting = {
                 }
             }
 
-            const brandLogos = Array.from(document.querySelectorAll(
-                ".report-cover-logo, .section-brand-logo, .handout-brand-logo"));
-            await Promise.all(brandLogos.map(async function (image) {
+            const printImages = Array.from(document.querySelectorAll(
+                ".report-cover-logo, .section-brand-logo, .handout-brand-logo, " +
+                ".survey-print-report.include-print-photos .photo-grid img"));
+            await Promise.all(printImages.map(async function (image) {
+                // Off-screen survey photos may still be deferred when the user starts printing.
+                if (image.loading === "lazy") {
+                    image.loading = "eager";
+                }
+
                 if (!image.complete) {
                     await new Promise(resolve => {
                         image.addEventListener("load", resolve, { once: true });

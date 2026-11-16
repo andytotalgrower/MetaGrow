@@ -25,6 +25,9 @@
     [Parameter] public IReadOnlyList<string> Palette { get; set; } = UtilsService.ChartPalette;
 
     private const int TickCount = 5;
+    private const int _viewBoxWidth = 1000;
+    // Reserve room for a full date in the compact chart's 18px axis font, including a gap.
+    private const double _dateLabelSpacing = 112;
 
     private double PlotLeft => Rotated
         ? Math.Clamp(Categories.Select(c => c.Label.Length * 8 + 18).DefaultIfEmpty(70).Max(), 75, 235)
@@ -71,17 +74,26 @@
         .OrderBy(date => date)
         .ToList();
 
-    private IReadOnlyList<DateTime> VisibleDates
+    private IEnumerable<DateTime> VisibleDates(IReadOnlyList<DateTime> dates)
     {
-        get
-        {
-            if (Dates.Count <= 6) return Dates;
+        if (dates.Count == 0) yield break;
 
-            var step = (int)Math.Ceiling(Dates.Count / 6d);
-            var visible = Dates.Where((_, index) => index % step == 0).ToList();
-            if (visible[^1] != Dates[^1]) visible.Add(Dates[^1]);
-            return visible;
+        yield return dates[0];
+        if (dates.Count == 1) yield break;
+
+        // Keep both ends of the history. Irregularly spaced visits can put sampled ticks too close together.
+        var step = (int)Math.Ceiling(dates.Count / 6d);
+        var previousLabelX = DateLabelX(dates[0], dates);
+        var lastLabelX = DateLabelX(dates[^1], dates);
+        for (var index = step; index < dates.Count - 1; index += step)
+        {
+            var labelX = DateLabelX(dates[index], dates);
+            if (labelX - previousLabelX < _dateLabelSpacing || lastLabelX - labelX < _dateLabelSpacing) continue;
+            yield return dates[index];
+            previousLabelX = labelX;
         }
+
+        yield return dates[^1];
     }
 
     private double AxisMaximum => FixedAxisMaximum is > 0
@@ -101,12 +113,16 @@
     private double CategoryX(int categoryIndex) =>
         PlotLeft + (((categoryIndex + 0.5) / Math.Max(1, Categories.Count)) * (PlotRight - PlotLeft));
 
-    private double DateX(DateTime date)
+    private double DateX(DateTime date, IReadOnlyList<DateTime> dates)
     {
-        if (Dates.Count <= 1) return (PlotLeft + PlotRight) / 2;
-        var range = (Dates[^1] - Dates[0]).TotalDays;
-        return PlotLeft + (((date - Dates[0]).TotalDays / Math.Max(1, range)) * (PlotRight - PlotLeft));
+        if (dates.Count <= 1) return (PlotLeft + PlotRight) / 2;
+        var range = (dates[^1] - dates[0]).TotalDays;
+        return PlotLeft + (((date - dates[0]).TotalDays / Math.Max(1, range)) * (PlotRight - PlotLeft));
     }
+
+    // Inset the text at either edge without moving the plotted dates or their ticks.
+    private double DateLabelX(DateTime date, IReadOnlyList<DateTime> dates) =>
+        Math.Clamp(DateX(date, dates), _dateLabelSpacing / 2, _viewBoxWidth - _dateLabelSpacing / 2);
 
     private BarGeometry Bar(int categoryIndex, int seriesIndex, double value)
     {
@@ -141,13 +157,14 @@
             .OrderBy(point => point.Date)
             .ToList();
 
-    private string LinePoints(IEnumerable<MultiCropReportPointDto> points) => string.Join(' ', points.Select(point =>
-        $"{SvgNumber(DateX(point.Date!.Value))},{SvgNumber(ValueY(point.Value!.Value))}"));
+    private string LinePoints(IEnumerable<MultiCropReportPointDto> points, IReadOnlyList<DateTime> dates) =>
+        string.Join(' ', points.Select(point =>
+            $"{SvgNumber(DateX(point.Date!.Value, dates))},{SvgNumber(ValueY(point.Value!.Value))}"));
 
     private string BuildSvg()
     {
         var svg = new StringBuilder();
-        svg.Append("<svg viewBox=\"0 0 1000 ").Append(SvgNumber(ViewBoxHeight))
+        svg.Append("<svg viewBox=\"0 0 ").Append(_viewBoxWidth).Append(' ').Append(SvgNumber(ViewBoxHeight))
             .Append("\" role=\"img\" aria-label=\"")
             .Append(Encode($"{Section.Title} chart"))
             .Append("\"><title>")
@@ -193,6 +210,7 @@
 
     private void AppendHistoricalChart(StringBuilder svg)
     {
+        var dates = Dates;
         for (var seriesIndex = 0; seriesIndex < ChartSeries.Count; seriesIndex++)
         {
             var series = ChartSeries[seriesIndex];
@@ -202,14 +220,14 @@
                 svg.Append("<polyline class=\"history-line")
                     .Append(ReportChartLayout.IsAreaAverage(series.Name) ? " area-average" : "")
                     .Append("\" points=\"")
-                    .Append(LinePoints(points)).Append("\" stroke=\"")
+                    .Append(LinePoints(points, dates)).Append("\" stroke=\"")
                     .Append(SeriesColour(seriesIndex)).Append("\"/>");
             }
 
             foreach (var point in points.Where(_ => !ReportChartLayout.IsAreaAverage(series.Name)))
             {
                 svg.Append("<circle class=\"history-point\" cx=\"")
-                    .Append(SvgNumber(DateX(point.Date!.Value))).Append("\" cy=\"")
+                    .Append(SvgNumber(DateX(point.Date!.Value, dates))).Append("\" cy=\"")
                     .Append(SvgNumber(ValueY(point.Value!.Value))).Append("\" r=\"5\" fill=\"")
                     .Append(SeriesColour(seriesIndex)).Append("\"><title>")
                     .Append(Encode($"{series.Name}: {point.Value:0.##} on {point.Date:dd MMM yyyy}"))
@@ -217,13 +235,14 @@
             }
         }
 
-        foreach (var date in VisibleDates)
+        foreach (var date in VisibleDates(dates))
         {
-            var x = DateX(date);
+            var x = DateX(date, dates);
             svg.Append("<line class=\"axis-tick\" x1=\"").Append(SvgNumber(x))
                 .Append("\" x2=\"").Append(SvgNumber(x)).Append("\" y1=\"").Append(SvgNumber(PlotBottom))
                 .Append("\" y2=\"").Append(SvgNumber(PlotBottom + 8)).Append("\"/>");
-            AppendText(svg, "axis-label", x, PlotBottom + 29, date.ToString("dd MMM yy"), "middle");
+            AppendText(svg, "axis-label", DateLabelX(date, dates), PlotBottom + 29,
+                date.ToString("dd MMM yy", CultureInfo.InvariantCulture), "middle");
         }
     }
 

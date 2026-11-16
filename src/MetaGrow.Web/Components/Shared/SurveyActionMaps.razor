@@ -8,8 +8,8 @@
 
 @if (_data.Recommendations.Count > 0 || _view.Warnings.Count > 0)
 {
-    @* Work planning remains useful even when maps are hidden or boundaries have never been uploaded. *@
-    @if (_view.WorkSummary.Count > 0)
+    @* Reports with their own work instructions can omit this summary and retain the maps. *@
+    @if (ShowWorkSummary && _view.WorkSummary.Count > 0)
     {
         <section class="work-summary" aria-label="Work summary">
             <h2>Work summary</h2>
@@ -115,6 +115,7 @@
     [Parameter] public string? PropertyName { get; set; }
     [Parameter] public DateTime SurveyDate { get; set; }
     [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public bool ShowWorkSummary { get; set; } = true;
     [Parameter] public EventCallback<SurveyActionMapDto> Saved { get; set; }
     private SurveyActionMapDto _data = new();
     private SurveyActionMapDto? _lastData;

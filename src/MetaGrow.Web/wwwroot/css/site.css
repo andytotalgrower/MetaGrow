@@ -116,6 +116,35 @@ html, body {
     width: 1.875rem;
 }
 
+/* Keep survey report controls on one row. Only the toolbar scrolls on narrow screens. */
+.survey-print-report .report-toolbar {
+    align-items: center;
+    background: var(--dxds-color-surface-neutral-subdued-rest);
+    border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
+    border-radius: .5rem;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: .375rem;
+    margin-top: .75rem;
+    min-width: 0;
+    overflow-x: auto;
+    padding: .5rem;
+}
+
+.survey-print-report .report-toolbar > * { flex-shrink: 0; }
+
+/* DevExpress can stretch the editor to full width despite its Width parameter. */
+.survey-print-report .report-toolbar > :is(#banana-report-brand, #report-brand) {
+    max-width: 11rem;
+    width: 11rem;
+}
+
+.survey-print-report .print-photo-option {
+    align-items: center;
+    display: flex;
+    white-space: nowrap;
+}
+
 .mg-grid-link:hover {
     background: var(--dxds-color-surface-neutral-default-hovered);
     color: var(--mg-link, #0d8ecb);

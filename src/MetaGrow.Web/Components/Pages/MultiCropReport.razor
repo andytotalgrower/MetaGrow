@@ -4,6 +4,8 @@
 @using Metagen.Shared.Services
 @using MetaGrow.Web.Services
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@* Send the loading status before the report data is ready when the link opens in a new tab. *@
+@attribute [StreamRendering]
 @inject ITgsApiService TgsApi
 @inject NavigationManager Navigation
 @inject IJSRuntime JavaScript
@@ -15,7 +17,7 @@
     @if (_loading)
     {
         <div class="report-loading" role="status">
-            <div class="spinner-border" aria-hidden="true"></div>
+            <DxWaitIndicator Visible="true" />
             <span>Building survey report…</span>
         </div>
     }
@@ -38,39 +40,38 @@
     else
     {
         <div class="report-toolbar no-print" role="toolbar" aria-label="Multi-crop report tools">
-            <div class="report-toolbar-navigation">
-                @if (!Shared)
-                {
-                    <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
-                    <DxButton Text="Edit survey" RenderStyle="ButtonRenderStyle.Secondary" Click="EditSurvey" />
-                }
-            </div>
-            <div class="report-toolbar-controls">
-                @if (!Shared)
-                {
-                    <DxButton Text="Block groups" RenderStyle="ButtonRenderStyle.Secondary" Click="ManageBlockGroups" />
-                    <DxButton Text="Edit photos" RenderStyle="ButtonRenderStyle.Secondary" Click="ManagePhotos" />
-                    <DxButton Text="PBD matrix" RenderStyle="ButtonRenderStyle.Secondary" Click="DownloadPbd" />
-                    <ReportShareButton SurveyId="@_report.SurveyId" PropertyName="@_report.PropertyName" />
-                    <span class="report-toolbar-divider" aria-hidden="true"></span>
-                }
-                <div class="report-brand-option">
-                    <label for="report-brand">Report brand</label>
-                    <DxComboBox Id="report-brand"
-                                Data="@ReportBranding.Options"
-                                @bind-Value="_reportBrandKey"
-                                TextFieldName="Label"
-                                ValueFieldName="Key"
-                                AllowUserInput="false" />
+            @* Keep the common report actions together so the extra multi-crop tools follow Print/Save. *@
+            @if (!Shared)
+            {
+                <DxButton IconCssClass="oi oi-arrow-left" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button"
+                          aria-label="Back to surveys" title="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
+                <DxButton IconCssClass="oi oi-pencil" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button"
+                          aria-label="Edit survey" title="Edit survey" RenderStyle="ButtonRenderStyle.Secondary" Click="EditSurvey" />
+                <DxButton IconCssClass="oi oi-image" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button"
+                          aria-label="Edit photos" title="Edit photos" RenderStyle="ButtonRenderStyle.Secondary" Click="ManagePhotos" />
+                <ReportShareButton SurveyId="@_report.SurveyId" PropertyName="@_report.PropertyName" IconOnly="true" />
+            }
+            @* Name the brand selector for assistive technology without taking up toolbar space. *@
+            <DxComboBox Id="report-brand" aria-label="Report brand" SizeMode="SizeMode.Small" Width="11rem"
+                        Data="@ReportBranding.Options"
+                        @bind-Value="_reportBrandKey"
+                        TextFieldName="Label"
+                        ValueFieldName="Key"
+                        AllowUserInput="false" />
+            @if (_report.Photos.Count > 0)
+            {
+                <div class="print-photo-option" title="Photos are excluded from printed reports unless selected">
+                    <DxCheckBox @bind-Checked="_includePhotosForPrint" @bind-Checked:after="SavePrintPhotosAsync"
+                                Enabled="@_printPhotosReady">Print Photos</DxCheckBox>
                 </div>
-                @if (_report.Photos.Count > 0)
-                {
-                    <div class="print-photo-option" title="Photos are excluded from printed reports unless selected">
-                        <DxCheckBox @bind-Checked="_includePhotosForPrint">Include photos in printout</DxCheckBox>
-                    </div>
-                }
-                <DxButton Text="Print / save PDF" RenderStyle="ButtonRenderStyle.Primary" Click="PrintReportAsync" />
-            </div>
+            }
+            <DxButton Text="Print/Save" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Primary"
+                      Click="PrintReportAsync" Enabled="@_printPhotosReady" />
+            @if (!Shared)
+            {
+                <DxButton Text="Block groups" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Secondary" Click="ManageBlockGroups" />
+                <DxButton Text="PBD matrix" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Secondary" Click="DownloadPbd" />
+            }
         </div>
 
         <header class="report-header">
@@ -472,6 +473,7 @@
     private bool _loading;
     private bool _printInvoked;
     private bool _includePhotosForPrint;
+    private bool _printPhotosReady;
     // Shared reports receive the creator preference from the validated share response.
     [Parameter] public string? SharedBrandKey { get; set; }
     private string _reportBrandKey = ReportBranding.MetagenKey;
@@ -592,7 +594,6 @@
         _report = null;
         _errorMessage = null;
         _printInvoked = false;
-        _includePhotosForPrint = false;
         _reportBrandKey = ReportBranding.MetagenKey;
 
         try
@@ -623,10 +624,39 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (Print && _report is not null && !_printInvoked)
+        if (firstRender)
+        {
+            try
+            {
+                _includePhotosForPrint = await JavaScript.InvokeAsync<bool>("metaGrowReportPrinting.getPrintPhotos");
+            }
+            catch (JSException)
+            {
+                // The checkbox defaults to off if the saved choice cannot be read.
+            }
+
+            // Render the restored checkbox and print CSS before the automatic print path runs.
+            _printPhotosReady = true;
+            StateHasChanged();
+            return;
+        }
+
+        if (Print && _printPhotosReady && _report is not null && !_printInvoked)
         {
             _printInvoked = true;
             await PrintReportAsync();
+        }
+    }
+
+    private async Task SavePrintPhotosAsync()
+    {
+        try
+        {
+            await JavaScript.InvokeVoidAsync("metaGrowReportPrinting.setPrintPhotos", _includePhotosForPrint);
+        }
+        catch (JSException)
+        {
+            // Keep the current checkbox choice usable even if the browser cannot save it.
         }
     }
 

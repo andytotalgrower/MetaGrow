@@ -60,9 +60,12 @@
                         }
                     </div>
                     <AuthorizeView>
-                        <Authorized Context="auth">
+                        <Authorized>
+                            @* Match the account icon in the navigation menu and name the link for assistive technology. *@
                             <NavLink href="@AddDrawerStateToUrl("/Account/Manage")"
-                                     class="display-desktop mg-user-name">@auth.User.Identity?.Name</NavLink>
+                                     class="display-desktop account-link" aria-label="My account" title="My account">
+                                <span class="icon icon-user" aria-hidden="true"></span>
+                            </NavLink>
                             <form action="Account/Logout" method="post" class="display-desktop">
                                 <AntiforgeryToken />
                                 <DxButton Text="Log out" SubmitFormOnClick="true" RenderStyle="ButtonRenderStyle.Secondary"

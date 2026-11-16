@@ -36,6 +36,9 @@
 .nav-buttons-container { align-items: center; display: flex; gap: 0.625rem; min-height: 2rem; }
 ::deep .nav-buttons-container > a { color: inherit; }
 ::deep .nav-buttons-container .back-button { padding-left: 0; padding-right: 0.25rem; }
+/* Keep a comfortable click target around the account icon. */
+::deep .nav-buttons-container > .account-link { padding: .375rem; }
+.account-link .icon { display: block; }
 .page-content-container {
     container-name: page-content;
     container-type: inline-size;

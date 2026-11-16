@@ -4,7 +4,16 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JavaScript
 
-<DxButton Text="Share report" RenderStyle="ButtonRenderStyle.Secondary" Click="OpenAsync" />
+@* Survey toolbars have a compact icon trigger and share the same dialog as the text trigger. *@
+@if (IconOnly)
+{
+    <DxButton IconCssClass="icon icon-share" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button"
+              aria-label="Share report" title="Share report" RenderStyle="ButtonRenderStyle.Secondary" Click="OpenAsync" />
+}
+else
+{
+    <DxButton Text="Share report" RenderStyle="ButtonRenderStyle.Secondary" Click="OpenAsync" />
+}
 
 <DxPopup @bind-Visible="_visible" ShowFooter="true" HeaderText="Share this report"
          AllowDrag="true" ShowCloseButton="true" CloseOnEscape="true" Width="760px">
@@ -111,6 +120,7 @@
     [Parameter] public Guid? SoilRevisionId { get; set; }
     [Parameter] public string? PropertyName { get; set; }
     [Parameter] public string ReportArea { get; set; } = MetaGrowReportAreas.MultiCrop;
+    [Parameter] public bool IconOnly { get; set; }
 
     private readonly List<MetaGrowReportShareDto> _shares = [];
     private ConfirmDialog? _confirm;

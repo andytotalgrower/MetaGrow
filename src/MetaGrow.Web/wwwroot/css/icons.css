@@ -18,6 +18,10 @@
 .icon-save {
     --icon-mask-image: url("/images/save.svg");
 }
+/* Use the connected-dot share glyph for icon-only report actions. */
+.icon-share {
+    --icon-mask-image: url("/images/share.svg");
+}
 .icon-demos {
     --icon-mask-image: url("/images/demos.svg");
 }

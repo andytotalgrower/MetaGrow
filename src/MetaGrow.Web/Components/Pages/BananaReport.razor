@@ -4,6 +4,8 @@
 @using Metagen.Shared.Services
 @using MetaGrow.Web.Services
 @attribute [Authorize(Roles = MetaGrowRoles.Admin + "," + MetaGrowRoles.AgricultureManager + "," + MetaGrowRoles.Agronomist)]
+@* Send the loading status before the report data is ready when the link opens in a new tab. *@
+@attribute [StreamRendering]
 @inject ITgsApiService TgsApi
 @inject NavigationManager Navigation
 @inject IJSRuntime JavaScript
@@ -15,7 +17,7 @@
     @if (_loading)
     {
         <div class="report-loading" role="status">
-            <div class="spinner-border" aria-hidden="true"></div>
+            <DxWaitIndicator Visible="true" />
             <span>Building banana survey report...</span>
         </div>
     }
@@ -37,35 +39,34 @@
     else
     {
         <div class="report-toolbar no-print" role="toolbar" aria-label="Banana report tools">
-            <div class="report-toolbar-navigation">
-                @if (!Shared)
-                {
-                    <DxButton Text="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
-                    <DxButton Text="Edit survey" RenderStyle="ButtonRenderStyle.Secondary" Click="EditSurvey" />
-                    <DxButton Text="Edit photos" RenderStyle="ButtonRenderStyle.Secondary" Click="ManagePhotos" />
-                    <ReportShareButton SurveyId="@_report.SurveyId"
-                                       PropertyName="@_report.PropertyName"
-                                       ReportArea="@MetaGrowReportAreas.Banana" />
-                }
-            </div>
-            <div class="report-toolbar-controls">
-                <div class="report-brand-option">
-                    <label for="banana-report-brand">Report brand</label>
-                    <DxComboBox Id="banana-report-brand"
-                                Data="@ReportBranding.Options"
-                                @bind-Value="_reportBrandKey"
-                                TextFieldName="Label"
-                                ValueFieldName="Key"
-                                AllowUserInput="false" />
+            @* Accessible names and hover titles identify each icon action. *@
+            @if (!Shared)
+            {
+                <DxButton IconCssClass="oi oi-arrow-left" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button"
+                          aria-label="Back to surveys" title="Back to surveys" RenderStyle="ButtonRenderStyle.Secondary" Click="BackToSurveys" />
+                <DxButton IconCssClass="oi oi-pencil" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button"
+                          aria-label="Edit survey" title="Edit survey" RenderStyle="ButtonRenderStyle.Secondary" Click="EditSurvey" />
+                <DxButton IconCssClass="oi oi-image" SizeMode="SizeMode.Small" CssClass="mg-grid-icon-button"
+                          aria-label="Edit photos" title="Edit photos" RenderStyle="ButtonRenderStyle.Secondary" Click="ManagePhotos" />
+                <ReportShareButton SurveyId="@_report.SurveyId" PropertyName="@_report.PropertyName"
+                                   ReportArea="@MetaGrowReportAreas.Banana" IconOnly="true" />
+            }
+            @* Name the brand selector for assistive technology without taking up toolbar space. *@
+            <DxComboBox Id="banana-report-brand" aria-label="Report brand" SizeMode="SizeMode.Small" Width="11rem"
+                        Data="@ReportBranding.Options"
+                        @bind-Value="_reportBrandKey"
+                        TextFieldName="Label"
+                        ValueFieldName="Key"
+                        AllowUserInput="false" />
+            @if (_report.Photos.Count > 0)
+            {
+                <div class="print-photo-option" title="Photos are excluded from printed reports unless selected">
+                    <DxCheckBox @bind-Checked="_includePhotosForPrint" @bind-Checked:after="SavePrintPhotosAsync"
+                                Enabled="@_printPhotosReady">Print Photos</DxCheckBox>
                 </div>
-                @if (_report.Photos.Count > 0)
-                {
-                    <div class="print-photo-option" title="Photos are excluded from printed reports unless selected">
-                        <DxCheckBox @bind-Checked="_includePhotosForPrint">Include photos in printout</DxCheckBox>
-                    </div>
-                }
-                <DxButton Text="Print / save PDF" RenderStyle="ButtonRenderStyle.Primary" Click="PrintReportAsync" />
-            </div>
+            }
+            <DxButton Text="Print/Save" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Primary"
+                      Click="PrintReportAsync" Enabled="@_printPhotosReady" />
         </div>
 
         <header class="report-header">
@@ -159,6 +160,49 @@
                         </tbody>
                     </table>
                 </div>
+            </section>
+        }
+
+        @* Print the checklist immediately after Actions as a separate worker handout. *@
+        @if (_report.Actions.Count > 0 && ChecklistBlocks.Count > 0)
+        {
+            <section class="report-panel operational-section action-checklist-section print-only" aria-labelledby="banana-action-checklist-title">
+                <div class="operational-heading">
+                    <div>
+                        <span class="section-kicker">Work instructions</span>
+                        <h2 id="banana-action-checklist-title">Action checklist</h2>
+                    </div>
+                    <img class="handout-brand-logo" src="@SelectedBrand.LogoPath" alt="@SelectedBrand.AltText" />
+                </div>
+                <div class="action-checklist-scroll">
+                    <table class="action-checklist-table">
+                        <thead>
+                            <tr>
+                                <th class="checklist-date">Date</th>
+                                <th class="checklist-action">Action</th>
+                                @foreach (var block in ChecklistBlocks)
+                                {
+                                    <th class="checklist-block"><span>@block</span></th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var action in _report.Actions)
+                            {
+                                <tr>
+                                    <td>@ActionDateText(action)</td>
+                                    <td><strong>@ActionGroupTitle(action.ActionGroupName)</strong><span>@action.Recommendation</span></td>
+                                    @foreach (var block in ChecklistBlocks)
+                                    {
+                                        var applies = ActionAppliesToBlock(action, block);
+                                        <td class="@(applies ? "checklist-target" : "checklist-not-applicable")">@(applies ? "☐" : string.Empty)</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="checklist-note">Tick each applicable block when the work has been completed.</p>
             </section>
         }
 
@@ -279,7 +323,7 @@
             @foreach (var dateIndexes in Enumerable.Range(0, _report.RustThrips.Dates.Count).Chunk(20))
             {
             var rustThripsTitle = $"rust-thrips-history-title-{dateIndexes[0]}";
-            <section class="report-panel summary-panel wide-print-section" aria-labelledby="@rustThripsTitle">
+            <section class="report-panel summary-panel wide-print-section rust-thrips-section" aria-labelledby="@rustThripsTitle">
                 <img class="section-brand-logo print-only" src="@SelectedBrand.LogoPath" alt="@SelectedBrand.AltText" />
                 <div class="section-heading">
                     <span class="section-kicker">Survey history</span>
@@ -321,48 +365,6 @@
 
         @RenderTables(false)
 
-        @if (_report.Actions.Count > 0 && ChecklistBlocks.Count > 0)
-        {
-            <section class="report-panel operational-section action-checklist-section print-only" aria-labelledby="banana-action-checklist-title">
-                <div class="operational-heading">
-                    <div>
-                        <span class="section-kicker">Work instructions</span>
-                        <h2 id="banana-action-checklist-title">Action checklist</h2>
-                    </div>
-                    <img class="handout-brand-logo" src="@SelectedBrand.LogoPath" alt="@SelectedBrand.AltText" />
-                </div>
-                <div class="action-checklist-scroll">
-                    <table class="action-checklist-table">
-                        <thead>
-                            <tr>
-                                <th class="checklist-date">Date</th>
-                                <th class="checklist-action">Action</th>
-                                @foreach (var block in ChecklistBlocks)
-                                {
-                                    <th class="checklist-block"><span>@block</span></th>
-                                }
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var action in _report.Actions)
-                            {
-                                <tr>
-                                    <td>@ActionDateText(action)</td>
-                                    <td><strong>@ActionGroupTitle(action.ActionGroupName)</strong><span>@action.Recommendation</span></td>
-                                    @foreach (var block in ChecklistBlocks)
-                                    {
-                                        var applies = ActionAppliesToBlock(action, block);
-                                        <td class="@(applies ? "checklist-target" : "checklist-not-applicable")">@(applies ? "☐" : string.Empty)</td>
-                                    }
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-                <p class="checklist-note">Tick each applicable block when the work has been completed.</p>
-            </section>
-        }
-
         @RenderTables(true)
 
         @* Maps are optional and precede photos in both the online and printable report. *@
@@ -370,7 +372,7 @@
         {
             <SurveyActionMaps Data="_report.ActionMaps" SurveyType="banana" SurveyId="_report.SurveyId"
                               PropertyName="@_report.PropertyName" SurveyDate="_report.SurveyDate" ReadOnly="Shared"
-                              Saved="OnActionMapsSaved" />
+                              ShowWorkSummary="false" Saved="OnActionMapsSaved" />
         }
 
         @if (_report.Photos.Count > 0)
@@ -380,7 +382,8 @@
                 <div class="section-heading">
                     <span class="section-kicker">Field images</span>
                     <h2 id="banana-photos-title">Survey photos</h2>
-                    <p>Select an image to open the full-size version from the Total Grower Services image library.</p>
+                    @* Opening the full-size image is only available on screen. *@
+                    <p class="no-print">Select an image to open the full-size version from the Total Grower Services image library.</p>
                 </div>
                 <div class="photo-grid">
                     @foreach (var photo in _report.Photos.OrderBy(photo => photo.DisplayOrder))
@@ -477,6 +480,7 @@
     private bool _loading;
     private bool _printInvoked;
     private bool _includePhotosForPrint;
+    private bool _printPhotosReady;
     // Shared reports receive the creator preference from the validated share response.
     [Parameter] public string? SharedBrandKey { get; set; }
     private string _reportBrandKey = ReportBranding.MetagenKey;
@@ -521,7 +525,6 @@
         _report = null;
         _errorMessage = null;
         _printInvoked = false;
-        _includePhotosForPrint = false;
         _reportBrandKey = ReportBranding.MetagenKey;
 
         try
@@ -549,10 +552,39 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (Print && _report is not null && !_printInvoked)
+        if (firstRender)
+        {
+            try
+            {
+                _includePhotosForPrint = await JavaScript.InvokeAsync<bool>("metaGrowReportPrinting.getPrintPhotos");
+            }
+            catch (JSException)
+            {
+                // The checkbox defaults to off if the saved choice cannot be read.
+            }
+
+            // Render the restored checkbox and print CSS before the automatic print path runs.
+            _printPhotosReady = true;
+            StateHasChanged();
+            return;
+        }
+
+        if (Print && _printPhotosReady && _report is not null && !_printInvoked)
         {
             _printInvoked = true;
             await PrintReportAsync();
+        }
+    }
+
+    private async Task SavePrintPhotosAsync()
+    {
+        try
+        {
+            await JavaScript.InvokeVoidAsync("metaGrowReportPrinting.setPrintPhotos", _includePhotosForPrint);
+        }
+        catch (JSException)
+        {
+            // Keep the current checkbox choice usable even if the browser cannot save it.
         }
     }
 

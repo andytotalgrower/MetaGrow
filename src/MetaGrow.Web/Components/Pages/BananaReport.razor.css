@@ -6,6 +6,8 @@
     margin: 0 auto;
     max-width: 90rem;
     padding-bottom: 2rem;
+    /* Fit the content column so the toolbar can scroll within the report. */
+    width: 100%;
 }
 
 .report-loading {
@@ -14,50 +16,6 @@
     gap: .75rem;
     justify-content: center;
     min-height: 18rem;
-}
-
-.report-toolbar {
-    align-items: flex-end;
-    background: var(--dxds-color-surface-neutral-subdued-rest);
-    border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
-    border-radius: .5rem;
-    display: flex;
-    gap: 1rem;
-    justify-content: space-between;
-    margin-top: .75rem;
-    padding: .75rem;
-}
-
-.report-toolbar-navigation,
-.report-toolbar-controls {
-    align-items: flex-end;
-    display: flex;
-    flex-wrap: wrap;
-    gap: .5rem;
-}
-
-.report-toolbar-controls { justify-content: flex-end; }
-
-.report-brand-option {
-    display: flex;
-    flex-direction: column;
-    gap: .2rem;
-    min-width: 12rem;
-}
-
-.report-brand-option label {
-    color: var(--dxds-color-content-neutral-subdued-rest);
-    font-size: .7rem;
-    font-weight: 600;
-}
-
-.print-photo-option {
-    align-items: center;
-    border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
-    border-radius: .35rem;
-    display: flex;
-    min-height: 2.25rem;
-    padding: .35rem .65rem;
 }
 
 .report-header {
@@ -335,9 +293,6 @@
 }
 
 @container page-content (max-width: 40rem) {
-    .report-toolbar { align-items: stretch; flex-direction: column; }
-    .report-toolbar-controls { justify-content: flex-start; }
-    .report-brand-option { flex: 1 1 100%; }
     .report-meta,
     .comment-grid,
     .photo-grid { grid-template-columns: 1fr; }
@@ -439,6 +394,7 @@
     .comment-grid article { break-inside: avoid; }
 
     .operational-section { break-before: page; border-top: 0; margin: 0; padding: 0; }
+    /* Show the worker checklist in print and start it on a new page. */
     .action-checklist-section { break-before: page; display: block !important; page-break-before: always; }
     .operational-heading { border-bottom-color: #222; margin-bottom: 4mm; padding-bottom: 3mm; }
     .operational-heading h2 { font-size: 16pt; }
@@ -487,10 +443,16 @@
     .summary-table th:first-child { position: static; width: 30mm; }
     .pest-summary-table th:first-child { width: 38mm; }
     .pest-summary-table th:nth-child(2) { width: 12mm; }
-    .rust-thrips-table thead th:not(:first-child) { height: 16mm; font-size: 6.5pt; vertical-align: bottom; }
-    .summary-panel .rust-thrips-table { min-width: 0; width: min(273mm, calc(38mm + var(--rust-columns) * 11mm)); }
+    /* Use the full landscape width for horizontal dates and gain vertical room for the block rows. */
+    .rust-thrips-section { margin-bottom: 0; }
+    .rust-thrips-section .section-heading { margin-bottom: 2mm; }
+    .summary-panel .rust-thrips-table { width: 273mm; }
     .rust-thrips-table th:first-child { width: 38mm; }
-    .rust-thrips-table td, .rust-thrips-table th { padding: 1mm .5mm; }
+    .rust-thrips-table td,
+    .rust-thrips-table th { font-size: 8.5pt; line-height: 1.1; padding: .4mm .5mm; }
+    .rust-thrips-table thead th:not(:first-child) { font: 700 8pt/1.1 Arial, sans-serif; height: auto; padding: .8mm .25mm; }
+    .rust-thrips-table .summary-header-text { display: inline; transform: none; writing-mode: horizontal-tb; }
+    .rust-thrips-table tr { break-inside: avoid; }
     .chart-unit, .summary-note { font-size: 7pt; }
     .rust-thrips-status,
     .rust-thrips-key {
@@ -500,8 +462,12 @@
 
     .photo-section { display: none; }
     .include-print-photos .photo-section { break-before: page; display: block; }
-    .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* Fit two rows on a landscape page with typical captions, without cropping either orientation. */
+    .photo-grid { gap: 3mm; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .photo-grid figure { break-inside: avoid; }
+    .photo-grid img { aspect-ratio: auto; height: 58mm; object-fit: contain; }
+    .photo-grid figcaption { font-size: 8pt; gap: 1mm; overflow-wrap: anywhere; padding: 2mm; }
+    .photo-grid figcaption span { font-size: inherit; }
     .report-footer {
         break-inside: avoid;
         display: flex;
