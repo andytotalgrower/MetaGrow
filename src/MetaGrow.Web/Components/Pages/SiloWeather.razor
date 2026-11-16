@@ -9,13 +9,13 @@
 @inject ILogger<SiloWeather> Logger
 @inject IJSRuntime JS
 
-<PageTitle>SILO Weather | MetaGrow</PageTitle>
+<PageTitle>Climate | MetaGrow</PageTitle>
 
 <DxToastProvider Name="@_toastProvider" HorizontalAlignment="HorizontalAlignment.Right"
                  StickToViewport="true" />
 
 <div class="weather-page">
-    <h1>SILO Weather</h1>
+    <h1>Climate</h1>
     <section class="weather-filters" aria-label="Weather filters">
         <div class="weather-field">
             <label for="silo-region">Region</label>
@@ -26,6 +26,15 @@
                         SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
                         AllowUserInput="false" NullText="Search for a region"
                         Enabled="@(_regions.Count > 0)" />
+        </div>
+        <div class="weather-field">
+            <label for="silo-crop">Crop</label>
+            <DxComboBox Id="silo-crop" Data="@_crops" @bind-Value="_cropTypeId"
+                        @bind-Value:after="CropChangedAsync"
+                        TextFieldName="@nameof(CropOption.Description)" ValueFieldName="@nameof(CropOption.CropTypeId)"
+                        SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains"
+                        AllowUserInput="false" NullText="@CropPlaceholder" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                        Enabled="@(!_loading && _crops.Count > 0)" />
         </div>
         <div class="weather-field">
             <label for="silo-from">From</label>
@@ -42,6 +51,11 @@
                       RenderStyle="ButtonRenderStyle.Secondary" />
         </div>
     </section>
+
+    @if (_calendarLoadFailed && !_loading)
+    {
+        <p role="status">The crop calendar could not be loaded for this region.</p>
+    }
 
     @if (_history.Count > 0 && !HasValidDateRange)
     {
@@ -76,7 +90,15 @@
     }
     else
     {
-        <p>Latest saved observation for this region: @_history[^1].Date.ToString("dd MMM yyyy")</p>
+        @* Show the latest saved date for the region even when the selected range has no results. *@
+        <div class="weather-observation-note" role="status">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 11v6" />
+                <circle cx="12" cy="7.5" r=".8" fill="currentColor" stroke="none" />
+            </svg>
+            <p>Latest saved observation for this region: <strong>@_history[^1].Date.ToString("dd MMM yyyy")</strong></p>
+        </div>
         @if (_results.Count == 0)
         {
             <p>No weather observations were found in the selected date range.</p>
@@ -99,23 +121,33 @@
                         <DxChartAxisTitle Text="Radiation (MJ/m²)" />
                     </DxChartValueAxis>
                     <DxChartLineSeries Name="Rainfall (mm)" Axis="Water" ArgumentField="@((WeatherDay day) => day.Date)"
-                                       ValueField="@((WeatherDay day) => day.Rainfall)" BreakOnEmptyPoints="true">
+                                       ValueField="@((WeatherDay day) => day.Rainfall)" BreakOnEmptyPoints="true"
+                                       Visible="@IsSeriesVisible(_dailyChartKey, WeatherSeries.Rainfall)"
+                                       VisibleChanged="@(visible => SetSeriesVisibilityAsync(_dailyChartKey, WeatherSeries.Rainfall, visible))">
                         <DxChartSeriesPoint Visible="@(_results.Count == 1)" />
                     </DxChartLineSeries>
                     <DxChartLineSeries Name="Min temp (°C)" Axis="Temperature" ArgumentField="@((WeatherDay day) => day.Date)"
-                                       ValueField="@((WeatherDay day) => day.MinimumTemperature)" BreakOnEmptyPoints="true">
+                                       ValueField="@((WeatherDay day) => day.MinimumTemperature)" BreakOnEmptyPoints="true"
+                                       Visible="@IsSeriesVisible(_dailyChartKey, WeatherSeries.MinimumTemperature)"
+                                       VisibleChanged="@(visible => SetSeriesVisibilityAsync(_dailyChartKey, WeatherSeries.MinimumTemperature, visible))">
                         <DxChartSeriesPoint Visible="@(_results.Count == 1)" />
                     </DxChartLineSeries>
                     <DxChartLineSeries Name="Max temp (°C)" Axis="Temperature" ArgumentField="@((WeatherDay day) => day.Date)"
-                                       ValueField="@((WeatherDay day) => day.MaximumTemperature)" BreakOnEmptyPoints="true">
+                                       ValueField="@((WeatherDay day) => day.MaximumTemperature)" BreakOnEmptyPoints="true"
+                                       Visible="@IsSeriesVisible(_dailyChartKey, WeatherSeries.MaximumTemperature)"
+                                       VisibleChanged="@(visible => SetSeriesVisibilityAsync(_dailyChartKey, WeatherSeries.MaximumTemperature, visible))">
                         <DxChartSeriesPoint Visible="@(_results.Count == 1)" />
                     </DxChartLineSeries>
                     <DxChartLineSeries Name="Solar radiation (MJ/m²)" Axis="Radiation" ArgumentField="@((WeatherDay day) => day.Date)"
-                                       ValueField="@((WeatherDay day) => day.Radiation)" BreakOnEmptyPoints="true">
+                                       ValueField="@((WeatherDay day) => day.Radiation)" BreakOnEmptyPoints="true"
+                                       Visible="@IsSeriesVisible(_dailyChartKey, WeatherSeries.Radiation)"
+                                       VisibleChanged="@(visible => SetSeriesVisibilityAsync(_dailyChartKey, WeatherSeries.Radiation, visible))">
                         <DxChartSeriesPoint Visible="@(_results.Count == 1)" />
                     </DxChartLineSeries>
                     <DxChartLineSeries Name="Tall-crop ET (mm)" Axis="Water" ArgumentField="@((WeatherDay day) => day.Date)"
-                                       ValueField="@((WeatherDay day) => day.TallCropEvapotranspiration)" BreakOnEmptyPoints="true">
+                                       ValueField="@((WeatherDay day) => day.TallCropEvapotranspiration)" BreakOnEmptyPoints="true"
+                                       Visible="@IsSeriesVisible(_dailyChartKey, WeatherSeries.TallCropEvapotranspiration)"
+                                       VisibleChanged="@(visible => SetSeriesVisibilityAsync(_dailyChartKey, WeatherSeries.TallCropEvapotranspiration, visible))">
                         <DxChartSeriesPoint Visible="@(_results.Count == 1)" />
                     </DxChartLineSeries>
                     <DxChartLegend Position="RelativePosition.Outside" VerticalAlignment="VerticalEdge.Bottom"
@@ -130,6 +162,135 @@
                     </DxChartTooltip>
                 </DxChart>
             </div>
+            <section class="weather-averages" aria-labelledby="weather-averages-heading">
+                <h2 id="weather-averages-heading">Daily averages for the selected period</h2>
+                @AverageCards(CalculateAverages(_results))
+            </section>
+        }
+
+        @if (HasValidDateRange && _from is { } selectedFrom && _to is { } selectedTo)
+        {
+            var cropYields = _cropYields.Where(yield => yield.CropTypeId == _cropTypeId).ToArray();
+            var calendarYields = cropYields.Where(yield => yield.ReportingYearStartMonth == 1).ToArray();
+            if (_cropTypeId is { } cropTypeId && (_cropSeasons.Any(window => window.CropTypeId == cropTypeId)
+                || cropYields.Length == 0))
+            {
+                @* Seasonal yields can also be displayed for years that predate saved weather. *@
+                <details class="weather-averages weather-averages-disclosure" open>
+                    <summary>Daily averages by crop season</summary>
+                    @if (_pendingDateChange is not null)
+                    {
+                        <div class="weather-status" role="status">
+                            <DxWaitIndicator Visible="true" />
+                            <span>Updating seasonal averages…</span>
+                        </div>
+                    }
+                    else
+                    {
+                        var seasonalAverages = CalculateSeasonalAverages(cropTypeId, selectedFrom.Date, selectedTo.Date)
+                            .ToLookup(average => average.Window);
+                        var seasons = _cropSeasons.Where(window => window.CropTypeId == cropTypeId)
+                            .Select(window => new
+                            {
+                                Window = window,
+                                Averages = seasonalAverages[window].Select(average =>
+                                    new YearlyAverages(average.Year, average.Values, average)).ToArray(),
+                                Yields = calendarYields.Where(yield => SiloCropCalendar.SeasonOverlaps(
+                                    window, yield.HarvestYear, selectedFrom.Date, selectedTo.Date)).ToArray()
+                            })
+                            .Where(season => season.Averages.Length > 0 || season.Yields.Length > 0)
+                            .ToArray();
+                        @if (_yieldLoadFailed)
+                        {
+                            <p role="status">Regional yield data is currently unavailable.</p>
+                        }
+                        @if (seasons.Length == 0)
+                        {
+                            <p>No readings fall within the saved crop periods for these dates.</p>
+                        }
+                        else
+                        {
+                            <p>Seasons are grouped by the year they end. Weather averages use readings within the selected dates.</p>
+                            @foreach (var season in seasons)
+                            {
+                                <section class="weather-season-chart" @key="season.Window">
+                                    <h3>@SeasonChartTitle(season.Window)</h3>
+                                    @AverageTrendChart(AverageTrendPoints(season.Averages, season.Yields), SeasonChartKey(season.Window))
+                                    @if (season.Averages.Length > 0)
+                                    {
+                                        @YearAverageCards(season.Averages)
+                                    }
+                                </section>
+                            }
+                        }
+                    }
+                </details>
+            }
+
+            @* Match fiscal-year yields with weather from the same reporting period. *@
+            @foreach (var period in cropYields.Where(yield => yield.ReportingYearStartMonth != 1)
+                .GroupBy(yield => yield.ReportingYearStartMonth))
+            {
+                var firstYear = SiloCropCalendar.GetReportingYear(selectedFrom, period.Key);
+                var lastYear = SiloCropCalendar.GetReportingYear(selectedTo, period.Key);
+                var periodYields = period.Where(yield => yield.HarvestYear >= firstYear && yield.HarvestYear <= lastYear).ToArray();
+                if (periodYields.Length == 0)
+                {
+                    var earliest = SiloCropCalendar.FormatReportingYear(period.Min(yield => yield.HarvestYear), period.Key);
+                    var latest = SiloCropCalendar.FormatReportingYear(period.Max(yield => yield.HarvestYear), period.Key);
+                    <p>Adjust the dates to see the available yield data (@(earliest == latest ? earliest : $"{earliest} to {latest}")).</p>
+                    continue;
+                }
+
+                <details class="weather-averages weather-averages-disclosure" @key="period.Key" open>
+                    <summary>@(period.Key == 7 ? "Daily averages and yield by financial year" : "Daily averages and yield by reporting year")</summary>
+                    @if (_pendingDateChange is not null)
+                    {
+                        <div class="weather-status" role="status">
+                            <DxWaitIndicator Visible="true" />
+                            <span>Updating reporting year averages…</span>
+                        </div>
+                    }
+                    else
+                    {
+                        // Keep the comparison focused on the span with yield data, including any gaps between estimates.
+                        var firstYieldYear = periodYields.Min(yield => yield.HarvestYear);
+                        var lastYieldYear = periodYields.Max(yield => yield.HarvestYear);
+                        var averages = _results.GroupBy(day => SiloCropCalendar.GetReportingYear(day.Date, period.Key))
+                            .Where(days => days.Key >= firstYieldYear && days.Key <= lastYieldYear)
+                            .Select(days => new YearlyAverages(days.Key, CalculateAverages(days)));
+                        <p>Year labels show when each reporting period ends. Weather averages use readings within the selected dates.</p>
+                        @AverageTrendChart(AverageTrendPoints(averages, periodYields),
+                            FormattableString.Invariant($"reporting-{_recipientId}-{_cropTypeId}-{period.Key}"), period.Key)
+                    }
+                </details>
+            }
+
+            if (selectedFrom.Year != selectedTo.Year)
+            {
+                var yearlyAverages = _results.GroupBy(day => day.Date.Year)
+                    .OrderBy(group => group.Key)
+                    .Select(group => new YearlyAverages(group.Key, CalculateAverages(group)))
+                    .ToArray();
+                var selectedCalendarYields = calendarYields.Where(yield =>
+                    yield.HarvestYear >= selectedFrom.Year && yield.HarvestYear <= selectedTo.Year);
+                var yearlyChartPoints = AverageTrendPoints(yearlyAverages, selectedCalendarYields);
+                @if (yearlyChartPoints.Length > 0)
+                {
+                    <details class="weather-averages weather-averages-disclosure" open>
+                        <summary>Daily averages by calendar year</summary>
+                        @AverageTrendChart(yearlyChartPoints, _calendarChartKey)
+                        @if (yearlyAverages.Length > 0)
+                        {
+                            @YearAverageCards(yearlyAverages)
+                        }
+                    </details>
+                }
+            }
+        }
+
+        @if (_results.Count > 0)
+        {
             @if (_exporting)
             {
                 <div class="weather-status" role="status">
@@ -176,25 +337,270 @@
 @code {
     private const string _toastProvider = "SiloWeatherMessages";
     private const string _filterCookieName = "metagrow.weather.filters";
+    private const string _seriesCookiePrefix = "metagrow.weather.series.";
+    private const string _dailyChartKey = "daily";
+    private const string _calendarChartKey = "calendar";
+    private const int _yieldMetricIndex = -1;
+    private readonly Dictionary<string, int> _hiddenChartSeries = new();
     private static readonly TimeZoneInfo _brisbaneTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Australia/Brisbane");
     private static readonly TimeSpan _filterDelay = TimeSpan.FromMilliseconds(500);
     private IReadOnlyList<SiloCollectionPointDto> _regions = [];
+    private IReadOnlyList<SiloCropSeasonDto> _cropSeasons = [];
+    private IReadOnlyList<SiloCropYieldDto> _cropYields = [];
+    private IReadOnlyList<CropOption> _crops = [];
     private IReadOnlyList<WeatherDay> _history = [];
     private IReadOnlyList<WeatherDay> _results = [];
+
+    // Match the chart series and units so each card summarises the daily values plotted above it.
+    private static readonly (WeatherSeries Series, string Label, string Unit, string Axis, string IconPath, Func<WeatherDay, decimal?> SelectValue)[] _averageMetrics =
+    [
+        (WeatherSeries.Rainfall, "Rainfall", "mm", "Water", "M6 14a4 4 0 1 1 1-7 5 5 0 0 1 9 2h2a3 3 0 0 1 0 6h-2M8 16l-2 4m6-4-2 4m6-4-2 4", day => day.Rainfall),
+        (WeatherSeries.MinimumTemperature, "Minimum temperature", "°C", "Temperature", "M8 13.5V5a2 2 0 0 1 4 0v8.5a4 4 0 1 1-4 0ZM10 12v6m6-4 2 2 2-2m-2 2v-6", day => day.MinimumTemperature),
+        (WeatherSeries.MaximumTemperature, "Maximum temperature", "°C", "Temperature", "M8 13.5V5a2 2 0 0 1 4 0v8.5a4 4 0 1 1-4 0ZM10 8v10m6-6 2-2 2 2m-2-2v6", day => day.MaximumTemperature),
+        (WeatherSeries.Radiation, "Solar radiation", "MJ/m²", "Radiation", "M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2", day => day.Radiation),
+        (WeatherSeries.TallCropEvapotranspiration, "Tall-crop evapotranspiration", "mm", "Water", "M7 8 10 5l3 3m-3-3v8m5-8 2-2 2 2m-2-2v9M4 16c2 0 2 2 4 2s2-2 4-2 2 2 4 2 2-2 4-2M4 20c2 0 2 2 4 2s2-2 4-2 2 2 4 2 2-2 4-2", day => day.TallCropEvapotranspiration)
+    ];
+
+    // Nullable Average skips missing readings, includes measured zeroes, and returns null with no readings.
+    private static string FormatAverage(decimal? average, string unit) =>
+        average is { } value ? $"{value:N1} {unit}" : "No readings";
+
+    // Store averages in metric order so cards and chart series use the same values.
+    private static decimal?[] CalculateAverages(IEnumerable<WeatherDay> days) =>
+        _averageMetrics.Select(metric => days.Average(metric.SelectValue)).ToArray();
+
+    // These flags are persisted in cookies. Keep their values stable if the chart order changes.
+    [Flags]
+    private enum WeatherSeries
+    {
+        Rainfall = 1,
+        MinimumTemperature = 2,
+        MaximumTemperature = 4,
+        Radiation = 8,
+        TallCropEvapotranspiration = 16,
+        Yield = 32
+    }
+
+    private sealed record YearlyAverages(int Year, decimal?[] Values, SeasonalAverage? Season = null);
+    private sealed record AverageChartPoint(int Year, int MetricIndex, decimal? Value, SeasonalAverage? Season = null,
+        SiloCropYieldDto? Yield = null);
+    private sealed record CropOption(int CropTypeId, string Description);
+    private sealed record SeasonalAverage(int Year, SiloCropSeasonDto Window, DateTime From, DateTime To,
+        int ObservationDays, decimal?[] Values);
+    private IReadOnlyList<SeasonalAverage> CalculateSeasonalAverages(int cropTypeId, DateTime from, DateTime to)
+    {
+        var averages = new List<SeasonalAverage>();
+        foreach (var window in _cropSeasons.Where(window => window.CropTypeId == cropTypeId))
+        {
+            // Use the same filtered days as the chart. Keep separate saved windows within each phase.
+            var daysBySeason = _results
+                .Select(day => (Day: day, Year: SiloCropCalendar.GetSeasonYear(window, day.Date)))
+                .Where(match => match.Year.HasValue)
+                .GroupBy(match => match.Year.GetValueOrDefault(), match => match.Day);
+
+            foreach (var days in daysBySeason)
+            {
+                var (start, end) = SiloCropCalendar.ClipSeason(window, days.Key, from, to);
+                averages.Add(new SeasonalAverage(days.Key, window, start, end, days.Count(), CalculateAverages(days)));
+            }
+        }
+
+        return averages;
+    }
+
+    private static string SeasonChartTitle(SiloCropSeasonDto window)
+    {
+        // Use the saved month bounds in the heading, including when the selected dates clip the window.
+        var startMonth = new DateTime(2000, window.StartMonth, 1).ToString("MMM");
+        var endMonth = new DateTime(2000, window.EndMonth, 1).ToString("MMM");
+        return $"{window.Phase} ({startMonth}–{endMonth})";
+    }
+
+    private static AverageChartPoint[] AverageTrendPoints(IEnumerable<YearlyAverages> averages,
+        IEnumerable<SiloCropYieldDto> yields)
+    {
+        var averagesByYear = averages.ToDictionary(average => average.Year);
+        var yieldsByYear = yields.ToDictionary(observation => observation.HarvestYear);
+        var years = averagesByYear.Keys.Concat(yieldsByYear.Keys).ToArray();
+        if (years.Length == 0)
+            return [];
+
+        // Yield is one annual observation, shared by all matching phase charts. Missing values leave gaps.
+        var firstYear = years.Min();
+        return Enumerable.Range(firstYear, years.Max() - firstYear + 1).SelectMany(year =>
+        {
+            var average = averagesByYear.GetValueOrDefault(year);
+            var weatherPoints = _averageMetrics.Select((_, metricIndex) =>
+                new AverageChartPoint(year, metricIndex, average?.Values[metricIndex], average?.Season));
+            var observation = yieldsByYear.GetValueOrDefault(year);
+            return yieldsByYear.Count == 0 ? weatherPoints : weatherPoints.Append(
+                new AverageChartPoint(year, _yieldMetricIndex, observation?.TonnesPerHectare, Yield: observation));
+        }).ToArray();
+    }
+
+    // Use the saved window identity so split seasons and charts for other regions have independent settings.
+    private static string SeasonChartKey(SiloCropSeasonDto window) =>
+        FormattableString.Invariant($"season-{window.RecipientId}-{window.CropTypeId}-{window.Phase.ToLowerInvariant()}-{window.StartMonth}");
+
+    // Calendar and crop-season trends share axes, series, markers and legend behaviour.
+    private RenderFragment AverageTrendChart(IReadOnlyList<AverageChartPoint> points, string chartKey,
+        int reportingYearStartMonth = 1) => @<div class="weather-averages-chart">
+        @if (points.Any(point => point.Value.HasValue))
+        {
+            var yieldSource = points.FirstOrDefault(point => point.Yield is not null)?.Yield;
+            <DxChart Data="@points" Width="100%" Height="360px">
+                <DxChartArgumentAxis Type="ChartAxisType.Discrete" />
+                <DxChartValueAxis Name="Water">
+                    <DxChartAxisTitle Text="Rainfall and ET (mm)" />
+                </DxChartValueAxis>
+                <DxChartValueAxis Name="Temperature" Alignment="ChartAxisAlignment.Far">
+                    <DxChartAxisTitle Text="Temperature (°C)" />
+                </DxChartValueAxis>
+                <DxChartValueAxis Name="Radiation" Alignment="ChartAxisAlignment.Far">
+                    <DxChartAxisTitle Text="Radiation (MJ/m²)" />
+                </DxChartValueAxis>
+                @if (yieldSource is not null)
+                {
+                    <DxChartValueAxis Name="Yield" Alignment="ChartAxisAlignment.Far">
+                        <DxChartAxisTitle Text="Yield (t/ha)" />
+                    </DxChartValueAxis>
+                }
+                @for (var index = 0; index < _averageMetrics.Length; index++)
+                {
+                    var metricIndex = index;
+                    var metric = _averageMetrics[metricIndex];
+                    <DxChartLineSeries Name="@($"{metric.Label} ({metric.Unit})")" Axis="@metric.Axis"
+                                       ArgumentField="@((AverageChartPoint point) => point.Year)"
+                                       ValueField="@((AverageChartPoint point) => point.Value)"
+                                       Filter="@((AverageChartPoint point) => point.MetricIndex == metricIndex)"
+                                       BreakOnEmptyPoints="true"
+                                       Visible="@IsSeriesVisible(chartKey, metric.Series)"
+                                       VisibleChanged="@(visible => SetSeriesVisibilityAsync(chartKey, metric.Series, visible))">
+                        <DxChartSeriesPoint Visible="true" />
+                    </DxChartLineSeries>
+                }
+                @if (yieldSource is not null)
+                {
+                    @* Use the same toggle and saved visibility behaviour as the weather series. *@
+                    <DxChartLineSeries Name="@(yieldSource.IsEstimate ? "Estimated regional yield (t/ha)" : "Regional yield (t/ha)")"
+                                       Axis="Yield" DashStyle="ChartDashStyle.Dash"
+                                       ArgumentField="@((AverageChartPoint point) => point.Year)"
+                                       ValueField="@((AverageChartPoint point) => point.Value)"
+                                       Filter="@((AverageChartPoint point) => point.MetricIndex == _yieldMetricIndex)"
+                                       BreakOnEmptyPoints="true"
+                                       Visible="@IsSeriesVisible(chartKey, WeatherSeries.Yield)"
+                                       VisibleChanged="@(visible => SetSeriesVisibilityAsync(chartKey, WeatherSeries.Yield, visible))">
+                        <DxChartSeriesPoint Visible="true" />
+                    </DxChartLineSeries>
+                }
+                <DxChartLegend Position="RelativePosition.Outside" VerticalAlignment="VerticalEdge.Bottom"
+                               Orientation="Orientation.Horizontal" AllowToggleSeries="true" />
+                <DxChartTooltip Enabled="true">
+                    <div class="weather-tooltip">
+                        @{ var point = context.Point.DataItems?.OfType<AverageChartPoint>().FirstOrDefault(); }
+                        <strong>@context.Point.SeriesName</strong>
+                        <span>@(point is not null
+                            ? SiloCropCalendar.FormatReportingYear(point.Year, reportingYearStartMonth)
+                            : context.Point.Argument)</span>
+                        <span>@($"{context.Point.Value:N1}")</span>
+                        @if (point?.Yield is { } observation)
+                        {
+                            <span>@observation.SourceRegion</span>
+                            <span>@($"{observation.TonnesProduced:N0} tonnes · {observation.HectaresHarvested:#,##0.###} {YieldAreaLabel(observation.AreaBasis)}")</span>
+                            <span>@(observation.IsCalculated ? "Calculated from tonnes and hectares" : "Published yield")</span>
+                            <span>@observation.SourceName</span>
+                        }
+                        else if (point?.Season is { } season)
+                        {
+                            <span>@season.From.ToString("dd MMM yyyy") – @season.To.ToString("dd MMM yyyy")</span>
+                            <span>@season.ObservationDays @(season.ObservationDays == 1 ? "observation day" : "observation days")</span>
+                        }
+                    </div>
+                </DxChartTooltip>
+            </DxChart>
+            @if (yieldSource is not null)
+            {
+                @if (yieldSource.IsEstimate)
+                {
+                    <p>Yield is an annual regional estimate for @yieldSource.SourceRegion.</p>
+                }
+                else
+                {
+                    <p>Yield is the annual outcome for the @yieldSource.SourceRegion.</p>
+                }
+            }
+        }
+        else
+        {
+            <p role="status">No readings for the chart metrics in the selected dates.</p>
+        }
+    </div>;
+
+    // Keep the denominator visible because ABS uses growing area for bananas.
+    private static string YieldAreaLabel(string areaBasis) => areaBasis switch
+    {
+        "Growing" => "ha of growing area",
+        "Bearing" => "ha of bearing area",
+        _ => "ha harvested"
+    };
+
+    private static RenderFragment YearAverageCards(IEnumerable<YearlyAverages> averages) => @<details class="weather-year-list weather-averages-disclosure">
+        <summary>Year-by-year averages</summary>
+        @* Keep both the list and its individual year cards closed initially. *@
+        @foreach (var year in averages)
+        {
+            <details class="weather-average-year weather-averages-disclosure" @key="year.Year">
+                <summary>@year.Year</summary>
+                @if (year.Season is { } season)
+                {
+                    <p class="weather-season-dates">@season.From.ToString("dd MMM yyyy") – @season.To.ToString("dd MMM yyyy")
+                        · @season.ObservationDays @(season.ObservationDays == 1 ? "observation day" : "observation days")</p>
+                }
+                @AverageCards(year.Values)
+            </details>
+        }
+    </details>;
+
+    private static RenderFragment AverageCards(decimal?[] averages) => @<dl class="weather-average-list">
+        @for (var index = 0; index < _averageMetrics.Length; index++)
+        {
+            var (_, label, unit, _, iconPath, _) = _averageMetrics[index];
+            <div class="weather-average">
+                <dt>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="@iconPath" />
+                    </svg>
+                    <span>@label</span>
+                </dt>
+                <dd>@FormatAverage(averages[index], unit)</dd>
+            </div>
+        }
+    </dl>;
+
     private CancellationTokenSource? _activeLoad;
     private CancellationTokenSource? _pendingDateChange;
     private IGrid? _grid;
     private WeatherFilterPreferences? _savedFilters;
     private int? _recipientId;
+    private int? _cropTypeId;
     private DateTime? _from;
     private DateTime? _to;
     private DateTime _historyThrough;
     private bool _loading = true;
     private bool _exporting;
+    private bool _calendarLoadFailed;
+    private bool _yieldLoadFailed;
     private string? _loadError;
 
     private bool HasValidDateRange =>
         _from is { } from && _to is { } to && from.Date <= to.Date && to.Date <= _historyThrough;
+
+    private string CropPlaceholder => _recipientId is null ? "Select a region first"
+        : _loading ? "Loading crop calendar…"
+        : _crops.Count == 0 && _calendarLoadFailed ? "Crop calendar unavailable"
+        : _crops.Count == 0 ? "No crop data saved"
+        : "Search for a crop";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -202,6 +608,7 @@
             return;
 
         // Read browser preferences on the first interactive render.
+        await ReadChartPreferencesAsync();
         await LoadRegionsAsync();
         await InvokeAsync(StateHasChanged);
     }
@@ -228,38 +635,112 @@
     }
 
     private Task RegionChangedAsync() =>
-        Task.WhenAll(SaveFiltersAsync(new WeatherFilterPreferences(_recipientId)), LoadHistoryAsync());
+        Task.WhenAll(SaveFiltersAsync(new WeatherFilterPreferences(_recipientId,
+            CropTypeId: _recipientId.HasValue ? _savedFilters?.CropTypeId : null)), LoadHistoryAsync());
+
+    private Task CropChangedAsync() =>
+        SaveFiltersAsync((_savedFilters ?? new WeatherFilterPreferences(_recipientId)) with { CropTypeId = _cropTypeId });
 
     private Task LoadHistoryAsync()
     {
         // Clear the previous region while the new history and its date bounds are loading.
         _pendingDateChange?.Cancel();
         _history = _results = [];
+        _cropSeasons = [];
+        _cropYields = [];
+        _crops = [];
+        _calendarLoadFailed = false;
+        _yieldLoadFailed = false;
         _from = _to = null;
         return RunLoadAsync(async cancellationToken =>
         {
             if (_recipientId is not { } recipientId)
+            {
+                _cropTypeId = null;
                 return;
+            }
 
             await Task.Delay(_filterDelay, cancellationToken);
-            var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, _brisbaneTimeZone).Date;
-            var readings = await WeatherApi.GetHistoryAsync(recipientId, DateOnly.FromDateTime(today), cancellationToken);
+            await Task.WhenAll(LoadWeatherReadingsAsync(recipientId, cancellationToken), LoadCropOptionsAsync(recipientId, cancellationToken));
+        }, "Weather history could not be loaded.");
+    }
+
+    private async Task LoadWeatherReadingsAsync(int recipientId, CancellationToken cancellationToken)
+    {
+        var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, _brisbaneTimeZone).Date;
+        var readings = await WeatherApi.GetHistoryAsync(recipientId, DateOnly.FromDateTime(today), cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        _history = readings.GroupBy(reading => reading.ObservationDate)
+            .OrderBy(day => day.Key)
+            .Select(day => new WeatherDay(day.Key.ToDateTime(TimeOnly.MinValue), day.ToArray()))
+            .ToArray();
+        _historyThrough = today;
+        SetDefaultDates();
+        if (_history.Count > 0 && _savedFilters is { From: { } from, To: { } to }
+            && from.Date <= to.Date && to.Date <= today)
+        {
+            _from = from.Date;
+            _to = to.Date;
+            FilterHistory(from, to);
+        }
+    }
+
+    private async Task LoadCropOptionsAsync(int recipientId, CancellationToken cancellationToken)
+    {
+        await Task.WhenAll(LoadCropCalendarAsync(recipientId, cancellationToken), LoadCropYieldsAsync(recipientId, cancellationToken));
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // A crop can have regional yield data without a saved phase at this collection point.
+        _crops = _cropSeasons.Select(season => new CropOption(season.CropTypeId, season.CropDescription))
+            .Concat(_cropYields.Where(yield => !string.IsNullOrWhiteSpace(yield.CropDescription))
+                .Select(yield => new CropOption(yield.CropTypeId, yield.CropDescription!)))
+            .DistinctBy(crop => crop.CropTypeId)
+            .OrderBy(crop => crop.Description, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+
+        var filters = _savedFilters;
+        _cropTypeId = filters?.CropTypeId is { } cropTypeId && _crops.Any(crop => crop.CropTypeId == cropTypeId)
+            ? cropTypeId
+            : null;
+        // A failed endpoint can hide the saved crop temporarily. Keep its preference for a retry.
+        if (filters is { CropTypeId: not null } && _cropTypeId is null && !_calendarLoadFailed && !_yieldLoadFailed)
+            await SaveFiltersAsync(filters with { CropTypeId = null });
+    }
+
+    private async Task LoadCropCalendarAsync(int recipientId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var seasons = await WeatherApi.GetCropSeasonsAsync(recipientId, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
-            _history = readings.GroupBy(reading => reading.ObservationDate)
-                .OrderBy(day => day.Key)
-                .Select(day => new WeatherDay(day.Key.ToDateTime(TimeOnly.MinValue), day.ToArray()))
-                .ToArray();
-            _historyThrough = today;
-            SetDefaultDates();
-            if (_history.Count > 0 && _savedFilters is { From: { } from, To: { } to }
-                && from.Date <= to.Date && to.Date <= today)
-            {
-                _from = from.Date;
-                _to = to.Date;
-                FilterHistory(from, to);
-            }
-        }, "Weather history could not be loaded.");
+            // Planting remains a calendar reference and has no weather summary on this page.
+            _cropSeasons = seasons.Where(season => !season.Phase.Equals("Planting", StringComparison.OrdinalIgnoreCase)).ToArray();
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Weather remains available when the calendar endpoint or its database release is unavailable.
+            Logger.LogWarning(exception, "SILO crop calendar could not be loaded for recipient {RecipientId}.", recipientId);
+            _calendarLoadFailed = true;
+            ShowToast("The crop calendar could not be loaded.", ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task LoadCropYieldsAsync(int recipientId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var yields = await WeatherApi.GetCropYieldsAsync(recipientId, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            _cropYields = yields;
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The weather and crop calendar remain usable before the yield release is deployed.
+            Logger.LogWarning(exception, "SILO crop yields could not be loaded for recipient {RecipientId}.", recipientId);
+            _yieldLoadFailed = true;
+        }
     }
 
     private async Task RunLoadAsync(Func<CancellationToken, Task> load, string error)
@@ -315,7 +796,7 @@
             if (!dateChange.IsCancellationRequested)
             {
                 FilterHistory(from, to);
-                await SaveFiltersAsync(new WeatherFilterPreferences(_recipientId, from.Date, to.Date));
+                await SaveFiltersAsync(new WeatherFilterPreferences(_recipientId, from.Date, to.Date, _savedFilters?.CropTypeId));
             }
         }
         catch (OperationCanceledException) when (dateChange.IsCancellationRequested)
@@ -336,7 +817,7 @@
         _pendingDateChange?.Cancel();
         SetDefaultDates();
         // Store the region without fixed dates so the default advances with new weather history.
-        return SaveFiltersAsync(new WeatherFilterPreferences(_recipientId));
+        return SaveFiltersAsync(new WeatherFilterPreferences(_recipientId, CropTypeId: _savedFilters?.CropTypeId));
     }
 
     private void SetDefaultDates()
@@ -344,6 +825,47 @@
         _from = _history.Count > 0 ? _history[0].Date : null;
         _to = _historyThrough;
         _results = _history;
+    }
+
+    private async Task ReadChartPreferencesAsync()
+    {
+        try
+        {
+            var preferences = await JS.InvokeAsync<Dictionary<string, string>>(
+                "metaGrowFilterPreferences.getByPrefix", _seriesCookiePrefix);
+            foreach (var (chartKey, value) in preferences)
+            {
+                if (int.TryParse(value, out var hiddenSeries) && hiddenSeries >= 0)
+                    _hiddenChartSeries[chartKey] = hiddenSeries;
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException)
+        {
+            // All series start visible when browser storage is unavailable.
+        }
+    }
+
+    private bool IsSeriesVisible(string chartKey, WeatherSeries series) =>
+        (_hiddenChartSeries.GetValueOrDefault(chartKey) & (int)series) == 0;
+
+    private async Task SetSeriesVisibilityAsync(string chartKey, WeatherSeries series, bool visible)
+    {
+        var previous = _hiddenChartSeries.GetValueOrDefault(chartKey);
+        var hidden = visible ? previous & ~(int)series : previous | (int)series;
+        if (hidden == previous)
+            return;
+
+        // Update the legend state immediately and persist only the chart that changed.
+        _hiddenChartSeries[chartKey] = hidden;
+        try
+        {
+            await JS.InvokeVoidAsync("metaGrowFilterPreferences.set", _seriesCookiePrefix + chartKey,
+                hidden.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException)
+        {
+            // The current chart still reflects the toggle when browser storage is unavailable.
+        }
     }
 
     private async Task<WeatherFilterPreferences?> ReadFiltersAsync(CancellationToken cancellationToken)
@@ -413,7 +935,9 @@
         _activeLoad = null;
     }
 
-    private sealed record WeatherFilterPreferences(int? RecipientId, DateTime? From = null, DateTime? To = null);
+    // Older Climate cookies omit the optional crop selection.
+    private sealed record WeatherFilterPreferences(int? RecipientId, DateTime? From = null, DateTime? To = null,
+        int? CropTypeId = null);
 
     private sealed record WeatherDay(DateTime Date, IReadOnlyList<SiloDailyWeatherDto> Readings)
     {

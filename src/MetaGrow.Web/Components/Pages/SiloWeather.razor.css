@@ -8,12 +8,23 @@
     border-radius: .6rem;
     display: grid;
     gap: .8rem;
-    grid-template-columns: minmax(14rem, 2fr) repeat(2, minmax(8rem, 1fr)) auto;
+    grid-template-columns: repeat(2, minmax(11rem, 2fr)) repeat(2, minmax(8rem, 1fr)) auto;
     padding: 1rem;
 }
 .weather-field { display: grid; gap: .3rem; min-width: 0; }
 .weather-field label { font-size: .85rem; font-weight: 700; }
 .weather-actions, .weather-status { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; }
+.weather-observation-note {
+    align-items: flex-start;
+    background: var(--dxds-color-surface-neutral-subdued-rest);
+    border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
+    border-radius: .6rem;
+    display: flex;
+    gap: .65rem;
+    padding: .65rem .75rem;
+}
+/* Keep the icon legible when the message wraps on narrow screens. */
+.weather-observation-note svg { flex: none; height: 1.25rem; width: 1.25rem; }
 .weather-chart {
     background: var(--dxds-color-surface-neutral-subdued-rest);
     border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
@@ -21,10 +32,58 @@
     min-width: 0;
     padding: .75rem;
 }
-.weather-tooltip { display: grid; gap: .15rem; }
+/* Match the report chart tooltip inset around each point's details. */
+.weather-tooltip { display: grid; gap: .15rem; padding: .6rem .75rem; }
+.weather-averages {
+    background: var(--dxds-color-surface-neutral-subdued-rest);
+    border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
+    border-radius: .6rem;
+    padding: 1rem;
+}
+.weather-averages h2 { font-size: 1rem; font-weight: 700; margin: 0 0 .75rem; }
+.weather-averages-disclosure > summary { cursor: pointer; font-weight: 700; }
+.weather-averages-disclosure[open] > summary { margin-bottom: .75rem; }
+.weather-averages-chart { min-width: 0; margin-bottom: 1rem; }
+/* Give each saved season its own heading above the shared trend layout. */
+.weather-season-chart { min-width: 0; margin-top: 1rem; }
+.weather-season-chart h3 { font-size: .95rem; font-weight: 700; margin: 0 0 .5rem; }
+.weather-year-list { border-top: 1px solid var(--dxds-color-border-neutral-subdued-rest); padding-top: .75rem; }
+.weather-average-year > summary { font-size: .95rem; }
+.weather-page .weather-season-dates { margin-bottom: .5rem; }
+/* Separate consecutive years while keeping them in the same summary box. */
+.weather-average-year + .weather-average-year {
+    border-top: 1px solid var(--dxds-color-border-neutral-subdued-rest);
+    margin-top: .85rem;
+    padding-top: .85rem;
+}
+
+/* Let the cards wrap as the page narrows, including when the navigation is expanded. */
+.weather-average-list {
+    display: grid;
+    gap: .65rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    margin: 0;
+}
+.weather-average {
+    background: var(--dxds-color-surface-neutral-default-rest, var(--bs-body-bg));
+    border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
+    border-radius: .45rem;
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    justify-content: space-between;
+    padding: .7rem .8rem;
+}
+.weather-average dt { align-items: center; display: flex; font-size: .85rem; gap: .5rem; }
+.weather-average svg { color: var(--mg-blue, #007cba); flex: 0 0 1.25rem; height: 1.25rem; }
+.weather-average dd { font-size: 1.2rem; font-weight: 700; margin: 0; }
 .weather-grid { min-width: 0; overflow-x: auto; }
 .weather-grid ::deep > .dxbl-grid { min-width: 48rem; }
-@container page-content (max-width: 52rem) {
+@container page-content (max-width: 56rem) {
     .weather-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .weather-field:first-child, .weather-actions { grid-column: 1 / -1; }
+    .weather-actions { grid-column: 1 / -1; }
+}
+@container page-content (max-width: 28rem) {
+    /* Give the search pickers the full width on narrow screens. */
+    .weather-field:nth-child(-n+2) { grid-column: 1 / -1; }
 }

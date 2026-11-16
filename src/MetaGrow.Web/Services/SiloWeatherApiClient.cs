@@ -12,6 +12,16 @@ public sealed class SiloWeatherApiClient(
     public Task<List<SiloCollectionPointDto>> GetRegionsAsync(CancellationToken cancellationToken) =>
         ReadAsync<List<SiloCollectionPointDto>>("silo/points", cancellationToken);
 
+    // One calendar read populates the picker and lets crop changes reuse the loaded schedules.
+    public Task<List<SiloCropSeasonDto>> GetCropSeasonsAsync(int recipientId, CancellationToken cancellationToken) =>
+        ReadAsync<List<SiloCropSeasonDto>>(FormattableString.Invariant($"silo/crop-seasons?recipientId={recipientId}"),
+            cancellationToken);
+
+    // Yield is already mapped to the collection point and can be reused across crop and date changes.
+    public Task<List<SiloCropYieldDto>> GetCropYieldsAsync(int recipientId, CancellationToken cancellationToken) =>
+        ReadAsync<List<SiloCropYieldDto>>(FormattableString.Invariant($"silo/crop-yields?recipientId={recipientId}"),
+            cancellationToken);
+
     // Always send the recipient ID. Omitting it would request all grid cells.
     public Task<List<SiloDailyWeatherDto>> GetHistoryAsync(int recipientId, DateOnly throughDate,
         CancellationToken cancellationToken) =>
