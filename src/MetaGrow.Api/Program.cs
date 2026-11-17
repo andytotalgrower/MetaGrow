@@ -4,6 +4,7 @@ using MetaGrow.Api.Auth;
 using MetaGrow.Api.Data;
 using MetaGrow.Api.Services;
 using Metagen.Shared.Services;
+using Metagen.Shared.Configuration;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -14,6 +15,7 @@ using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddMetagenSharedSettings();
 
 builder.Host.UseSerilog((context, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)
@@ -86,8 +88,8 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
     .SetApplicationName("MetaGrow.Api");
 
-var graphMail = builder.Configuration.GetSection(GraphMailOptions.SectionName).Get<GraphMailOptions>() ?? new();
-DecryptGraphMailOptions(graphMail);
+// Use the same encrypted mail configuration as MetaAgency rather than maintaining another copy.
+var graphMail = builder.Configuration.GetMetagenGraphMail();
 builder.Services.AddSingleton(graphMail);
 builder.Services.AddSingleton<IGraphMailService>(_ => new GraphMailService(new HttpClient(), graphMail));
 builder.Services.AddSingleton<MailQueue>();
@@ -161,19 +163,6 @@ static string? GetConnectionString(ISettingsService settings)
         .Replace("[DATABASE]", settings.GetSetting("DatabaseName"))
         .Replace("[USER]", settings.GetEncryptedSetting("User1"))
         .Replace("[PASSWORD]", settings.GetEncryptedSetting("Password1"));
-}
-
-static void DecryptGraphMailOptions(GraphMailOptions options)
-{
-    var encryption = new EncryptionService { KI = 5 };
-    options.ApplicationClientId = Decrypt(options.ApplicationClientId);
-    options.ObjectId = Decrypt(options.ObjectId);
-    options.DirectoryTenantId = Decrypt(options.DirectoryTenantId);
-    options.SecretId = Decrypt(options.SecretId);
-    options.SecretValue = Decrypt(options.SecretValue);
-    return;
-
-    string Decrypt(string value) => string.IsNullOrWhiteSpace(value) ? value : encryption.Decrypt(value);
 }
 
 public partial class Program { }

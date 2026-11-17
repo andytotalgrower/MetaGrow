@@ -4,6 +4,7 @@ using Metagen.AccountSettings.Razor.Backend;
 using Metagen.AccountSettings.Razor.Configuration;
 using Metagen.AccountSettings.Razor.Extensions;
 using Metagen.Shared.Services;
+using Metagen.Shared.Configuration;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.SqlClient;
@@ -18,6 +19,7 @@ Log.Logger = new LoggerConfiguration().MinimumLevel.Information().Enrich.FromLog
         retainedFileCountLimit: 10, shared: true).CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddMetagenSharedSettings();
 builder.Host.UseSerilog();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddDevExpressBlazor(options => options.SizeMode = DevExpress.Blazor.SizeMode.Medium);

@@ -118,6 +118,10 @@ html, body {
 
 /* Keep survey report controls on one row. Only the toolbar scrolls on narrow screens. */
 .survey-print-report .report-toolbar {
+    /* Keep printing controls within reach while scrolling the online report. */
+    position: sticky;
+    top: 0;
+    z-index: 5;
     align-items: center;
     background: var(--dxds-color-surface-neutral-subdued-rest);
     border: 1px solid var(--dxds-color-border-neutral-subdued-rest);
@@ -139,11 +143,8 @@ html, body {
     width: 11rem;
 }
 
-.survey-print-report .print-photo-option {
-    align-items: center;
-    display: flex;
-    white-space: nowrap;
-}
+/* Bound the layout selector just like the branding editor in the single-row toolbar. */
+.survey-print-report .report-toolbar > .report-photo-print-layout { width: 11rem; max-width: 11rem; }
 
 .mg-grid-link:hover {
     background: var(--dxds-color-surface-neutral-default-hovered);

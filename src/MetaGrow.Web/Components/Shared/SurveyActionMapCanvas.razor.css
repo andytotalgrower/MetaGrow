@@ -3,6 +3,7 @@
 .map-canvas-scroll { overflow: auto; max-height: 700px; border: 1px solid #dce3df; }
 .map-canvas { display: block; height: auto; min-width: 100%; }
 .map-canvas g { cursor: pointer; }
+.map-label-leader { fill: none; stroke: #59666d; stroke-width: .8; pointer-events: none; }
 .map-canvas g:focus path, .map-canvas g:hover path { stroke: #111; stroke-width: 3; }
 .map-block-details { display: flex; flex-direction: column; gap: .3rem; padding: .75rem; background: #f4f7f5; }
 /* Always print the entire farm even if the viewer zoomed or scrolled on screen. */

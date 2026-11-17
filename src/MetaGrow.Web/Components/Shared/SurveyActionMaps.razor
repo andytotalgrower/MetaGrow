@@ -96,7 +96,19 @@
                             {
                                 <div class="map-legend-item">
                                     <span class="map-swatch" style="background:@item.Colour;color:@item.TextColour">@item.Number</span>
-                                    <div class="map-key-instruction"><strong>@item.Summary</strong><span><strong>Blocks:</strong> @(item.Blocks.Count > 0 ? string.Join(", ", item.Blocks) : "Block names unavailable")</span></div>
+                                    <div class="map-key-instruction">
+                                        <strong>@item.Summary</strong>
+                                        <span>@(item.BlockDescriptions.Count > 0 ? string.Join(", ", item.BlockDescriptions) : "Block names unavailable")</span>
+                                        @* Incomplete boundary reads must not present a partial sum as a complete total. *@
+                                        <span>
+                                            <strong>@(item.HasIncompleteArea ? "Mapped area:" : "Total area:")</strong>
+                                            @(item.AreaHectares.HasValue ? SurveyActionMapLayout.Hectares(item.AreaHectares.Value) : "Unavailable")
+                                            @if (item.HasIncompleteArea)
+                                            {
+                                                <span> (incomplete boundaries)</span>
+                                            }
+                                        </span>
+                                    </div>
                                 </div>
                             }
                             <div class="map-legend-item"><span class="map-swatch map-neutral">–</span><span>No matching recommendation</span></div>

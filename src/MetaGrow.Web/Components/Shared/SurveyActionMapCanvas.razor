@@ -8,7 +8,7 @@
     <span>Select a block for its recommendation. Scroll to move around a zoomed map.</span>
 </div>
 <div class="map-canvas-scroll">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 650" class="map-canvas" style="width:@(_zoom)%" role="img" aria-label="@Map.Title">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="@Map.ViewBox" class="map-canvas" style="width:@(_zoom)%" role="img" aria-label="@Map.Title">
         <title>@Map.Title</title>
         <rect width="1000" height="650" fill="white" />
         @foreach (var shape in Map.Shapes)
@@ -17,15 +17,44 @@
                @onclick="@(() => _selected = shape)" @onkeydown="@(args => SelectKey(args, shape))">
                 <title>@shape.BlockName: @Details(shape)</title>
                 <path d="@shape.Path" fill="@shape.Colour" stroke="#555" stroke-width="1.5" fill-rule="evenodd" />
-                @* Give neighbouring block names more room in the shared screen and print SVG. *@
-                <text x="@SurveyActionMapLayout.Number(shape.LabelX)" y="@SurveyActionMapLayout.Number(shape.LabelY)"
-                      text-anchor="middle" fill="@shape.TextColour" font-size="11" font-weight="600" pointer-events="none">@shape.BlockName</text>
-                @if (shape.LegendNumber.HasValue)
-                {
-                    <g><text x="@SurveyActionMapLayout.Number(shape.LabelX)" y="@SurveyActionMapLayout.Number(shape.LabelY + 15)"
-                          text-anchor="middle" fill="@shape.TextColour" font-size="11" pointer-events="none">@shape.LegendNumber</text></g>
-                }
             </g>
+        }
+        @* Draw all leaders before text so they cannot obscure neighbouring labels. *@
+        @foreach (var shape in Map.Shapes.Where(shape => shape.Label?.IsCallout == true))
+        {
+            var label = shape.Label!;
+            var edge = label.Anchor.X < label.X ? label.X : label.X + label.Width;
+            <polyline class="map-label-leader" points="@LeaderPoints(label, edge)" />
+        }
+        @foreach (var shape in Map.Shapes)
+        {
+            var label = shape.Label;
+            @if (label is null)
+            {
+                <g pointer-events="none">
+                    <text x="@SurveyActionMapLayout.Number(shape.LabelX)" y="@SurveyActionMapLayout.Number(shape.LabelY)"
+                          text-anchor="middle" fill="@shape.TextColour" font-size="11">@shape.BlockName</text>
+                </g>
+            }
+            else
+            {
+                <g class="map-block-label" pointer-events="none">
+                    @if (label.IsCallout)
+                    {
+                        <rect x="@SurveyActionMapLayout.Number(label.X)" y="@SurveyActionMapLayout.Number(label.Y)"
+                              width="@SurveyActionMapLayout.Number(label.Width)" height="@SurveyActionMapLayout.Number(label.Height)"
+                              rx="3" fill="white" stroke="#aab4ba" stroke-width="0.6" />
+                    }
+                    <text text-anchor="middle" fill="@(label.IsCallout ? "#222" : shape.TextColour)"
+                          font-size="@SurveyActionMapLayout.Number(label.FontSize)" font-family="Arial, sans-serif" font-weight="600">
+                        @for (var index = 0; index < label.Lines.Count; index++)
+                        {
+                            <tspan x="@SurveyActionMapLayout.Number(label.X + label.Width / 2)"
+                                   y="@SurveyActionMapLayout.Number(label.Y + 3 + label.FontSize + index * label.FontSize * 1.2)">@label.Lines[index]</tspan>
+                        }
+                    </text>
+                </g>
+            }
         }
         <text x="965" y="28" text-anchor="middle" fill="#333" font-size="15">↑ N</text>
     </svg>
@@ -49,6 +78,10 @@
     }
 
     private static string Details(SurveyActionMapShape shape) => string.IsNullOrEmpty(shape.Summary) ? "No matching recommendation" : shape.Summary;
+    // Route to the nearest edge of the outside label while keeping the endpoint inside its polygon.
+    private static string LeaderPoints(SurveyActionMapLabel label, double edge) =>
+        $"{SurveyActionMapLayout.Number(label.Anchor.X)},{SurveyActionMapLayout.Number(label.Anchor.Y)} " +
+        $"{SurveyActionMapLayout.Number(edge)},{SurveyActionMapLayout.Number(label.Y + label.Height / 2)}";
     private void SelectKey(KeyboardEventArgs args, SurveyActionMapShape shape)
     {
         if (args.Key is "Enter" or " ") _selected = shape;

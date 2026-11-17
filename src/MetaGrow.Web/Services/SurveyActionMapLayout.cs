@@ -10,10 +10,12 @@ namespace MetaGrow.Web.Services;
 public static class SurveyActionMapLayout
 {
     private sealed record Point(double X, double Y);
-    private sealed record Geometry(SurveyMapBlockDto Block, List<List<Point>> Rings);
+    private sealed record Geometry(SurveyMapBlockDto Block, List<List<Point>> Rings, double AreaHectares);
+    private const double _earthRadiusMetres = 6_371_009;
     private static readonly string[][] _palettes =
     [
-        ["#d1ef71", "#8eb027", "#5f720f", "#abfdca", "#41ff91", "#00db8b", "#00257b", "#04515e"],
+        // Keep the olive nutrition shade light enough for dark callout leaders on screen and paper.
+        ["#d1ef71", "#8eb027", "#cad69d", "#abfdca", "#41ff91", "#00db8b", "#00257b", "#04515e"],
         ["#ffa8a3", "#f85a5a", "#b42a2a", "#821414", "#ff0000", "#ff6900", "#ffa900", "#ffff00"],
         ["#6d6461", "#ab9a85", "#c5b58d", "#e5d593", "#cda753", "#d68474", "#8a381a", "#3a2714"],
         ["#0900ff", "#009fff", "#00dfff", "#b0d3ee", "#7db1d9", "#3677a8"],
@@ -36,17 +38,23 @@ public static class SurveyActionMapLayout
                     .Where(blockNames.ContainsKey).Select(id => blockNames[id])
                     .Order(StringComparer.OrdinalIgnoreCase).ToList())).ToList();
         var geometry = new List<Geometry>();
+        var incompleteAreas = new HashSet<(string Type, int Id)>();
         foreach (var block in data.Blocks)
         {
+            // The API may retain successful files from a folder whose other files failed to load.
+            if (data.Warnings.Contains($"Map data could not be loaded for {block.BlockName}.", StringComparer.Ordinal))
+                incompleteAreas.Add((block.BlockType, block.BlockId));
             var count = geometry.Count;
             foreach (var kml in block.Kml)
             {
                 try
                 {
-                    foreach (var rings in ReadPolygons(kml)) geometry.Add(new(block, rings));
+                    foreach (var rings in ReadPolygons(kml))
+                        geometry.Add(new(block, rings, PolygonAreaHectares(rings)));
                 }
                 catch (Exception exception) when (exception is XmlException or FormatException or InvalidOperationException)
                 {
+                    incompleteAreas.Add((block.BlockType, block.BlockId));
                     result.Warnings.Add($"Invalid map data for {block.BlockName}; valid polygons are still shown.");
                 }
             }
@@ -63,6 +71,9 @@ public static class SurveyActionMapLayout
         }
 
         var availableIds = geometry.Where(shape => shape.Block.BlockType == surveyType).Select(shape => shape.Block.BlockId).ToHashSet();
+        // Keep crop type in the key because banana and multi-crop identifiers can collide.
+        var blockAreas = geometry.GroupBy(shape => (shape.Block.BlockType, shape.Block.BlockId))
+            .ToDictionary(group => group.Key, group => group.Sum(shape => shape.AreaHectares));
         var missingIds = data.Recommendations.SelectMany(action => action.BlockIds).Distinct().Where(id => !availableIds.Contains(id)).ToList();
         if (missingIds.Count > 0)
             result.Warnings.Add($"Recommendations for {missingIds.Count} block(s) cannot be drawn because their boundaries are unavailable.");
@@ -77,7 +88,12 @@ public static class SurveyActionMapLayout
         var scale = Math.Min(920 / Math.Max(maxX - minX, .000001), 570 / Math.Max(maxY - minY, .000001));
         var offsetX = (1000 - (maxX - minX) * scale) / 2;
         var offsetY = (650 - (maxY - minY) * scale) / 2;
-        Point Project(Point point) => new(offsetX + (point.X * longitudeScale - minX) * scale, offsetY + (maxY - point.Y) * scale);
+        SurveyMapPoint Project(Point point) => new(offsetX + (point.X * longitudeScale - minX) * scale, offsetY + (maxY - point.Y) * scale);
+
+        // Label placement depends on farm geometry, so calculate it once for every category map.
+        var projectedGeometry = geometry.Select(shape => shape.Rings.Select(ring => ring.Select(Project).ToList()).ToList()).ToList();
+        var labels = SurveyActionMapLabelLayout.Build(geometry.Select((shape, index) =>
+            (shape.Block.BlockName, projectedGeometry[index])).ToList());
 
         foreach (var category in data.Recommendations.GroupBy(action => action.ActionGroupId).OrderBy(group => group.Key))
         {
@@ -96,6 +112,7 @@ public static class SurveyActionMapLayout
                 }
                 var panel = new SurveyActionMapPanel
                 {
+                    ViewBox = SurveyActionMapLabelLayout.ViewBox(labels),
                     Key = $"{category.Key}:{name}",
                     Title = category.First().ActionGroupName + (name.Length == 0 ? " — all recommendations" : $" — {name}")
                 };
@@ -104,25 +121,41 @@ public static class SurveyActionMapLayout
                 {
                     var palette = _palettes[Math.Clamp(category.Key - 1, 0, _palettes.Length - 1)];
                     var colour = palette[index % palette.Length];
+                    var assignedIds = summaries.Where(summary => summary.Value == distinct[index]).Select(summary => summary.Key).ToList();
+                    var measuredIds = assignedIds.Where(id => blockAreas.ContainsKey((surveyType, id))).ToList();
                     panel.Legend.Add(new(index + 1, distinct[index], colour, TextColour(colour))
                     {
+                        AreaHectares = measuredIds.Count > 0 ? measuredIds.Sum(id => blockAreas[(surveyType, id)]) : null,
+                        HasIncompleteArea = measuredIds.Count != assignedIds.Count ||
+                            assignedIds.Any(id => incompleteAreas.Contains((surveyType, id))),
+                        // Keep unavailable measurements explicit in the same list as measured blocks.
+                        BlockDescriptions = assignedIds.Where(blockNames.ContainsKey)
+                            .OrderBy(id => blockNames[id], StringComparer.OrdinalIgnoreCase)
+                            .Select(id => blockAreas.TryGetValue((surveyType, id), out var area)
+                                ? $"{blockNames[id]} ({Hectares(area)})"
+                                : $"{blockNames[id]} (area unavailable)").ToList(),
                         Blocks = summaries.Where(summary => summary.Value == distinct[index])
                             .Where(summary => blockNames.ContainsKey(summary.Key)).Select(summary => blockNames[summary.Key])
                             .Order(StringComparer.OrdinalIgnoreCase).ToList()
                     });
                 }
-                // Legend numbers disambiguate colours when a category exceeds the legacy palette size.
-                foreach (var shape in geometry)
+                // Reuse the same label positions for every recommendation category.
+                for (var shapeIndex = 0; shapeIndex < geometry.Count; shapeIndex++)
                 {
+                    var shape = geometry[shapeIndex];
                     var summary = shape.Block.BlockType == surveyType ? summaries.GetValueOrDefault(shape.Block.BlockId, "") : "";
                     var legend = panel.Legend.FirstOrDefault(item => item.Summary == summary);
-                    var projected = shape.Rings.Select(ring => ring.Select(Project).ToList()).ToList();
+                    var projected = projectedGeometry[shapeIndex];
                     var outer = projected[0];
                     var path = string.Join(" ", projected.Select(ring => "M " + string.Join(" L ", ring.Select(point => $"{Number(point.X)} {Number(point.Y)}")) + " Z"));
                     panel.Shapes.Add(new(shape.Block.BlockName, path,
                         (outer.Min(point => point.X) + outer.Max(point => point.X)) / 2,
                         (outer.Min(point => point.Y) + outer.Max(point => point.Y)) / 2,
-                        summary, legend?.Colour ?? "#d4d4d4", legend?.TextColour ?? "#333333", legend?.Number));
+                        summary, legend?.Colour ?? "#d4d4d4", legend?.TextColour ?? "#333333", legend?.Number)
+                    {
+                        AreaHectares = blockAreas[(shape.Block.BlockType, shape.Block.BlockId)],
+                        Label = labels[shapeIndex]
+                    });
                 }
                 result.Maps.Add(panel);
             }
@@ -132,6 +165,37 @@ public static class SurveyActionMapLayout
     }
 
     public static string Number(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    public static string Hectares(double value) => value.ToString("0.00", CultureInfo.InvariantCulture) + " ha";
+
+    private static double PolygonAreaHectares(List<List<Point>> rings)
+    {
+        // KML identifies outer boundaries and holes explicitly, irrespective of winding direction.
+        var area = RingAreaHectares(rings[0]) - rings.Skip(1).Sum(RingAreaHectares);
+        if (!double.IsFinite(area) || area < 0) throw new FormatException("Invalid polygon area.");
+        return area;
+    }
+
+    private static double RingAreaHectares(List<Point> ring)
+    {
+        // Reuse the spherical polar-triangle calculation in TgsWebsite/TgsClientPortal BlockPolygon.
+        // Work in geographic coordinates, before projection into the SVG, and close open rings.
+        var previous = ring[^1];
+        var previousTanLatitude = Math.Tan((Math.PI / 2 - previous.Y * Math.PI / 180) / 2);
+        var previousLongitude = previous.X * Math.PI / 180;
+        var total = 0d;
+        foreach (var point in ring)
+        {
+            var tanLatitude = Math.Tan((Math.PI / 2 - point.Y * Math.PI / 180) / 2);
+            var longitude = point.X * Math.PI / 180;
+            var longitudeDelta = longitude - previousLongitude;
+            var product = tanLatitude * previousTanLatitude;
+            total += 2 * Math.Atan2(product * Math.Sin(longitudeDelta), 1 + product * Math.Cos(longitudeDelta));
+            previousTanLatitude = tanLatitude;
+            previousLongitude = longitude;
+        }
+        return Math.Abs(total) * _earthRadiusMetres * _earthRadiusMetres / 10_000;
+    }
 
     private static string TextColour(string colour)
     {

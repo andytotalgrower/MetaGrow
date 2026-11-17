@@ -1,14 +1,54 @@
 window.metaGrowReportPrinting = {
     pendingTimer: null,
-    _printPhotosCookie: "metagrow-print-photos",
+    _photoLayoutCookie: "metagrow-print-photo-layout",
 
     // Both survey reports use the same browser preference, whether opened normally or for direct printing.
-    getPrintPhotos: function () {
-        return window.metaGrowFilterPreferences.get(this._printPhotosCookie) === "true";
+    getPhotoLayout: function () {
+        const saved = window.metaGrowFilterPreferences.get(this._photoLayoutCookie);
+        if (["none", "best-fit", "1", "2", "3"].includes(saved)) return saved;
+        // Preserve the old checkbox choice for browsers upgrading to the layout selector.
+        return window.metaGrowFilterPreferences.get("metagrow-print-photos") === "true" ? "best-fit" : "none";
     },
 
-    setPrintPhotos: function (includePhotos) {
-        window.metaGrowFilterPreferences.set(this._printPhotosCookie, includePhotos ? "true" : "false");
+    setPhotoLayout: function (layout) {
+        const value = ["none", "best-fit", "1", "2", "3"].includes(layout) ? layout : "none";
+        window.metaGrowFilterPreferences.set(this._photoLayoutCookie, value);
+    },
+
+    _fitPhotoRows: function () {
+        for (const grid of document.querySelectorAll(".include-print-photos .photo-grid")) {
+            const columns = Number(grid.style.getPropertyValue("--print-photo-columns")) || 3;
+            const rows = Number(grid.style.getPropertyValue("--print-photo-rows")) || 2;
+            // Measure the complete captions at their printed width, including wrapped comments.
+            const measure = document.createElement("div");
+            measure.setAttribute("aria-hidden", "true");
+            measure.style.cssText = "position:fixed;left:-10000px;visibility:hidden;width:273mm;font:8pt/1.3 Arial,sans-serif";
+            document.body.appendChild(measure);
+            try {
+                const pixelsPerMm = measure.getBoundingClientRect().width / 273;
+                measure.style.width = ((273 - (columns - 1) * 3) / columns) + "mm";
+                let captionHeight = 0;
+                for (const caption of grid.querySelectorAll("figcaption")) {
+                    const copy = caption.cloneNode(true);
+                    copy.style.cssText = "display:flex;flex-direction:column;gap:1mm;padding:2mm;overflow-wrap:anywhere";
+                    for (const child of copy.children) {
+                        child.style.fontSize = "inherit";
+                        child.style.whiteSpace = "pre-line";
+                    }
+                    measure.appendChild(copy);
+                    captionHeight = Math.max(captionHeight, copy.getBoundingClientRect().height / pixelsPerMm);
+                    copy.remove();
+                }
+                // Leave room for the photo heading on the first sheet. Extra-long captions may
+                // flow onto more sheets, with their full text and each photo kept together.
+                const rowHeight = (148 - (rows - 1) * 3) / rows;
+                const imageHeight = Math.max(20, Math.min(rows === 1 ? 126 : 58, rowHeight - captionHeight - 1));
+                grid.style.setProperty("--print-photo-height", imageHeight + "mm");
+            }
+            finally {
+                measure.remove();
+            }
+        }
     },
 
     print: function (fileName, delayMilliseconds) {
@@ -57,6 +97,8 @@ window.metaGrowReportPrinting = {
                     }
                 }
             }));
+
+            window.metaGrowReportPrinting._fitPhotoRows();
 
             // Give DevExpress and the browser two completed paint frames before
             // capturing the document for print.

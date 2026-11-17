@@ -73,6 +73,8 @@ Both applications write rolling Serilog files under `C:\Logs\MetaGrow`. Shared-r
 
 Do not commit plaintext production credentials. The applications support encrypted values under `MySettings`; the API also requires a JWT signing key of at least 64 characters.
 
+Graph mail and TGS client defaults are maintained once in the sibling `Metagen.Shared/appsettings.Metagen.json` file, shared with MetaAgency and automatically copied to build/publish output. Application settings, development secrets and environment variables override these defaults. The API decrypts Graph credentials through `GetMetagenGraphMail`, using the same key-index-5 contract as MetaAgency. Database, API identity and public application URLs remain application-specific. Republish consumers after updating the shared defaults; no extra Graph or TGS environment variables are required.
+
 ## Run locally
 
 From the MetaGrow repository, start the TGS API first, then the MetaGrow API and Web app in separate terminals:

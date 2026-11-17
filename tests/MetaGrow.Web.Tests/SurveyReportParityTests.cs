@@ -34,7 +34,14 @@ public class SurveyReportParityTests
         Assert.Matches("class=\"map-context\"[^>]*>River Farm", html);
         var key = Regex.Match(html, "class=\"map-legend\".*?</article>", RegexOptions.Singleline).Value;
         Assert.Contains("23/10 Setbest recommended", key);
-        Assert.Contains("Block A, Block B", key);
+        Assert.Contains("Block A (1.10 ha), Block B (1.10 ha)", key);
+        // Keep geographic measurements in the key so both online and printed SVG labels stay short.
+        var svg = Regex.Match(html, "<svg[^>]*class=\"map-canvas\".*?</svg>", RegexOptions.Singleline).Value;
+        Assert.NotEmpty(svg);
+        Assert.Matches(">Block A</tspan>", svg);
+        Assert.DoesNotContain(" ha", svg);
+        Assert.Contains("Total area:", key);
+        Assert.Contains("2.20 ha", key);
         // The banana report already provides the same information in its Actions section.
         Assert.Equal(!banana, html.Contains("Work summary", StringComparison.Ordinal));
     }
@@ -54,7 +61,7 @@ public class SurveyReportParityTests
         Assert.Contains("Blocks without usable KML (1)", disclosure.Value);
         Assert.Matches("<li[^>]*>Block B</li>", disclosure.Value);
         Assert.Contains("Work summary", html);
-        Assert.Matches("Blocks:</strong>\\s*Block A, Block B", html);
+        Assert.Contains("Block A (1.10 ha), Block B (area unavailable)", html);
         Assert.Contains("map-canvas", html);
     }
 
@@ -120,6 +127,9 @@ public class SurveyReportParityTests
             data.Recommendations.Add(new() { SurveyActionId = index + 20, ActionGroupId = 1, ActionGroupName = "Nutrition",
                 Summary = $"23/10 Recommendation {index}", BlockIds = [index] });
         }
+        // Force an outside callout and verify it shares the printed map sheet with the complete key.
+        data.Blocks[^1].BlockName = "Very long block name with a complete field instruction";
+        data.Blocks[^1].Kml = [data.Blocks[0].Kml[0].Replace("153.001", "153.000001").Replace("-27.001", "-27.000001")];
         // Even a long, expanded diagnostic disclosure must consume no printed space.
         data.Blocks[1].Kml.Clear();
         data.Warnings = Enumerable.Range(1, 200).Select(number => $"Unavailable boundary {number}").ToList();
@@ -128,6 +138,7 @@ public class SurveyReportParityTests
             ["Data"] = data, ["SurveyType"] = type,
             ["SurveyId"] = 17, ["PropertyName"] = "Map verification farm", ["SurveyDate"] = new DateTime(2026, 10, 21), ["ReadOnly"] = true
         });
+        Assert.Contains("class=\"map-label-leader\"", html);
         html = html.Replace("<details ", "<details open ");
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "src", "MetaGrow.Web"))) root = root.Parent;
@@ -390,6 +401,52 @@ public class SurveyReportParityTests
 
         // The cover is one page and the complete rust thrips table should fit on the next.
         Assert.Equal(2, await CountPrintedPages(html, Path.GetFullPath(Path.GetTempPath())));
+    }
+
+    [ChromeTheory]
+    [InlineData(true, "none", 1)]
+    [InlineData(true, "best-fit", 3)]
+    [InlineData(true, "1", 12)]
+    [InlineData(true, "2", 4)]
+    [InlineData(true, "3", 3)]
+    [InlineData(false, "none", 1)]
+    [InlineData(false, "best-fit", 3)]
+    [InlineData(false, "1", 12)]
+    [InlineData(false, "2", 4)]
+    [InlineData(false, "3", 3)]
+    public async Task Photo_layouts_paginate_mixed_orientations_with_captions(bool banana, string layout, int expectedPages)
+    {
+        // Eleven photos span multiple sheets in every layout and include long wrapping comments.
+        var photos = Enumerable.Range(0, 11).Select(index => new
+        {
+            Url = "data:image/svg+xml," + Uri.EscapeDataString(
+                $"<svg xmlns='http://www.w3.org/2000/svg' width='{(index % 2 == 0 ? 400 : 600)}' height='{(index % 2 == 0 ? 600 : 400)}'><rect width='100%' height='100%' fill='green'/></svg>"),
+            Comments = "A complete field observation with enough words to wrap under a photograph in the three column layout."
+        }).ToList();
+        var reportHtml = banana
+            ? await Render<BananaReport>(new BananaOnlineReportDto
+            {
+                Photos = photos.Select(photo => new BananaReportPhotoDto { Url = photo.Url, Comments = photo.Comments }).ToList()
+            })
+            : await Render<MultiCropReport>(new MultiCropOnlineReportDto
+            {
+                Photos = photos.Select(photo => new MultiCropReportPhotoDto { Url = photo.Url, Comments = photo.Comments }).ToList()
+            });
+        // Static rendering has no browser cookie. Apply the same selection that the interactive binding supplies.
+        if (layout != ReportPhotoPrinting._none)
+            reportHtml = reportHtml.Replace("survey-print-report ", "survey-print-report include-print-photos ", StringComparison.Ordinal);
+        reportHtml = reportHtml.Replace(ReportPhotoPrinting.PrintStyle("none", 11),
+            ReportPhotoPrinting.PrintStyle(layout, 11), StringComparison.Ordinal);
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "src", "MetaGrow.Web"))) root = root.Parent;
+        Assert.NotNull(root);
+        var css = await File.ReadAllTextAsync(Path.Combine(root.FullName, "src", "MetaGrow.Web", "obj", "Debug", "net10.0",
+            "scopedcss", "bundle", "MetaGrow.Web.styles.css"));
+        var script = await File.ReadAllTextAsync(Path.Combine(root.FullName, "src", "MetaGrow.Web", "wwwroot", "scripts", "report-printing.js"));
+        var html = "<!doctype html><html><head><style>body{margin:0;font-family:Arial,sans-serif}" + css +
+            "</style></head><body>" + reportHtml + "<script>" + script +
+            "window.metaGrowReportPrinting._fitPhotoRows();</script></body></html>";
+        Assert.Equal(expectedPages, await CountPrintedPages(html, Path.GetFullPath(Path.GetTempPath())));
     }
 
     private static async Task<int> CountPrintedPages(string html, string temporaryRoot)

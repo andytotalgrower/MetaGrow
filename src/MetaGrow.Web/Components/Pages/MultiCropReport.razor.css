@@ -555,10 +555,10 @@
     .no-findings { border-radius: 3mm; padding: 5mm; break-inside: avoid; }
     .photo-section { display: none; }
     .include-print-photos .photo-section { break-before: page; display: block; }
-    /* Fit two rows on a landscape page with typical captions, without cropping either orientation. */
-    .photo-grid { gap: 3mm; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    /* The saved layout sets the columns and available image height on landscape paper. */
+    .photo-grid { gap: 3mm; grid-template-columns: repeat(var(--print-photo-columns, 3), minmax(0, 1fr)); }
     .photo-grid figure { break-inside: avoid; }
-    .photo-grid img { aspect-ratio: auto; height: 58mm; object-fit: contain; }
+    .photo-grid img { aspect-ratio: auto; height: var(--print-photo-height, 58mm); object-fit: contain; }
     .photo-grid figcaption { font-size: 8pt; gap: 1mm; overflow-wrap: anywhere; padding: 2mm; }
     .photo-grid figcaption span { font-size: inherit; }
     .summary-scroll { overflow: visible; }

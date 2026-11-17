@@ -6,6 +6,79 @@ namespace MetaGrow.Web.Tests;
 public class SurveyActionMapTests
 {
     [Fact]
+    public void Hectares_match_a_small_spherical_rectangle_in_either_winding_and_open_or_closed_rings()
+    {
+        // A tiny latitude/longitude rectangle has a known spherical area, independent of SVG projection.
+        const double radius = 6_371_009;
+        var expected = radius * radius * (0.001 * Math.PI / 180) *
+            Math.Abs(Math.Sin(-27 * Math.PI / 180) - Math.Sin(-27.001 * Math.PI / 180)) / 10_000;
+        var coordinates = "153,-27 153.001,-27 153.001,-27.001 153,-27.001";
+        foreach (var ring in new[] { coordinates, string.Join(" ", coordinates.Split(' ').Reverse()), coordinates + " 153,-27" })
+        {
+            var data = Fixture();
+            data.Blocks[0].Kml = [$"<kml><Polygon><outerBoundaryIs><LinearRing><coordinates>{ring}</coordinates></LinearRing></outerBoundaryIs></Polygon></kml>"];
+            var shape = SurveyActionMapLayout.Build(data, "banana").Maps[0].Shapes[0];
+            Assert.InRange(shape.AreaHectares, expected - 0.000001, expected + 0.000001);
+        }
+    }
+
+    [Theory]
+    [InlineData("banana", "multicrop")]
+    [InlineData("multicrop", "banana")]
+    public void Block_areas_combine_polygons_subtract_holes_and_totals_count_blocks_once(string type, string otherType)
+    {
+        var data = Fixture(type);
+        var originalArea = SurveyActionMapLayout.Build(data, type).Maps[0].Shapes[0].AreaHectares;
+        var hole = "<innerBoundaryIs><LinearRing><coordinates>153.0002,-27.0002 153.0004,-27.0002 153.0004,-27.0004 153.0002,-27.0004</coordinates></LinearRing></innerBoundaryIs>";
+        // Use a separate polygon in the same block to exercise the combined block label.
+        var secondPolygon = _polygon.Replace("153.001", "153.021").Replace("153,", "153.02,");
+        data.Blocks[0].Kml = [$"<kml><MultiGeometry>{_polygon.Replace("</Polygon>", hole + "</Polygon>")}{secondPolygon}</MultiGeometry></kml>"];
+        data.Blocks.Add(new() { BlockId = 1, BlockType = otherType, BlockName = "Other crop", Kml = [$"<kml>{_polygon}</kml>"] });
+        data.Recommendations[0].BlockIds = [1, 1, 2];
+        data.Recommendations.Add(new() { SurveyActionId = 11, ActionGroupId = 1, ActionGroupName = "Nutrition", Summary = "Second job", BlockIds = [1, 2] });
+
+        var map = Assert.Single(SurveyActionMapLayout.Build(data, type).Maps);
+        var blockShapes = map.Shapes.Where(shape => shape.BlockName == "Block A").ToList();
+        Assert.Equal(2, blockShapes.Count);
+        Assert.Equal(blockShapes[0].AreaHectares, blockShapes[1].AreaHectares);
+        Assert.InRange(blockShapes[0].AreaHectares, originalArea * 1.95999, originalArea * 1.96001);
+        var legend = Assert.Single(map.Legend);
+        Assert.Equal(new[] { "Block A (2.16 ha)", "Block B (1.10 ha)" }, legend.BlockDescriptions);
+        Assert.Equal(blockShapes[0].AreaHectares + map.Shapes.Single(shape => shape.BlockName == "Block B").AreaHectares,
+            legend.AreaHectares);
+        Assert.False(legend.HasIncompleteArea);
+    }
+
+    [Fact]
+    public void Missing_or_partially_invalid_boundaries_mark_recommendation_areas_incomplete()
+    {
+        var data = Fixture();
+        data.Blocks[1].Kml.Clear();
+        var map = Assert.Single(SurveyActionMapLayout.Build(data, "banana").Maps);
+        Assert.True(map.Legend[0].HasIncompleteArea);
+        Assert.Equal(map.Shapes[0].AreaHectares, map.Legend[0].AreaHectares);
+
+        data.Blocks[1].Kml = [$"<kml>{_polygon}</kml>", "<invalid"];
+        map = Assert.Single(SurveyActionMapLayout.Build(data, "banana").Maps);
+        Assert.True(map.Legend[0].HasIncompleteArea);
+        Assert.Equal(map.Shapes.Sum(shape => shape.AreaHectares), map.Legend[0].AreaHectares);
+    }
+
+    [Fact]
+    public void A_partial_storage_read_only_marks_recommendations_for_affected_blocks()
+    {
+        var data = Fixture();
+        data.Recommendations[0].BlockIds = [1];
+        data.Recommendations.Add(new() { SurveyActionId = 20, ActionGroupId = 2, ActionGroupName = "Disease",
+            Summary = "Trim", BlockIds = [2] });
+        data.Warnings = ["Map data could not be loaded for Block A.", "Other map diagnostic"];
+
+        var maps = SurveyActionMapLayout.Build(data, "banana").Maps;
+        Assert.True(maps.Single(map => map.Key == "1:").Legend[0].HasIncompleteArea);
+        Assert.False(maps.Single(map => map.Key == "2:").Legend[0].HasIncompleteArea);
+    }
+
+    [Fact]
     public void Work_summary_groups_recommendations_and_keeps_blocks_without_geometry()
     {
         var data = Fixture();

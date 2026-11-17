@@ -13,7 +13,7 @@
 
 <PageTitle>Multi-crop survey @SurveyId | MetaGrow</PageTitle>
 
-<div class="online-report survey-print-report @(Print ? "print-layout" : string.Empty) @(_includePhotosForPrint ? "include-print-photos" : string.Empty)">
+<div class="online-report survey-print-report @(Print ? "print-layout" : string.Empty) @(_photoPrintLayout != ReportPhotoPrinting._none ? "include-print-photos" : string.Empty)">
     @if (_loading)
     {
         <div class="report-loading" role="status">
@@ -60,10 +60,10 @@
                         AllowUserInput="false" />
             @if (_report.Photos.Count > 0)
             {
-                <div class="print-photo-option" title="Photos are excluded from printed reports unless selected">
-                    <DxCheckBox @bind-Checked="_includePhotosForPrint" @bind-Checked:after="SavePrintPhotosAsync"
-                                Enabled="@_printPhotosReady">Print Photos</DxCheckBox>
-                </div>
+                <DxComboBox CssClass="report-photo-print-layout" aria-label="Photos in printed report"
+                            Data="@ReportPhotoPrinting.Options" TextFieldName="Value" ValueFieldName="Key"
+                            @bind-Value="_photoPrintLayout" @bind-Value:after="SavePrintPhotosAsync"
+                            SizeMode="SizeMode.Small" AllowUserInput="false" Enabled="@_printPhotosReady" />
             }
             <DxButton Text="Print/Save" SizeMode="SizeMode.Small" RenderStyle="ButtonRenderStyle.Primary"
                       Click="PrintReportAsync" Enabled="@_printPhotosReady" />
@@ -340,7 +340,7 @@
                     <h2 id="photos-title">Survey photos</h2>
                     <p>Photos remain securely referenced from the existing Total Grower Services image library.</p>
                 </div>
-                <div class="photo-grid">
+                <div class="photo-grid" style="@ReportPhotoPrinting.PrintStyle(_photoPrintLayout, _report.Photos.Count)">
                     @foreach (var photo in _report.Photos)
                     {
                         <figure>
@@ -472,7 +472,7 @@
     private MultiCropOnlineReportDto? _report;
     private bool _loading;
     private bool _printInvoked;
-    private bool _includePhotosForPrint;
+    private string _photoPrintLayout = ReportPhotoPrinting._none;
     private bool _printPhotosReady;
     // Shared reports receive the creator preference from the validated share response.
     [Parameter] public string? SharedBrandKey { get; set; }
@@ -628,14 +628,15 @@
         {
             try
             {
-                _includePhotosForPrint = await JavaScript.InvokeAsync<bool>("metaGrowReportPrinting.getPrintPhotos");
+                _photoPrintLayout = ReportPhotoPrinting.Normalize(
+                    await JavaScript.InvokeAsync<string>("metaGrowReportPrinting.getPhotoLayout"));
             }
             catch (JSException)
             {
-                // The checkbox defaults to off if the saved choice cannot be read.
+                // Default to excluding photos when the browser preference cannot be read.
             }
 
-            // Render the restored checkbox and print CSS before the automatic print path runs.
+            // Render the restored layout before the automatic print path runs.
             _printPhotosReady = true;
             StateHasChanged();
             return;
@@ -652,11 +653,11 @@
     {
         try
         {
-            await JavaScript.InvokeVoidAsync("metaGrowReportPrinting.setPrintPhotos", _includePhotosForPrint);
+            await JavaScript.InvokeVoidAsync("metaGrowReportPrinting.setPhotoLayout", _photoPrintLayout);
         }
         catch (JSException)
         {
-            // Keep the current checkbox choice usable even if the browser cannot save it.
+            // Keep the current layout usable even if the browser cannot save it.
         }
     }
 
